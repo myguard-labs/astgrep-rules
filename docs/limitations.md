@@ -49,3 +49,56 @@ Use type/alignment diagnostics and executed-path sanitizers for that question.
 The time truncation rule covers explicit casts and direct integer declarations.
 Assignments to previously declared variables need type resolution and remain
 outside this matcher.
+
+## Added rules
+
+- `go-tls-insecure-skip-verify` and `py-requests-verify-false` match a literal
+  `true`/`False`. A value supplied through a variable, config field or build flag
+  is not detected; that path needs configuration review.
+- `go-defer-in-loop` uses the nearest enclosing function as the boundary, so a
+  defer inside a closure or goroutine within the loop is correctly excluded. It
+  does not model whether the loop is bounded or the resource cheap, and it does
+  not cover a helper called in the loop that defers internally.
+- `py-hardcoded-tempfile` is lexical: it matches `/tmp/` and `/var/tmp/` string
+  prefixes anywhere, including read-only paths and paths later replaced. It
+  cannot see `TMPDIR` overrides or a path already produced by `mkdtemp`.
+- `php-file-inclusion-variable` fires when a variable, subscript, call or
+  interpolated string reaches the included path. A path built only from
+  literals, constants and `__DIR__` does not match. It does not model taint, so
+  an internal, non-request variable still matches and needs review.
+- `c-strncat-size-misuse` keys on `sizeof`/`strlen` appearing as the length
+  argument itself; the correct remaining-space forms subtract and do not match.
+  It cannot confirm the sizeof operand is the same object as the destination,
+  and an array passed as a pointer parameter makes `sizeof` wrong for reasons
+  this rule does not diagnose.
+
+`c-strncat-size-misuse` snapshots show `sizeof(dst)` as a secondary label twice:
+the nested `has` annotates the same range at the argument-list and operand
+levels. Scan output reports a single finding per call; the duplicate is a label
+artifact, not a double match.
+
+## Second batch
+
+- `go-http-no-timeout` keys on field names in the literal. A client configured
+  after construction, or one whose Transport carries its own deadlines, is not
+  detected; a literal naming any `*Timeout` field is treated as handled even if
+  the value is zero.
+- `go-error-swallowed` cannot tell an error from any other discarded return, so
+  it approximates: an assignment binding `err*`, `e` or `ok*` is excluded, as
+  are discards of the common cleanup calls (Close/Flush/Sync/Kill/Wait/Remove/
+  Set*Deadline). Measured on labs/gozer, labs/gyzor and labs/mailstrix, most
+  raw matches came from vendored dependencies; scope scans to first-party
+  directories. Test files legitimately discard results and dominate the rest.
+- `py-jwt-decode-unverified` matches any `.decode` call carrying the disabling
+  argument, so a non-JWT `decode` with a `verify` keyword would also match. It
+  does not detect verification disabled through a variable or a prebuilt options
+  dict.
+- `py-mutable-default-arg` flags the literal default. It cannot tell whether the
+  parameter is ever mutated, so a read-only default still matches; the fix is
+  cheap either way.
+- `php-weak-crypto` is a call inventory. md5/sha1 over non-secret data is a
+  legitimate use and matches; the rule cannot see what the argument holds.
+- `c-return-stack-address` binds the returned identifier to a same-function
+  declaration without a storage class, so a `static` local does not match. It
+  does not resolve shadowing, so a name also declared in an inner scope, or one
+  that is a parameter pointer, still needs the declaration checked.

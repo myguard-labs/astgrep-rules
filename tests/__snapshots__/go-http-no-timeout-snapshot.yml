@@ -1,0 +1,44 @@
+id: go-http-no-timeout
+snapshots:
+  package m; func f() { c := &http.Client{} }:
+    labels:
+    - source: http.Client{}
+      style: primary
+      start: 28
+      end: 41
+    - source: http.Client
+      style: secondary
+      start: 28
+      end: 39
+    - source: '{}'
+      style: secondary
+      start: 39
+      end: 41
+  'package m; func f() { c := http.Client{Transport: tr} }':
+    labels:
+    - source: 'http.Client{Transport: tr}'
+      style: primary
+      start: 27
+      end: 53
+    - source: http.Client
+      style: secondary
+      start: 27
+      end: 38
+    - source: '{Transport: tr}'
+      style: secondary
+      start: 38
+      end: 53
+  'package m; func f() { s := &http.Server{Addr: ":8080", Handler: mux} }':
+    labels:
+    - source: 'http.Server{Addr: ":8080", Handler: mux}'
+      style: primary
+      start: 28
+      end: 68
+    - source: http.Server
+      style: secondary
+      start: 28
+      end: 39
+    - source: '{Addr: ":8080", Handler: mux}'
+      style: secondary
+      start: 39
+      end: 68

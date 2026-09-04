@@ -1,0 +1,11 @@
+id: go-http-no-timeout
+valid:
+- 'package m; func f() { c := &http.Client{Timeout: 10 * time.Second} }'
+- 'package m; func f() { s := &http.Server{ReadHeaderTimeout: 5 * time.Second} }'
+- 'package m; func f() { s := &http.Server{Addr: a, WriteTimeout: d} }'
+- 'package m; func f() { t := &http.Transport{MaxIdleConns: 10} }'
+- 'package m; // c := &http.Client{}'
+invalid:
+- 'package m; func f() { c := &http.Client{} }'
+- 'package m; func f() { s := &http.Server{Addr: ":8080", Handler: mux} }'
+- 'package m; func f() { c := http.Client{Transport: tr} }'

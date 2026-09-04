@@ -1,0 +1,18 @@
+id: php-weak-crypto
+language: php
+severity: error
+message: >-
+  md5/sha1/crypt used on a password, or mt_rand/rand/uniqid used for a security
+  value. These hashes are fast and collision-prone, so a stolen table is brute
+  forced offline; these PRNGs are predictable, so tokens can be guessed. Use
+  password_hash/password_verify for passwords and random_bytes/random_int for
+  tokens.
+note: >-
+  Fires on the call itself. md5/sha1 over a non-secret (cache key, ETag,
+  checksum) is a legitimate use and the routine dismissal; the password and
+  token cases are not.
+rule:
+  kind: function_call_expression
+  has:
+    field: function
+    regex: '^(md5|sha1|crypt|mt_rand|rand|uniqid)$'

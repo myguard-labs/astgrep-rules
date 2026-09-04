@@ -1,0 +1,32 @@
+id: py-jwt-decode-unverified
+language: python
+severity: error
+message: >-
+  JWT decoded with signature verification disabled — the token's claims are
+  attacker-controlled, so any identity, role or expiry inside it can be forged.
+  Remove verify_signature/verify=False and decode with the expected algorithms
+  and key. To read claims without trusting them, keep the value out of any
+  authorization decision.
+note: >-
+  Fires on jwt.decode with verify=False or options disabling verify_signature.
+  Reading an unverified claim purely for logging or routing is the only routine
+  dismissal, and it must not gate access.
+rule:
+  kind: call
+  all:
+    - has:
+        field: function
+        regex: '(^|\.)decode$'
+    - has:
+        kind: argument_list
+        has:
+          stopBy: end
+          any:
+            - kind: keyword_argument
+              all:
+                - has: { field: name, regex: ^verify$ }
+                - has: { field: value, regex: ^False$ }
+            - kind: pair
+              all:
+                - has: { field: key, regex: verify_signature }
+                - has: { field: value, regex: ^False$ }
