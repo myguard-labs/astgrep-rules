@@ -109,7 +109,9 @@ Each rule's `note` names the commit that motivated it.
   nginx's log handler, not a formatting call. Wrappers, macros and
   format strings held in variables are not seen. Measured zero hits on the
   Angie tree.
-- `c-duplicate-boolean-clause` compares operand text, so two clauses that
+- `c-duplicate-boolean-clause` sees only adjacent operands: `a && b && a`
+  does not match, because the chain parses as `(a && b) && a` and the two
+  `a` are never siblings. It compares operand text, so two clauses that
   differ only in spacing are still distinct, and it cannot tell a volatile or
   macro-expanded operand from a pure one. A repeated volatile read is
   re-evaluated and may differ, so those matches are review candidates rather
@@ -143,7 +145,8 @@ Each rule's `note` names the commit that motivated it.
   recognised.
 - `nginx-buf-flush-before-last-buf` matches the direct `else if` shape on the
   same buffer expression. Two independent `if` statements, or a compound
-  condition on the first branch, do not match.
+  condition on either branch (`else if (b->last_buf || b->sync)`), do not
+  match.
 - `nginx-pool-cleanup-add-size-discarded` recognises the allocation as a plain
   assignment, a declaration with an initialiser, or an assignment inside an
   `if` condition or body, and requires the `->data` assignment to follow it in

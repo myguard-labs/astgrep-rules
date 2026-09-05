@@ -3,6 +3,7 @@ valid:
 - void f(void) { if (a || b) { x(); } }
 - void f(void) { if (a && b || a) { x(); } }
 - void f(void) { if (a || b || c || a) { x(); } }
+- void f(void) { if (a && b && a) { x(); } }
 - void f(void) { if (a == 1 || a == 2) { x(); } }
 - void f(void) { if (a | a) { x(); } }
 - void f(void) { if (g(&rp, end) == NGX_OK && g(&rp, end) == NGX_OK) { x(); } }
@@ -20,6 +21,9 @@ valid:
   int a;
   #endif
 - |
+# The ERROR exclusion has no unit fixture: an isolated continued #if parses
+# cleanly. Reproduce with the rule's ERROR clause removed against
+# labs/nginx-cache-turbo-module/src/ngx_http_cache_turbo_module.c:553.
   #if NGX_A && NGX_A
   int a;
   #endif

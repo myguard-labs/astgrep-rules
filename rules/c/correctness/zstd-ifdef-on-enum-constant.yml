@@ -3,9 +3,9 @@ language: c
 severity: warning
 message: >-
   Preprocessor test on a libzstd ZSTD_c_* / ZSTD_d_* / ZSTD_e_* name. A stable
-  parameter is a plain enumerator, invisible to #ifdef, so the guard is always
-  false and the code inside is dropped: gate that on ZSTD_VERSION_NUMBER
-  instead. An experimental parameter is a macro alias visible only under
+  parameter is a plain enumerator, invisible to the preprocessor, so #ifdef
+  and defined() are always false and the code inside is dropped, while
+  #ifndef is always true: gate on ZSTD_VERSION_NUMBER instead. An experimental parameter is a macro alias visible only under
   ZSTD_STATIC_LINKING_ONLY, so there the #ifdef is meaningful and a
   version-only replacement would reference an undeclared identifier in a
   release build. Check which kind the name is before changing the guard.

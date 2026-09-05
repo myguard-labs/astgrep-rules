@@ -2,7 +2,7 @@ id: c-duplicate-boolean-clause
 language: c
 severity: warning
 message: >-
-  The same operand appears twice in one && / || chain. Usually the repeat is
+  Two adjacent operands of one && / || chain are identical. Usually the repeat is
   dead and a copy-paste left a condition out, but confirm it: a volatile read
   or a macro that expands to a side effect is evaluated again and may differ
   between the two operands.
