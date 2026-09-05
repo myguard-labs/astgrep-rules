@@ -48,3 +48,9 @@ snapshots:
       style: secondary
       start: 19
       end: 25
+  void f(void) { volatile int ready; if (ready || ready) { x(); } }:
+    labels:
+    - source: ready || ready
+      style: primary
+      start: 39
+      end: 53

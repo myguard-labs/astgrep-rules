@@ -2,29 +2,29 @@ id: nginx-pool-cleanup-add-size-discarded
 snapshots:
   ? void f(void) { cln = ngx_pool_cleanup_add(cf->pool, sizeof(ZSTD_CDict *)); if (cln == NULL) return; cln->handler = h; cln->data = conf->dict; }
   : labels:
-    - source: cln = ngx_pool_cleanup_add(cf->pool, sizeof(ZSTD_CDict *))
+    - source: cln = ngx_pool_cleanup_add(cf->pool, sizeof(ZSTD_CDict *));
       style: primary
       start: 15
-      end: 73
+      end: 74
     - source: cln->data = conf->dict
       style: secondary
       start: 118
       end: 140
-    - source: void f(void) { cln = ngx_pool_cleanup_add(cf->pool, sizeof(ZSTD_CDict *)); if (cln == NULL) return; cln->handler = h; cln->data = conf->dict; }
+    - source: cln->data = conf->dict
       style: secondary
-      start: 0
-      end: 143
+      start: 118
+      end: 140
   void f(void) { cln = ngx_pool_cleanup_add(pool, size); if (cln == NULL) { return; } if (ready) { cln->data = ctx; } }:
     labels:
-    - source: cln = ngx_pool_cleanup_add(pool, size)
+    - source: cln = ngx_pool_cleanup_add(pool, size);
       style: primary
       start: 15
-      end: 53
+      end: 54
     - source: cln->data = ctx
       style: secondary
       start: 97
       end: 112
-    - source: void f(void) { cln = ngx_pool_cleanup_add(pool, size); if (cln == NULL) { return; } if (ready) { cln->data = ctx; } }
+    - source: cln->data = ctx
       style: secondary
-      start: 0
-      end: 117
+      start: 97
+      end: 112

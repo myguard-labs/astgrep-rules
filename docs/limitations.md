@@ -62,22 +62,38 @@ resolution and remain outside this matcher.
 Rules mined from the nginx-zstd-module commit history (2018 to 2026-09).
 Each rule's `note` names the commit that motivated it.
 
-- `nginx-table-missing-sentinel` reads the last named element of an
-  initialised `ngx_conf_enum_t`, `ngx_conf_bitmask_t`, `ngx_command_t`,
-  `ngx_http_variable_t` or `ngx_stream_variable_t` array. A table filled at
-  runtime, or terminated through a macro with another name, is not checked.
-- `nginx-command-offset-struct-mismatch` trusts the `*_main_conf_t`,
+- `nginx-table-missing-sentinel` asks whether a sentinel appears anywhere
+  among an initialised `ngx_conf_enum_t`, `ngx_conf_bitmask_t`,
+  `ngx_command_t`, `ngx_http_variable_t` or `ngx_stream_variable_t` array's
+  elements, not whether it is last, so a sentinel in the middle passes even
+  though the walker stops there. Position-based matching was tried first and
+  rejected: a trailing comment is a named node, so it took the last slot and
+  produced an error-level false positive on a correctly terminated table. A
+  table filled at runtime, or terminated through a macro with another name,
+  is not checked.
+- `nginx-command-offset-struct-mismatch` counts fields with `ofRule` so that
+  inline comments between them do not shift the positions. It trusts the
+  `*_main_conf_t`,
   `*_srv_conf_t`, `*_loc_conf_t` naming convention and fires only for generic
   `ngx_*_set_*_slot` handlers. A custom handler may reinterpret the offset
   (Angie's `status_zone` stores a main-conf field under the srv offset) and
   is skipped; a struct that does not follow the convention is skipped too.
-- `nginx-format-libc-length-modifier` checks direct literal arguments of the
-  listed nginx formatting and logging functions. `%l` and `%ul` are legal
-  nginx conversions and stay quiet; `%lu`, `%ld`, `%zu`, `%hu`, `%lld` and a
-  bare `%u` without a type letter fire. Wrappers, macros and format strings
-  held in variables are not seen. Measured zero hits on the Angie tree.
+- `nginx-format-libc-length-modifier` checks the format argument at its known
+  position per function: second for `ngx_sprintf` and `ngx_log_stderr`, third
+  for `ngx_snprintf`/`ngx_slprintf`/`ngx_vslprintf`, fourth for the log and
+  conf-log family. A `%lu` sitting in a data argument is therefore not
+  flagged. `%l` and `%ul` are legal nginx conversions and stay quiet; `%lu`,
+  `%ld`, `%zu`, `%zi`, `%zo`, `%zX`, `%hu`, `%lld` and a bare `%u` without a
+  conversion letter fire. Note what nginx actually does with these: `%l`
+  consumes a long and then prints the trailing `u` literally, so the argument
+  list is not shifted; a bare `%u` consumes nothing. Wrappers, macros and
+  format strings held in variables are not seen. Measured zero hits on the
+  Angie tree.
 - `c-duplicate-boolean-clause` compares operand text, so two clauses that
-  differ only in spacing are still distinct. Operands containing a call are
+  differ only in spacing are still distinct, and it cannot tell a volatile or
+  macro-expanded operand from a pure one. A repeated volatile read is
+  re-evaluated and may differ, so those matches are review candidates rather
+  than proven dead code. Operands containing a call are
   excluded: nginx's DoH parser repeats `skip_name()` on purpose. Anything
   under a preprocessor condition or a tree-sitter ERROR node is excluded; a
   continued `#if` line recovers into an ERROR subtree and matched wrongly.
@@ -86,16 +102,25 @@ Each rule's `note` names the commit that motivated it.
   to review. The defect is a missed match, not an over-read: `strncasecmp`
   stops at the needle's NUL.
 - `zstd-ifdef-on-enum-constant` flags every `#ifdef`, `#ifndef` and
-  `defined()` on a `ZSTD_c_`, `ZSTD_d_` or `ZSTD_e_` name. Experimental
-  parameters are macros under `ZSTD_STATIC_LINKING_ONLY`, so a guard may be
-  intentional in a static-only build; the rule still asks for a version gate.
+  `defined()` on a `ZSTD_c_`, `ZSTD_d_` or `ZSTD_e_` name, but the right fix
+  depends on which kind the name is. A stable parameter is a plain enumerator,
+  so the guard is always false and a `ZSTD_VERSION_NUMBER` gate replaces it.
+  An experimental parameter is a macro alias visible only under
+  `ZSTD_STATIC_LINKING_ONLY` (`zstd.h`), where the guard is meaningful and a
+  version-only replacement would reference an undeclared identifier. The rule
+  cannot tell them apart; the reviewer does.
 - `nginx-conf-return-code-confusion` sees return statements only. A code
-  stored in a local and returned later needs the local's type. `u_char *`
-  and `char **` functions are excluded because they are not conf handlers.
+  stored in a local and returned later needs the local's type. `u_char *` and
+  `char **` functions are excluded, and the `char *` side additionally
+  requires an `ngx_conf_t *` parameter so an unrelated `char *` helper
+  returning a sentinel is not flagged. A return inside a nested function
+  definition is judged on that function's own signature.
 - `nginx-buf-flush-before-last-buf` matches the direct `else if` shape on the
   same buffer expression. Two independent `if` statements, or a compound
   condition on the first branch, do not match.
-- `nginx-pool-cleanup-add-size-discarded` pairs the allocation with any
-  `->data` assignment on the same cleanup variable anywhere in the function.
-  It does not order the two statements or follow the value; a size given by
-  a macro that expands to zero still counts as an allocation request.
+- `nginx-pool-cleanup-add-size-discarded` requires the `->data` assignment to
+  follow the allocation in source order, but does no path analysis, so the
+  two may sit on branches that never both execute. `ngx_pool_cleanup_add`
+  allocates only when the runtime size is non-zero (`core/ngx_palloc.c`), and
+  the rule cannot evaluate the expression, so a macro or variable that
+  happens to be zero still matches.

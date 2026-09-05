@@ -21,6 +21,19 @@ valid:
       return NGX_OK;
   }
 - |
+  char *
+  outer(ngx_conf_t *cf)
+  {
+      ngx_int_t inner(void) { return NGX_OK; }
+      return NGX_CONF_OK;
+  }
+- |
+  char *
+  lookup(void)
+  {
+      return NGX_OK;
+  }
+- |
   static char **
   names(void)
   {

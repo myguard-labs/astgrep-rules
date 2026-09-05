@@ -4,6 +4,7 @@ valid:
 - void f(void) { cln = ngx_pool_cleanup_add(cf->pool, sizeof(ngx_x_cleanup_t)); if (cln == NULL) return; clnd = cln->data; clnd->dict = conf->dict; }
 - void f(void) { cln = ngx_pool_cleanup_add(cf->pool, sizeof(ZSTD_CDict *)); other->data = conf->dict; }
 - void f(void) { cln = ngx_pool_cleanup_add(cf->pool, sizeof(ZSTD_CDict *)); cln->handler = h; }
+- void f(void) { cln->data = ctx; cln = ngx_pool_cleanup_add(pool, n); }
 - /* void f(void) { cln = ngx_pool_cleanup_add(cf->pool, sizeof(x)); cln->data = conf->dict; } */
 - void f(void) { const char *t = "cln = ngx_pool_cleanup_add(cf->pool, sizeof(x)); cln->data = conf->dict;"; }
 invalid:

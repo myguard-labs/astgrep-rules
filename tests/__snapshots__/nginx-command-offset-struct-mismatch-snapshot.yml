@@ -40,6 +40,44 @@ snapshots:
       end: 126
   ? |
     static ngx_command_t  ngx_http_x_commands[] = {
+        { ngx_string("x"), NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1, /* handler */ ngx_conf_set_str_slot,
+          NGX_HTTP_LOC_CONF_OFFSET, offsetof(ngx_http_x_main_conf_t, dict_file), NULL },
+        ngx_null_command
+    };
+  : labels:
+    - source: |-
+        { ngx_string("x"), NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1, /* handler */ ngx_conf_set_str_slot,
+              NGX_HTTP_LOC_CONF_OFFSET, offsetof(ngx_http_x_main_conf_t, dict_file), NULL }
+      style: primary
+      start: 52
+      end: 226
+    - source: NGX_HTTP_LOC_CONF_OFFSET
+      style: secondary
+      start: 149
+      end: 173
+    - source: offsetof(ngx_http_x_main_conf_t, dict_file)
+      style: secondary
+      start: 175
+      end: 218
+    - source: ngx_command_t
+      style: secondary
+      start: 7
+      end: 20
+    - source: |-
+        static ngx_command_t  ngx_http_x_commands[] = {
+            { ngx_string("x"), NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1, /* handler */ ngx_conf_set_str_slot,
+              NGX_HTTP_LOC_CONF_OFFSET, offsetof(ngx_http_x_main_conf_t, dict_file), NULL },
+            ngx_null_command
+        };
+      style: secondary
+      start: 0
+      end: 251
+    - source: ngx_conf_set_str_slot
+      style: secondary
+      start: 120
+      end: 141
+  ? |
+    static ngx_command_t  ngx_http_x_commands[] = {
         { ngx_string("x_dict_file"), NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1, ngx_conf_set_str_slot,
           NGX_HTTP_LOC_CONF_OFFSET, offsetof(ngx_http_x_main_conf_t, dict_file), NULL },
         ngx_null_command

@@ -10,13 +10,10 @@ message: >-
 note: >-
   Real: nginx-zstd-module 08ef190 (#74), ngx_http_zstd_static[] enum table
   without a sentinel; an unmatched directive value walked into unrelated
-  memory. Only initialised array definitions are checked; a table filled at
-  runtime is out of scope.
-utils:
-  last-element:
-    nthChild:
-      position: 1
-      reverse: true
+  memory. The rule asks only whether a sentinel appears among the initialiser
+  elements, not whether it is last, so a sentinel in the middle of a table
+  still passes here even though the walker stops there. Only initialised array
+  definitions are checked; a table filled at runtime is out of scope.
 rule:
   kind: declaration
   any:
@@ -32,7 +29,7 @@ rule:
               kind: initializer_list
               not:
                 has:
-                  matches: last-element
+                  kind: initializer_list
                   regex: \bngx_null_string\b
     - all:
         - has:
@@ -46,8 +43,8 @@ rule:
               kind: initializer_list
               not:
                 has:
-                  matches: last-element
-                  regex: \bngx_null_command\b
+                  kind: identifier
+                  regex: ^ngx_null_command$
     - all:
         - has:
             field: type
@@ -60,5 +57,5 @@ rule:
               kind: initializer_list
               not:
                 has:
-                  matches: last-element
-                  regex: \bngx_(http|stream)_null_variable\b
+                  kind: identifier
+                  regex: ^ngx_(http|stream)_null_variable$

@@ -54,6 +54,24 @@ snapshots:
       style: secondary
       start: 50
       end: 56
+  void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%zX", n); }:
+    labels:
+    - source: ngx_log_error(NGX_LOG_ERR, log, 0, "%zX", n)
+      style: primary
+      start: 15
+      end: 59
+    - source: ngx_log_error
+      style: secondary
+      start: 15
+      end: 28
+    - source: '"%zX"'
+      style: secondary
+      start: 50
+      end: 55
+    - source: '"%zX"'
+      style: secondary
+      start: 50
+      end: 55
   void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%zd", n); }:
     labels:
     - source: ngx_log_error(NGX_LOG_ERR, log, 0, "%zd", n)
@@ -69,6 +87,42 @@ snapshots:
       start: 50
       end: 55
     - source: '"%zd"'
+      style: secondary
+      start: 50
+      end: 55
+  void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%zi", n); }:
+    labels:
+    - source: ngx_log_error(NGX_LOG_ERR, log, 0, "%zi", n)
+      style: primary
+      start: 15
+      end: 59
+    - source: ngx_log_error
+      style: secondary
+      start: 15
+      end: 28
+    - source: '"%zi"'
+      style: secondary
+      start: 50
+      end: 55
+    - source: '"%zi"'
+      style: secondary
+      start: 50
+      end: 55
+  void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%zo", n); }:
+    labels:
+    - source: ngx_log_error(NGX_LOG_ERR, log, 0, "%zo", n)
+      style: primary
+      start: 15
+      end: 59
+    - source: ngx_log_error
+      style: secondary
+      start: 15
+      end: 28
+    - source: '"%zo"'
+      style: secondary
+      start: 50
+      end: 55
+    - source: '"%zo"'
       style: secondary
       start: 50
       end: 55
@@ -144,6 +198,42 @@ snapshots:
       style: secondary
       start: 50
       end: 66
+  void f(void) { ngx_log_stderr(0, "%llu", n); }:
+    labels:
+    - source: ngx_log_stderr(0, "%llu", n)
+      style: primary
+      start: 15
+      end: 43
+    - source: ngx_log_stderr
+      style: secondary
+      start: 15
+      end: 29
+    - source: '"%llu"'
+      style: secondary
+      start: 33
+      end: 39
+    - source: '"%llu"'
+      style: secondary
+      start: 33
+      end: 39
+  void f(void) { p = ngx_slprintf(buf, last, "%lu", n); }:
+    labels:
+    - source: ngx_slprintf(buf, last, "%lu", n)
+      style: primary
+      start: 19
+      end: 52
+    - source: ngx_slprintf
+      style: secondary
+      start: 19
+      end: 31
+    - source: '"%lu"'
+      style: secondary
+      start: 43
+      end: 48
+    - source: '"%lu"'
+      style: secondary
+      start: 43
+      end: 48
   void f(void) { p = ngx_snprintf(p, len, "%hu", v); }:
     labels:
     - source: ngx_snprintf(p, len, "%hu", v)

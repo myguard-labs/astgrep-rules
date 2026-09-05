@@ -15,6 +15,9 @@ valid:
 - /* void f(void) { if (a || a) { x(); } } */
 - void f(void) { const char *t = "if (a || a) { x(); }"; }
 invalid:
+# Advisory: a volatile operand is re-read, so this match is a review candidate
+# rather than proven dead code. Documented in the rule note.
+- void f(void) { volatile int ready; if (ready || ready) { x(); } }
 - void f(void) { if (a || a) { x(); } }
 - void f(void) { if (a && a) { x(); } }
 - void f(void) { if (a || (b && c) || (b && c) || d) { x(); } }

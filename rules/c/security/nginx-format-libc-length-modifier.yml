@@ -2,30 +2,74 @@ id: nginx-format-libc-length-modifier
 language: c
 severity: error
 message: >-
-  libc length modifier inside an nginx format string. ngx_vslprintf() knows
-  %d %i %l %z %L %D %O %T %M %A %p %P %s %V %v %Z and the u/x/X prefixes, not
-  h/ll/j/t, and a bare %u with no conversion letter after it prints nothing.
-  An unknown letter is copied literally and its argument is not consumed, so
-  every later argument is misread. Use %ui, %uz, %uL, %ul, %O.
+  libc length modifier in an nginx format string. ngx_vslprintf() reads
+  u, m, x and X as prefixes and then expects one of its own conversions
+  (d i l z L D O T M A p P s V v Z N c f r %). It has no h, ll, j or t
+  modifier, and no trailing-letter forms: %lu consumes a long for the l
+  and then prints a literal u, %zu prints a literal u after the size,
+  and a bare %u with no conversion after it consumes nothing at all.
+  Use %ui, %uz, %uL, %ul or %O.
 note: >-
-  Real: nginx-zstd-module 6038ff2 (#207) and 89199b0 (#290) reworked the
-  byte-counter specifiers. %z alone is ssize_t and %uz is size_t; %zu prints
-  the number followed by a literal u. Only the listed nginx formatting and
-  logging functions are checked; wrappers need their own entry.
+  Real: nginx-zstd-module 6038ff2 (#207) reprinted the byte counters through
+  the unsigned %uL. The related 89199b0 (#290) widened four log arguments
+  rather than changing a specifier. The format argument is matched by
+  position per function, so a %lu inside a data argument is not flagged.
+  Wrappers and macros with their own format position need their own entry,
+  and a format string held in a variable is not seen. Snapshots show the
+  format literal twice as a secondary label: the argument-list traversal and
+  the literal match annotate the same range. Scan output reports one finding
+  per call; the repeat is a label artefact, not a double match.
 utils:
   bad-format:
-    regex: '%[-+ 0#]*\d*(?:\.\d+)?(?:(?:hh?|ll?|j|t|q)[diouxX]|z[dux])|%[-+ 0#]*\d*[umxX]*u[^A-Za-z.*%]'
+    regex: '%[-+ 0#]*\d*(?:\.\d+)?(?:(?:hh?|ll?|j|t|q)[diouxX]|z[diouxX])|%[-+ 0#]*\d*[umxX]*u[^A-Za-z.*%]'
+  format-literal:
+    any:
+      - kind: string_literal
+        matches: bad-format
+      - kind: concatenated_string
+        matches: bad-format
 rule:
   kind: call_expression
-  all:
-    - has:
-        field: function
-        regex: ^(ngx_sprintf|ngx_snprintf|ngx_slprintf|ngx_vslprintf|ngx_log_error|ngx_log_debug\d|ngx_conf_log_error|ngx_log_stderr|ngx_ssl_error|ngx_http_log_error|ngx_log_abort)$
-    - has:
-        field: arguments
-        has:
-          any:
-            - kind: string_literal
-              matches: bad-format
-            - kind: concatenated_string
-              matches: bad-format
+  any:
+    # ngx_sprintf(buf, fmt, ...) -- format is argument 2
+    - all:
+        - has:
+            field: function
+            regex: ^ngx_sprintf$
+        - has:
+            field: arguments
+            has:
+              nthChild: 2
+              matches: format-literal
+    # ngx_snprintf(buf, max, fmt, ...) / ngx_slprintf(buf, last, fmt, ...)
+    # / ngx_vslprintf(buf, last, fmt, args) -- format is argument 3
+    - all:
+        - has:
+            field: function
+            regex: ^(ngx_snprintf|ngx_slprintf|ngx_vslprintf)$
+        - has:
+            field: arguments
+            has:
+              nthChild: 3
+              matches: format-literal
+    # ngx_log_error(level, log, err, fmt, ...) and the ngx_log_debugN macros,
+    # ngx_conf_log_error(level, cf, err, fmt, ...) -- format is argument 4
+    - all:
+        - has:
+            field: function
+            regex: ^(ngx_log_error|ngx_log_debug\d|ngx_conf_log_error|ngx_ssl_error|ngx_http_log_error)$
+        - has:
+            field: arguments
+            has:
+              nthChild: 4
+              matches: format-literal
+    # ngx_log_stderr(err, fmt, ...) -- format is argument 2
+    - all:
+        - has:
+            field: function
+            regex: ^ngx_log_stderr$
+        - has:
+            field: arguments
+            has:
+              nthChild: 2
+              matches: format-literal

@@ -9,6 +9,9 @@ valid:
 - void f(void) { snprintf(buf, sizeof(buf), "%lu %zu", n, m); }
 - void f(void) { printf("%lld\n", v); }
 - void f(void) { my_log("%lu", n); }
+- void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%s", "%lu"); }
+- 'void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "value: %V", &fmt); }'
+- void f(void) { p = ngx_snprintf(buf, sizeof("%lu") - 1, "%uz", n); }
 - void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%uf %uc %up %uV %us", a, b, c, d, e); }
 - void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%u.3f done", v); }
 - void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%08XD %*s", v, n, s); }
@@ -25,3 +28,8 @@ invalid:
 - void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "n=%u, m=%ui", n, m); }
 - void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "size " "%lu" " bytes", n); }
 - void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%zd", n); }
+- void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%zi", n); }
+- void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%zo", n); }
+- void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%zX", n); }
+- void f(void) { p = ngx_slprintf(buf, last, "%lu", n); }
+- void f(void) { ngx_log_stderr(0, "%llu", n); }

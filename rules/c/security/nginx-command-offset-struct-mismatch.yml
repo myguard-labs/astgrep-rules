@@ -12,9 +12,13 @@ note: >-
   directive as duplicate. Custom handlers may interpret the offset themselves
   (Angie's status_zone does) and are not matched. The struct level is read
   from the *_main_conf_t / *_srv_conf_t / *_loc_conf_t naming convention.
+  Field positions skip comment nodes, so an inline comment between fields
+  does not hide a mismatch.
 utils:
   slot-handler:
-    nthChild: 3
+    nthChild:
+      position: 3
+      ofRule: {not: {kind: comment}}
     regex: ^ngx_(conf|http|stream|mail)_set_\w+_slot$
 rule:
   kind: initializer_list
@@ -29,22 +33,34 @@ rule:
   any:
     - all:
         - has:
-            nthChild: 4
+            nthChild:
+              position: 4
+              ofRule: {not: {kind: comment}}
             regex: ^NGX_(HTTP|STREAM|MAIL)_MAIN_CONF_OFFSET$
         - has:
-            nthChild: 5
+            nthChild:
+              position: 5
+              ofRule: {not: {kind: comment}}
             regex: ^offsetof\(\s*\w+_(srv|loc)_conf_t\b
     - all:
         - has:
-            nthChild: 4
+            nthChild:
+              position: 4
+              ofRule: {not: {kind: comment}}
             regex: ^NGX_(HTTP|STREAM|MAIL)_SRV_CONF_OFFSET$
         - has:
-            nthChild: 5
+            nthChild:
+              position: 5
+              ofRule: {not: {kind: comment}}
             regex: ^offsetof\(\s*\w+_(main|loc)_conf_t\b
     - all:
         - has:
-            nthChild: 4
+            nthChild:
+              position: 4
+              ofRule: {not: {kind: comment}}
             regex: ^NGX_HTTP_LOC_CONF_OFFSET$
         - has:
-            nthChild: 5
+            nthChild:
+              position: 5
+              ofRule: {not: {kind: comment}}
             regex: ^offsetof\(\s*\w+_(main|srv)_conf_t\b

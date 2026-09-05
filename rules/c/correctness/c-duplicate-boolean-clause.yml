@@ -2,14 +2,19 @@ id: c-duplicate-boolean-clause
 language: c
 severity: warning
 message: >-
-  The same operand appears twice in one && / || chain. The repeat is dead:
-  either a copy-paste left a condition out, or the clause should be removed.
+  The same operand appears twice in one && / || chain. Usually the repeat is
+  dead and a copy-paste left a condition out, but confirm it: a volatile read
+  or a macro that expands to a side effect is evaluated again and may differ
+  between the two operands.
 note: >-
   Real: nginx-zstd-module e9cf598, a three-line max_length clause duplicated
   verbatim in the header-filter eligibility test. Operands containing a call
   are skipped because a repeated side-effecting call (skip two DNS names) is
   intentional. Preprocessor conditions and anything under a parse-error
   node are skipped: a continued #if line recovers into an ERROR subtree.
+  Operand text is compared as written, so the rule cannot tell a volatile or
+  macro-expanded operand from a pure one; those remain review candidates
+  rather than proven redundancy.
 utils:
   call-free:
     not:
