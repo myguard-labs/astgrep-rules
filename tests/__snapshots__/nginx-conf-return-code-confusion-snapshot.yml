@@ -2,6 +2,276 @@ id: nginx-conf-return-code-confusion
 snapshots:
   ? |
     char *
+    h1(ngx_conf_t *cf)
+    {
+        return NGX_AGAIN;
+    }
+  : labels:
+    - source: return NGX_AGAIN;
+      style: primary
+      start: 32
+      end: 49
+    - source: char
+      style: secondary
+      start: 0
+      end: 4
+    - source: ngx_conf_t
+      style: secondary
+      start: 10
+      end: 20
+    - source: cf
+      style: secondary
+      start: 22
+      end: 24
+    - source: '*cf'
+      style: secondary
+      start: 21
+      end: 24
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 10
+      end: 24
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 10
+      end: 24
+    - source: h1(ngx_conf_t *cf)
+      style: secondary
+      start: 7
+      end: 25
+    - source: |-
+        *
+        h1(ngx_conf_t *cf)
+      style: secondary
+      start: 5
+      end: 25
+    - source: |-
+        char *
+        h1(ngx_conf_t *cf)
+        {
+            return NGX_AGAIN;
+        }
+      style: secondary
+      start: 0
+      end: 51
+  ? |
+    char *
+    h2(ngx_conf_t *cf)
+    {
+        return NGX_DECLINED;
+    }
+  : labels:
+    - source: return NGX_DECLINED;
+      style: primary
+      start: 32
+      end: 52
+    - source: char
+      style: secondary
+      start: 0
+      end: 4
+    - source: ngx_conf_t
+      style: secondary
+      start: 10
+      end: 20
+    - source: cf
+      style: secondary
+      start: 22
+      end: 24
+    - source: '*cf'
+      style: secondary
+      start: 21
+      end: 24
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 10
+      end: 24
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 10
+      end: 24
+    - source: h2(ngx_conf_t *cf)
+      style: secondary
+      start: 7
+      end: 25
+    - source: |-
+        *
+        h2(ngx_conf_t *cf)
+      style: secondary
+      start: 5
+      end: 25
+    - source: |-
+        char *
+        h2(ngx_conf_t *cf)
+        {
+            return NGX_DECLINED;
+        }
+      style: secondary
+      start: 0
+      end: 54
+  ? |
+    char *
+    h3(ngx_conf_t *cf)
+    {
+        return NGX_DONE;
+    }
+  : labels:
+    - source: return NGX_DONE;
+      style: primary
+      start: 32
+      end: 48
+    - source: char
+      style: secondary
+      start: 0
+      end: 4
+    - source: ngx_conf_t
+      style: secondary
+      start: 10
+      end: 20
+    - source: cf
+      style: secondary
+      start: 22
+      end: 24
+    - source: '*cf'
+      style: secondary
+      start: 21
+      end: 24
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 10
+      end: 24
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 10
+      end: 24
+    - source: h3(ngx_conf_t *cf)
+      style: secondary
+      start: 7
+      end: 25
+    - source: |-
+        *
+        h3(ngx_conf_t *cf)
+      style: secondary
+      start: 5
+      end: 25
+    - source: |-
+        char *
+        h3(ngx_conf_t *cf)
+        {
+            return NGX_DONE;
+        }
+      style: secondary
+      start: 0
+      end: 50
+  ? |
+    char *
+    h4(ngx_conf_t *cf)
+    {
+        return NGX_BUSY;
+    }
+  : labels:
+    - source: return NGX_BUSY;
+      style: primary
+      start: 32
+      end: 48
+    - source: char
+      style: secondary
+      start: 0
+      end: 4
+    - source: ngx_conf_t
+      style: secondary
+      start: 10
+      end: 20
+    - source: cf
+      style: secondary
+      start: 22
+      end: 24
+    - source: '*cf'
+      style: secondary
+      start: 21
+      end: 24
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 10
+      end: 24
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 10
+      end: 24
+    - source: h4(ngx_conf_t *cf)
+      style: secondary
+      start: 7
+      end: 25
+    - source: |-
+        *
+        h4(ngx_conf_t *cf)
+      style: secondary
+      start: 5
+      end: 25
+    - source: |-
+        char *
+        h4(ngx_conf_t *cf)
+        {
+            return NGX_BUSY;
+        }
+      style: secondary
+      start: 0
+      end: 50
+  ? |
+    char *
+    h5(ngx_conf_t *cf)
+    {
+        return NGX_ABORT;
+    }
+  : labels:
+    - source: return NGX_ABORT;
+      style: primary
+      start: 32
+      end: 49
+    - source: char
+      style: secondary
+      start: 0
+      end: 4
+    - source: ngx_conf_t
+      style: secondary
+      start: 10
+      end: 20
+    - source: cf
+      style: secondary
+      start: 22
+      end: 24
+    - source: '*cf'
+      style: secondary
+      start: 21
+      end: 24
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 10
+      end: 24
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 10
+      end: 24
+    - source: h5(ngx_conf_t *cf)
+      style: secondary
+      start: 7
+      end: 25
+    - source: |-
+        *
+        h5(ngx_conf_t *cf)
+      style: secondary
+      start: 5
+      end: 25
+    - source: |-
+        char *
+        h5(ngx_conf_t *cf)
+        {
+            return NGX_ABORT;
+        }
+      style: secondary
+      start: 0
+      end: 51
+  ? |
+    char *
     handler(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     {
         return NGX_ERROR;
@@ -152,6 +422,34 @@ snapshots:
       style: secondary
       start: 0
       end: 52
+  ? |
+    ngx_uint_t
+    h6(ngx_conf_t *cf)
+    {
+        return NGX_CONF_ERROR;
+    }
+  : labels:
+    - source: return NGX_CONF_ERROR;
+      style: primary
+      start: 36
+      end: 58
+    - source: ngx_uint_t
+      style: secondary
+      start: 0
+      end: 10
+    - source: h6(ngx_conf_t *cf)
+      style: secondary
+      start: 11
+      end: 29
+    - source: |-
+        ngx_uint_t
+        h6(ngx_conf_t *cf)
+        {
+            return NGX_CONF_ERROR;
+        }
+      style: secondary
+      start: 0
+      end: 60
   ? |
     static char *
     merge(ngx_conf_t *cf, void *parent, void *child)

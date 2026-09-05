@@ -93,6 +93,42 @@ valid:
 invalid:
 - |
   char *
+  h1(ngx_conf_t *cf)
+  {
+      return NGX_AGAIN;
+  }
+- |
+  char *
+  h2(ngx_conf_t *cf)
+  {
+      return NGX_DECLINED;
+  }
+- |
+  char *
+  h3(ngx_conf_t *cf)
+  {
+      return NGX_DONE;
+  }
+- |
+  char *
+  h4(ngx_conf_t *cf)
+  {
+      return NGX_BUSY;
+  }
+- |
+  char *
+  h5(ngx_conf_t *cf)
+  {
+      return NGX_ABORT;
+  }
+- |
+  ngx_uint_t
+  h6(ngx_conf_t *cf)
+  {
+      return NGX_CONF_ERROR;
+  }
+- |
+  char *
   init_conf(ngx_cycle_t *cycle, void *conf)
   {
       return NGX_OK;

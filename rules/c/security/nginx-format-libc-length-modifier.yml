@@ -19,10 +19,11 @@ note: >-
   data argument is not flagged.
   Field positions skip comment nodes, so an inline comment before the format
   does not hide it. An escaped %% is not a conversion, so "100%%lu" is left
-  alone. A format built from two or more adjacent literals is skipped: the
-  compiler joins them before nginx parses, so neither the joined syntax (whose
-  quote characters break the percent parity) nor the individual pieces
-  ("%" "%lu" is an escape, "%u" "i" is a legal %ui) can be judged safely. Wrappers and macros with their own format position need
+  alone. Adjacent literals are judged piece by piece, skipping any piece whose
+  specifier may continue across a join: a piece ending in an unterminated
+  specifier, and the piece after it, are left alone, so "%l" "u",
+  "%" "%lu" and "%u" "i" are all passed over while "%lu" " bytes"
+  is still flagged. Wrappers and macros with their own format position need
   their own entry,
   and a format string held in a variable is not seen. Snapshots show the
   format literal twice as a secondary label: the argument-list traversal and
@@ -31,21 +32,22 @@ note: >-
 utils:
   bad-format:
     regex: '(?:^|[^%])(?:%%)*%[-+ 0#]*\d*(?:\.\d+)?(?:(?:hh?|ll?|j|t|q)[diouxX]|z[diouxX])|(?:^|[^%])(?:%%)*%[-+ 0#]*\d*[umxX]*u[^A-Za-z.*%]'
+  open-tail:
+    regex: '%(?:%%)*[-+ 0#]*\d*[umxX]*"$'
   format-literal:
     any:
       - kind: string_literal
         matches: bad-format
+        not:
+          inside: {kind: concatenated_string}
       - kind: concatenated_string
-        all:
-          - has:
-              kind: string_literal
-              matches: bad-format
-          - not:
-              has:
-                kind: string_literal
-                nthChild:
-                  position: 2
-                  ofRule: {kind: string_literal}
+        has:
+          kind: string_literal
+          matches: bad-format
+          not:
+            any:
+              - follows: {kind: string_literal, matches: open-tail}
+              - matches: open-tail
 rule:
   kind: call_expression
   any:
@@ -79,7 +81,7 @@ rule:
     - all:
         - has:
             field: function
-            regex: ^(ngx_log_error|ngx_log_debug\d|ngx_conf_log_error|ngx_ssl_error|ngx_http_log_error)$
+            regex: ^(ngx_log_error|ngx_log_debug\d|ngx_conf_log_error|ngx_ssl_error)$
         - has:
             field: arguments
             has:

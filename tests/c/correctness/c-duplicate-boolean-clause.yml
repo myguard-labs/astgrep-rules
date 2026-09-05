@@ -9,7 +9,24 @@ valid:
 - void f(void) { if (a || (g() && b) || (g() && b)) { x(); } }
 - |
   #if defined(NGX_X) \
-      && NGX_X
+      && defined(NGX_X)
+  int a;
+  #endif
+- |
+  #if defined(NGX_HTTP_X_TEST) \
+      && NGX_HTTP_X_TEST
+  int a;
+  #endif
+- |
+  #if NGX_A && NGX_A
+  int a;
+  #endif
+- |
+  #if NGX_X && NGX_X
+  int a;
+  #endif
+- |
+  #elif NGX_Y || NGX_Y
   int a;
   #endif
 - /* void f(void) { if (a || a) { x(); } } */

@@ -90,6 +90,24 @@ snapshots:
       style: secondary
       start: 50
       end: 57
+  void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%jd", n); }:
+    labels:
+    - source: ngx_log_error(NGX_LOG_ERR, log, 0, "%jd", n)
+      style: primary
+      start: 15
+      end: 59
+    - source: ngx_log_error
+      style: secondary
+      start: 15
+      end: 28
+    - source: '"%jd"'
+      style: secondary
+      start: 50
+      end: 55
+    - source: '"%jd"'
+      style: secondary
+      start: 50
+      end: 55
   void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%lld", v); }:
     labels:
     - source: ngx_log_error(NGX_LOG_ERR, log, 0, "%lld", v)
@@ -108,6 +126,28 @@ snapshots:
       style: secondary
       start: 50
       end: 56
+  void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%lu" " bytes", n); }:
+    labels:
+    - source: ngx_log_error(NGX_LOG_ERR, log, 0, "%lu" " bytes", n)
+      style: primary
+      start: 15
+      end: 68
+    - source: ngx_log_error
+      style: secondary
+      start: 15
+      end: 28
+    - source: '"%lu"'
+      style: secondary
+      start: 50
+      end: 55
+    - source: '"%lu" " bytes"'
+      style: secondary
+      start: 50
+      end: 64
+    - source: '"%lu" " bytes"'
+      style: secondary
+      start: 50
+      end: 64
   void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%lu%%", n); }:
     labels:
     - source: ngx_log_error(NGX_LOG_ERR, log, 0, "%lu%%", n)
@@ -126,6 +166,42 @@ snapshots:
       style: secondary
       start: 50
       end: 57
+  void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%qd", n); }:
+    labels:
+    - source: ngx_log_error(NGX_LOG_ERR, log, 0, "%qd", n)
+      style: primary
+      start: 15
+      end: 59
+    - source: ngx_log_error
+      style: secondary
+      start: 15
+      end: 28
+    - source: '"%qd"'
+      style: secondary
+      start: 50
+      end: 55
+    - source: '"%qd"'
+      style: secondary
+      start: 50
+      end: 55
+  void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%td", n); }:
+    labels:
+    - source: ngx_log_error(NGX_LOG_ERR, log, 0, "%td", n)
+      style: primary
+      start: 15
+      end: 59
+    - source: ngx_log_error
+      style: secondary
+      start: 15
+      end: 28
+    - source: '"%td"'
+      style: secondary
+      start: 50
+      end: 55
+    - source: '"%td"'
+      style: secondary
+      start: 50
+      end: 55
   void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%zX", n); }:
     labels:
     - source: ngx_log_error(NGX_LOG_ERR, log, 0, "%zX", n)
@@ -226,6 +302,10 @@ snapshots:
       style: secondary
       start: 15
       end: 28
+    - source: '"%lu"'
+      style: secondary
+      start: 58
+      end: 63
     - source: '"size " "%lu" " bytes"'
       style: secondary
       start: 50
@@ -234,6 +314,28 @@ snapshots:
       style: secondary
       start: 50
       end: 72
+  void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "size " "%lu", n); }:
+    labels:
+    - source: ngx_log_error(NGX_LOG_ERR, log, 0, "size " "%lu", n)
+      style: primary
+      start: 15
+      end: 67
+    - source: ngx_log_error
+      style: secondary
+      start: 15
+      end: 28
+    - source: '"%lu"'
+      style: secondary
+      start: 58
+      end: 63
+    - source: '"size " "%lu"'
+      style: secondary
+      start: 50
+      end: 63
+    - source: '"size " "%lu"'
+      style: secondary
+      start: 50
+      end: 63
   void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "size %lu bytes", n); }:
     labels:
     - source: ngx_log_error(NGX_LOG_ERR, log, 0, "size %lu bytes", n)
@@ -288,6 +390,42 @@ snapshots:
       style: secondary
       start: 33
       end: 39
+  void f(void) { ngx_log_stderr(0, /* fmt */ "%lu", n); }:
+    labels:
+    - source: ngx_log_stderr(0, /* fmt */ "%lu", n)
+      style: primary
+      start: 15
+      end: 52
+    - source: ngx_log_stderr
+      style: secondary
+      start: 15
+      end: 29
+    - source: '"%lu"'
+      style: secondary
+      start: 43
+      end: 48
+    - source: '"%lu"'
+      style: secondary
+      start: 43
+      end: 48
+  void f(void) { ngx_ssl_error(NGX_LOG_ERR, log, 0, "%lu", n); }:
+    labels:
+    - source: ngx_ssl_error(NGX_LOG_ERR, log, 0, "%lu", n)
+      style: primary
+      start: 15
+      end: 59
+    - source: ngx_ssl_error
+      style: secondary
+      start: 15
+      end: 28
+    - source: '"%lu"'
+      style: secondary
+      start: 50
+      end: 55
+    - source: '"%lu"'
+      style: secondary
+      start: 50
+      end: 55
   void f(void) { p = ngx_slprintf(buf, last, "%lu", n); }:
     labels:
     - source: ngx_slprintf(buf, last, "%lu", n)
@@ -324,6 +462,24 @@ snapshots:
       style: secondary
       start: 40
       end: 45
+  void f(void) { p = ngx_snprintf(p, len, /* fmt */ "%lu", n); }:
+    labels:
+    - source: ngx_snprintf(p, len, /* fmt */ "%lu", n)
+      style: primary
+      start: 19
+      end: 59
+    - source: ngx_snprintf
+      style: secondary
+      start: 19
+      end: 31
+    - source: '"%lu"'
+      style: secondary
+      start: 50
+      end: 55
+    - source: '"%lu"'
+      style: secondary
+      start: 50
+      end: 55
   void f(void) { p = ngx_sprintf(p, "%llu", v); }:
     labels:
     - source: ngx_sprintf(p, "%llu", v)
@@ -342,3 +498,39 @@ snapshots:
       style: secondary
       start: 34
       end: 40
+  void f(void) { p = ngx_sprintf(p, /* fmt */ "%lu", n); }:
+    labels:
+    - source: ngx_sprintf(p, /* fmt */ "%lu", n)
+      style: primary
+      start: 19
+      end: 53
+    - source: ngx_sprintf
+      style: secondary
+      start: 19
+      end: 30
+    - source: '"%lu"'
+      style: secondary
+      start: 44
+      end: 49
+    - source: '"%lu"'
+      style: secondary
+      start: 44
+      end: 49
+  void f(void) { p = ngx_vslprintf(buf, last, "%lu", args); }:
+    labels:
+    - source: ngx_vslprintf(buf, last, "%lu", args)
+      style: primary
+      start: 19
+      end: 56
+    - source: ngx_vslprintf
+      style: secondary
+      start: 19
+      end: 32
+    - source: '"%lu"'
+      style: secondary
+      start: 44
+      end: 49
+    - source: '"%lu"'
+      style: secondary
+      start: 44
+      end: 49

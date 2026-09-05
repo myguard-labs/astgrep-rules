@@ -28,6 +28,9 @@ valid:
       }
   }
 invalid:
+- void f(void) { while (go) { cln = ngx_pool_cleanup_add(pool, sizeof(x)); } cln->data = ctx; }
+- void f(void) { do { cln = ngx_pool_cleanup_add(pool, sizeof(x)); } while (go); cln->data = ctx; }
+- void f(void) { { cln = ngx_pool_cleanup_add(pool, sizeof(x)); } { cln->data = ctx; } }
 # Advisory: mutually exclusive arms cannot both run, but the rule does no path
 # analysis and reports the site for review. Documented in the rule note.
 - void f(void) { if (a) { cln = ngx_pool_cleanup_add(pool, sizeof(x)); } else { cln->data = ctx; } }
