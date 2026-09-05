@@ -19,8 +19,13 @@ valid:
 - curl https://example.com/data | bash ./local.sh
 - curl https://example.com/data | python3 ./local.py
 - bash | curl https://example.com/i.sh
-- curl https://example.com/i.sh | sudo -E -u root bash
 - curl https://example.com/i.sh | sudo -n -E python3 -c 'print("local")'
+- curl https://example.com/i.sh | sudo -u root tee /usr/local/bin/i.sh
+- curl https://example.com/i.sh | sudo --user=root install -m 755 /dev/stdin /usr/local/bin/i
+- curl https://example.com/i.sh | sudo -u bash tee /usr/local/bin/i.sh
+- curl https://example.com/i.sh | sudo --user bash install /dev/stdin /usr/local/bin/i
+- curl https://example.com/i.sh | sudo -E -u root bash ./local.sh
+- curl https://example.com/get.py | sudo --user=root python3 -c 'print("local")'
 invalid:
 - curl -sSL https://get.example.com/i.sh | bash
 - wget -qO- https://example.com/setup.sh | sh
@@ -44,3 +49,12 @@ invalid:
 - curl https://example.com/i.sh | sudo -E -n bash
 - curl https://example.com/get.py | sudo -n -E python3 - deploy
 - curl https://example.com/i.sh | sudo -HnE bash -s -- deploy
+- curl https://example.com/i.sh | sudo -E -u root bash
+- curl https://example.com/i.sh | sudo -uroot bash
+- curl https://example.com/i.sh | sudo --user root bash
+- curl https://example.com/i.sh | sudo --user=root bash
+- curl https://example.com/i.sh | sudo -n --user root -EH bash -s -- deploy
+- curl https://example.com/get.py | sudo --user=root -n python3 - deploy
+- curl https://example.com/i.sh | sudo -Eu root bash
+- curl https://example.com/i.sh | sudo -Euroot bash -s -- deploy
+- curl https://example.com/i.sh | sudo -u root -- bash

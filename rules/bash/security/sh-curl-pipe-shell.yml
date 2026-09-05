@@ -13,9 +13,10 @@ note: >-
   stdout, and that stream reaches a bare sh/bash/zsh/python interpreter or one
   with an explicit stdin selector (`-s` or `-`).
   Also covers sudo with any sequence or cluster of the common no-argument
-  -E/-H/-n/-S options. Arguments after an explicit stdin selector are program
-  argv, so they remain covered. Commands that select an output file,
-  interpreters given a script path, and sudo tee/install do not match.
+  -E/-H/-n/-S options and short or long user selection. Arguments after an
+  explicit stdin selector are program argv, so they remain covered. Commands
+  that select an output file, interpreters given a script path, and sudo
+  tee/install do not match.
   Vendor install instructions use this shape; that is the reason to pin and
   verify locally rather than a reason to dismiss it. An interpreter given an
   inline script (python3 -c, perl -e) does not match: stdin is data there, not
@@ -59,11 +60,11 @@ utils:
                   has: {field: argument, regex: '.+'}
               - all:
                   - has: {nthChild: 2, matches: stdin-marker}
-      # Supported sudo options take no argument, so any sequence or cluster can
-      # precede the interpreter. A stdin selector may be followed by argv.
+      # Supported sudo options and user selectors can be interleaved before the
+      # interpreter. A stdin selector may be followed by argv.
       - all:
           - has: {field: name, regex: '^sudo$'}
-          - regex: '^sudo(?:\s+-[EHnS]+)*\s+(?:sh|bash|zsh|ksh|dash|python3?|perl|ruby)(?:\s+(-s|-)(?:\s+.*)?)?$'
+          - regex: '^sudo(?:\s+(?:-[EHnS]+|-[EHnS]*u(?:\S+|\s+\S+)|--user(?:=\S+|\s+\S+)))*(?:\s+--)?\s+(?:sh|bash|zsh|ksh|dash|python3?|perl|ruby)(?:\s+(-s|-)(?:\s+.*)?)?$'
 rule:
   kind: pipeline
   has:

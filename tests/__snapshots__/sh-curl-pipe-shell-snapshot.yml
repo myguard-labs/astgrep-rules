@@ -272,6 +272,28 @@ snapshots:
       style: secondary
       start: 0
       end: 31
+  curl https://example.com/get.py | sudo --user=root -n python3 - deploy:
+    labels:
+    - source: curl https://example.com/get.py | sudo --user=root -n python3 - deploy
+      style: primary
+      start: 0
+      end: 70
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: sudo
+      style: secondary
+      start: 34
+      end: 38
+    - source: sudo --user=root -n python3 - deploy
+      style: secondary
+      start: 34
+      end: 70
+    - source: curl https://example.com/get.py
+      style: secondary
+      start: 0
+      end: 31
   curl https://example.com/get.py | sudo -E python3 -:
     labels:
     - source: curl https://example.com/get.py | sudo -E python3 -
@@ -390,6 +412,50 @@ snapshots:
       style: secondary
       start: 0
       end: 29
+  curl https://example.com/i.sh | sudo --user root bash:
+    labels:
+    - source: curl https://example.com/i.sh | sudo --user root bash
+      style: primary
+      start: 0
+      end: 53
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: sudo
+      style: secondary
+      start: 32
+      end: 36
+    - source: sudo --user root bash
+      style: secondary
+      start: 32
+      end: 53
+    - source: curl https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 29
+  curl https://example.com/i.sh | sudo --user=root bash:
+    labels:
+    - source: curl https://example.com/i.sh | sudo --user=root bash
+      style: primary
+      start: 0
+      end: 53
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: sudo
+      style: secondary
+      start: 32
+      end: 36
+    - source: sudo --user=root bash
+      style: secondary
+      start: 32
+      end: 53
+    - source: curl https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 29
   curl https://example.com/i.sh | sudo -E -n bash:
     labels:
     - source: curl https://example.com/i.sh | sudo -E -n bash
@@ -412,6 +478,72 @@ snapshots:
       style: secondary
       start: 0
       end: 29
+  curl https://example.com/i.sh | sudo -E -u root bash:
+    labels:
+    - source: curl https://example.com/i.sh | sudo -E -u root bash
+      style: primary
+      start: 0
+      end: 52
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: sudo
+      style: secondary
+      start: 32
+      end: 36
+    - source: sudo -E -u root bash
+      style: secondary
+      start: 32
+      end: 52
+    - source: curl https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 29
+  curl https://example.com/i.sh | sudo -Eu root bash:
+    labels:
+    - source: curl https://example.com/i.sh | sudo -Eu root bash
+      style: primary
+      start: 0
+      end: 50
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: sudo
+      style: secondary
+      start: 32
+      end: 36
+    - source: sudo -Eu root bash
+      style: secondary
+      start: 32
+      end: 50
+    - source: curl https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 29
+  curl https://example.com/i.sh | sudo -Euroot bash -s -- deploy:
+    labels:
+    - source: curl https://example.com/i.sh | sudo -Euroot bash -s -- deploy
+      style: primary
+      start: 0
+      end: 62
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: sudo
+      style: secondary
+      start: 32
+      end: 36
+    - source: sudo -Euroot bash -s -- deploy
+      style: secondary
+      start: 32
+      end: 62
+    - source: curl https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 29
   curl https://example.com/i.sh | sudo -HnE bash -s -- deploy:
     labels:
     - source: curl https://example.com/i.sh | sudo -HnE bash -s -- deploy
@@ -430,6 +562,72 @@ snapshots:
       style: secondary
       start: 32
       end: 59
+    - source: curl https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 29
+  curl https://example.com/i.sh | sudo -n --user root -EH bash -s -- deploy:
+    labels:
+    - source: curl https://example.com/i.sh | sudo -n --user root -EH bash -s -- deploy
+      style: primary
+      start: 0
+      end: 73
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: sudo
+      style: secondary
+      start: 32
+      end: 36
+    - source: sudo -n --user root -EH bash -s -- deploy
+      style: secondary
+      start: 32
+      end: 73
+    - source: curl https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 29
+  curl https://example.com/i.sh | sudo -u root -- bash:
+    labels:
+    - source: curl https://example.com/i.sh | sudo -u root -- bash
+      style: primary
+      start: 0
+      end: 52
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: sudo
+      style: secondary
+      start: 32
+      end: 36
+    - source: sudo -u root -- bash
+      style: secondary
+      start: 32
+      end: 52
+    - source: curl https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 29
+  curl https://example.com/i.sh | sudo -uroot bash:
+    labels:
+    - source: curl https://example.com/i.sh | sudo -uroot bash
+      style: primary
+      start: 0
+      end: 48
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: sudo
+      style: secondary
+      start: 32
+      end: 36
+    - source: sudo -uroot bash
+      style: secondary
+      start: 32
+      end: 48
     - source: curl https://example.com/i.sh
       style: secondary
       start: 0

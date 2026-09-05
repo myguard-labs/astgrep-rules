@@ -235,8 +235,10 @@ two rules cover only its code-level slice.
   `-o -`, `-o-`, `--output=-`, and combined common-option forms such as `-sLo-`
   explicitly select stdout. Wget must explicitly select stdout. `sudo` supports
   any sequence or cluster of the no-argument `-E`, `-H`, `-n` and `-S` options;
-  `sudo tee` and `sudo install` do not match. The rule cannot see whether a
-  checksum is verified elsewhere in the script.
+  `-u root`, `-uroot`, `--user root`, and `--user=root` can be interleaved with
+  them. User option values are not mistaken for commands, and `sudo tee` and
+  `sudo install` do not match. The rule cannot see whether a checksum is
+  verified elsewhere in the script.
 - `sh-tls-verify-disabled` matches the flag, not the intent, and binds each
   flag to the command that defines it: curl `-k`/`--insecure` (inside a short
   cluster of common no-argument flags such as `-sSk` too; argument-taking forms
