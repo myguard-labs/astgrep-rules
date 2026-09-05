@@ -263,3 +263,41 @@ chaining idiom, which accounts for all 394 assignment sites sampled.
   `http-js-challenge/ngx_http_js_challenge.c:239` was confirmed: it calls
   `ngx_http_output_filter` unconditionally afterwards, which emits a body for a
   HEAD request and writes after a filter has already finalized the request.
+
+## Eighth batch: measured rejections, no rules shipped
+
+A second research pass (2026-09-05) mined the
+[nginx security advisories](https://nginx.org/en/security_advisories.html)
+rather than the development guide, on the theory that CVE root causes would
+suggest shapes the API-contract pass missed. Every candidate was rejected on
+measurement against `modules/nginx/*` and `labs/nginx-*`. The measurements are
+recorded here so the same seams are not re-mined.
+
+- `ngx_palloc(pool, sizeof(ngx_buf_t))` without a following `ngx_memzero`, the
+  uninitialised-flags shape behind several memory-disclosure CVEs: 1 site in the
+  whole corpus. Modules use `ngx_calloc_buf` and `ngx_create_temp_buf` (117
+  sites), which zero or fully initialise the structure.
+- `ngx_list_push(&r->headers_out.headers)` with no `->hash` assignment, which
+  silently drops the header because iteration skips `hash == 0`: 7 raw hits, all
+  false positives. Every one assigned the whole struct with `*ho = *h`, which
+  carries `hash` from the source header. With struct copy, `ngx_memcpy` and
+  `ngx_memzero` added as dismissals the rule measures 0.
+- `ngx_strlchr`/`ngx_strnstr`/`ngx_strcasestrn` result used with no guard, a NULL
+  dereference on crafted input: 4 raw hits, all on attacker-controlled data
+  (`tc_url`, `unparsed_uri`), and all false positives — each site guards with
+  `if (p)`, a truthiness test rather than a comparison. With `!$V` and the
+  parenthesised-condition forms added, the rule measures 0.
+- Allocation size computed by multiplication is already covered by
+  `c-alloc-mul-overflow`, which carries the nginx pool allocators alongside
+  `malloc`; a separate nginx rule would duplicate it.
+- Three shapes were too broad to be selective and were not narrowed further:
+  `ngx_cpymem`/`ngx_memcpy` whose length argument is a pointer subtraction (326
+  hits), `$A->len - $B` underflow arithmetic (170), and pool allocation with a
+  multiplied size (219, and already covered). At those rates the rule would
+  flag mostly correct code.
+
+The recurring false-positive mechanism across both research passes is the same:
+a guard expressed as a truthiness test, a range check, or a struct copy rather
+than the literal comparison the first draft of a matcher expects. Measure every
+candidate against the corpus and read the hits before shipping; a raw count is
+not a defect count.
