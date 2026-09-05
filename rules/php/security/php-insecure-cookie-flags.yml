@@ -7,11 +7,12 @@ message: >-
   where it can be captured (CWE-1004, CWE-614). For a session or auth cookie
   that is account takeover. Enable both flags and set samesite as appropriate.
 note: >-
-  Fires on a positional setcookie/setrawcookie call with two arguments or fewer,
-  and on a positional or named expires_or_options array in which either httponly
-  or secure is absent or not literally true. Named options are recognized in any
-  argument order. The legacy positional form is also checked at arguments six
-  and seven. A deliberately readable, non-sensitive preference cookie is the
+  Fires on a positional or named expires_or_options array in which either
+  httponly or secure is absent or not literally true. Named options are
+  recognized in any argument order. Outside the options-array form, secure and
+  httponly must each be literally true, supplied either at positional arguments
+  six and seven or by a named argument. Mixed positional/named calls are
+  supported. A deliberately readable, non-sensitive preference cookie is the
   routine dismissal.
 utils:
   positional-options-array:
@@ -31,6 +32,36 @@ utils:
     any:
       - matches: positional-options-array
       - matches: named-options-array
+  positional-secure-true:
+    kind: argument
+    nthChild: 6
+    regex: '(?i)^true$'
+  positional-httponly-true:
+    kind: argument
+    nthChild: 7
+    regex: '(?i)^true$'
+  named-secure-true:
+    kind: argument
+    all:
+      - has:
+          field: name
+          regex: '^secure$'
+      - regex: '(?i):\s*true$'
+  named-httponly-true:
+    kind: argument
+    all:
+      - has:
+          field: name
+          regex: '^httponly$'
+      - regex: '(?i):\s*true$'
+  secure-true:
+    any:
+      - matches: positional-secure-true
+      - matches: named-secure-true
+  httponly-true:
+    any:
+      - matches: positional-httponly-true
+      - matches: named-httponly-true
   flag-true:
     kind: array_element_initializer
     regex: '(?i)^["\x27](httponly|secure)["\x27]\s*=>\s*true$'
@@ -41,19 +72,6 @@ rule:
         field: function
         regex: '^(setcookie|setrawcookie)$'
     - any:
-        # Two positional arguments or fewer: nothing can carry a flag.
-        - all:
-            - not:
-                has:
-                  field: arguments
-                  has:
-                    kind: argument
-                    nthChild: 3
-            - not:
-                has:
-                  field: arguments
-                  has:
-                    matches: options-array
         # Options array missing httponly => true.
         - has:
             field: arguments
@@ -76,7 +94,7 @@ rule:
                   has:
                     matches: flag-true
                     regex: '(?i)secure'
-        # Legacy positional form missing or disabling either fixed-position flag.
+        # Non-options form missing or disabling either positional/named flag.
         - all:
             - not:
                 has:
@@ -88,13 +106,9 @@ rule:
                     has:
                       field: arguments
                       has:
-                        kind: argument
-                        nthChild: 6
-                        regex: '(?i)^true$'
+                        matches: secure-true
                 - not:
                     has:
                       field: arguments
                       has:
-                        kind: argument
-                        nthChild: 7
-                        regex: '(?i)^true$'
+                        matches: httponly-true

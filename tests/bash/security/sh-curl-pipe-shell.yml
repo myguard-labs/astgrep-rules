@@ -13,9 +13,14 @@ valid:
 - curl -o /tmp/i.sh https://example.com/i.sh | bash
 - curl -o/tmp/i.sh https://example.com/i.sh | bash
 - curl --output=/tmp/i.sh https://example.com/i.sh | bash
+- curl -sLo/tmp/i.sh https://example.com/i.sh | bash
+- curl -sLo /tmp/i.sh https://example.com/i.sh | bash
 - wget https://example.com/setup.sh | sh
 - curl https://example.com/data | bash ./local.sh
+- curl https://example.com/data | python3 ./local.py
 - bash | curl https://example.com/i.sh
+- curl https://example.com/i.sh | sudo -E -u root bash
+- curl https://example.com/i.sh | sudo -n -E python3 -c 'print("local")'
 invalid:
 - curl -sSL https://get.example.com/i.sh | bash
 - wget -qO- https://example.com/setup.sh | sh
@@ -25,7 +30,17 @@ invalid:
 - curl -o - https://example.com/i.sh | bash
 - curl -o- https://example.com/i.sh | bash
 - curl --output=- https://example.com/i.sh | bash
+- curl -sLo- https://example.com/i.sh | bash
+- curl -sLo - https://example.com/i.sh | bash
+- curl -fsSLo- https://example.com/i.sh | bash
 - curl https://example.com/i.sh | bash -s
 - curl https://example.com/get.py | python3 -
 - curl https://example.com/i.sh | sudo bash -s
 - curl https://example.com/get.py | sudo -E python3 -
+- curl https://example.com/i.sh | bash -s -- deploy
+- curl https://example.com/get.py | python3 - deploy
+- curl https://example.com/i.sh | sudo bash -s -- deploy
+- curl https://example.com/get.py | sudo -E python3 - deploy
+- curl https://example.com/i.sh | sudo -E -n bash
+- curl https://example.com/get.py | sudo -n -E python3 - deploy
+- curl https://example.com/i.sh | sudo -HnE bash -s -- deploy

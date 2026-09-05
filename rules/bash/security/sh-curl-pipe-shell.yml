@@ -12,9 +12,10 @@ note: >-
   Fires when curl writes its response to stdout, or wget explicitly selects
   stdout, and that stream reaches a bare sh/bash/zsh/python interpreter or one
   with an explicit stdin selector (`-s` or `-`).
-  Also covers sudo with no options or the common no-argument -E/-H/-n/-S
-  options. Commands that select an output file, interpreters given a script
-  path, and sudo tee/install do not match.
+  Also covers sudo with any sequence or cluster of the common no-argument
+  -E/-H/-n/-S options. Arguments after an explicit stdin selector are program
+  argv, so they remain covered. Commands that select an output file,
+  interpreters given a script path, and sudo tee/install do not match.
   Vendor install instructions use this shape; that is the reason to pin and
   verify locally rather than a reason to dismiss it. An interpreter given an
   inline script (python3 -c, perl -e) does not match: stdin is data there, not
@@ -31,7 +32,7 @@ utils:
           - has: {field: name, regex: '^curl$'}
           - any:
               # These output-option forms explicitly select stdout.
-              - regex: '(^|\s)(-o\s+-|--output\s+-|-o-|--output=-)(\s|$)'
+              - regex: '(^|\s)(-[sSfLvikN]*o\s+-|-[sSfLvikN]*o-|--output\s+-|--output=-)(\s|$)'
               - not:
                   has:
                     field: argument
@@ -58,32 +59,11 @@ utils:
                   has: {field: argument, regex: '.+'}
               - all:
                   - has: {nthChild: 2, matches: stdin-marker}
-                  - not:
-                      has: {nthChild: 3, regex: '.+'}
-      # With no sudo options, the command word is its first argument.
+      # Supported sudo options take no argument, so any sequence or cluster can
+      # precede the interpreter. A stdin selector may be followed by argv.
       - all:
           - has: {field: name, regex: '^sudo$'}
-          - has: {nthChild: 2, matches: interpreter}
-          - any:
-              - not:
-                  has: {nthChild: 3, regex: '.+'}
-              - all:
-                  - has: {nthChild: 3, matches: stdin-marker}
-                  - not:
-                      has: {nthChild: 4, regex: '.+'}
-      # These common sudo options take no argument, so the next word is the
-      # command rather than an option value.
-      - all:
-          - has: {field: name, regex: '^sudo$'}
-          - has: {nthChild: 2, regex: '^-[EHnS]+$'}
-          - has: {nthChild: 3, matches: interpreter}
-          - any:
-              - not:
-                  has: {nthChild: 4, regex: '.+'}
-              - all:
-                  - has: {nthChild: 4, matches: stdin-marker}
-                  - not:
-                      has: {nthChild: 5, regex: '.+'}
+          - regex: '^sudo(?:\s+-[EHnS]+)*\s+(?:sh|bash|zsh|ksh|dash|python3?|perl|ruby)(?:\s+(-s|-)(?:\s+.*)?)?$'
 rule:
   kind: pipeline
   has:

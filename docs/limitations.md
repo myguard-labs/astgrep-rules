@@ -96,11 +96,10 @@ resolution and remain outside this matcher.
 - `go-http-no-timeout` keys on field names in an `http.Client` or
   `http.Server` literal; the package qualifier is required, so an unrelated
   `Client` type does not match and a dot-imported one is missed. Only direct
-  `*Timeout` fields count; a nested `Transport` timeout does not satisfy the
-  outer client. A client configured after construction, or one whose transport
-  carries its own deadlines, is not detected. A direct timeout field set to the
-  literal `0` matches; computed zero values such as `time.Duration(0)` are not
-  evaluated and are treated as configured.
+  `*Timeout` fields count; nested `Transport` timeouts do not suppress the outer
+  client match. Timeouts assigned after construction are not detected. A direct
+  timeout field set to the literal `0` matches; computed zero values such as
+  `time.Duration(0)` are not evaluated and are treated as configured.
 - `go-error-swallowed` cannot tell an error from any other discarded return, so
   it approximates: an assignment binding `err*`, `e` or `ok*` is excluded, as
   is an assignment whose right-hand expressions are all common cleanup calls
@@ -231,10 +230,11 @@ two rules cover only its code-level slice.
 
 - `sh-curl-pipe-shell` matches a stdout fetch to its rightward interpreter. An
   interpreter may be bare or use the explicit stdin forms `bash -s`/`python3 -`;
-  script-path and inline-script forms do not match. Curl must not select an
-  output file (`-o -`, `-o-`, and `--output=-` explicitly select stdout), while
-  wget must explicitly select stdout. `sudo`
-  supports no options or the common no-argument `-E`, `-H`, `-n` and `-S`;
+  arguments after those selectors are argv and remain covered, while script-path
+  and inline-script forms do not match. Curl must not select an output file;
+  `-o -`, `-o-`, `--output=-`, and combined common-option forms such as `-sLo-`
+  explicitly select stdout. Wget must explicitly select stdout. `sudo` supports
+  any sequence or cluster of the no-argument `-E`, `-H`, `-n` and `-S` options;
   `sudo tee` and `sudo install` do not match. The rule cannot see whether a
   checksum is verified elsewhere in the script.
 - `sh-tls-verify-disabled` matches the flag, not the intent, and binds each
@@ -253,8 +253,11 @@ two rules cover only its code-level slice.
   either `httponly` or `secure` is absent or not literally `true`, and the
   legacy positional form. A named `expires_or_options:` array is recognized in
   any argument order and is not interpreted as the positional signature.
-  Positional arguments six and seven must both be the literal `true`; calls too
-  short to carry those flags also match unless they supply a named options array.
+  Named `secure:` and `httponly:` arguments are also recognized in any source
+  order. Outside the options-array form, each flag may be supplied either by its
+  legacy positional slot or by its named argument, so a positional `secure`
+  followed by a named `httponly:` is handled correctly. Both resolved values
+  must be literal `true`; missing, false or computed values match.
 - `py-tarfile-extractall` covers CWE-22. The receiver must be bound from
   `tarfile.open`, `tarfile.TarFile` or `tarfile.TarFile.open` by a preceding
   assignment in the same statement list, the statement list containing an
