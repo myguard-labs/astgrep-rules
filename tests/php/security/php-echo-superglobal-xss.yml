@@ -16,8 +16,31 @@ valid:
 - '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], ENT_SUBSTITUTE | ENT_QUOTES) . "\">";'
 - '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], ENT_SUBSTITUTE | ENT_COMPAT) . "\">";'
 - '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], flags: (ENT_SUBSTITUTE | (ENT_COMPAT))) . "\">";'
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], 2) . "\">";'
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], (0x2 /* ENT_COMPAT */)) . "\">";'
+# Digit-separated masks with bit 1 protect double-quoted attributes.
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], 1_0) . "\">";'
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], (0x0_2 /* bit 1 */)) . "\">";'
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], 0b1_0) . "\">";'
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], 0o1_2) . "\">";'
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], 0_12) . "\">";'
 - |
   <?php echo "<input value='" . htmlspecialchars($_GET["q"], ENT_SUBSTITUTE | ENT_QUOTES) . "'>";
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], 0b11) . "'>";
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], 03) . "'>";
+# Digit-separated masks with bit 0 protect single-quoted attributes.
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], 1_3) . "'>";
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], (0x0_3 /* bit 0 */)) . "'>";
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], 0b1_1) . "'>";
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], 0o1_3) . "'>";
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], 0_13) . "'>";
 invalid:
 - '<?php echo $_GET["q"];'
 - '<?php echo $_POST["name"];'
@@ -35,5 +58,30 @@ invalid:
 - '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], /* flags */ ENT_NOQUOTES) . "\">";'
 - '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], (ENT_NOQUOTES /* no quotes */ | (ENT_SUBSTITUTE))) . "\">";'
 - '<?php echo "<input value=\"" . htmlentities($_GET["q"], flags: (ENT_NOQUOTES | ENT_SUBSTITUTE)) . "\">";'
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], (/* no quote bits */ 8)) . "\">";'
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], 0x8) . "\">";'
+# Digit-separated masks without bit 1 leave double quotes exposed.
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], (/* no quote bits */ 1_2)) . "\">";'
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], 0x0_8) . "\">";'
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], 0b1_00) . "\">";'
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], 0o1_0) . "\">";'
+- '<?php echo "<input value=\"" . htmlspecialchars($_GET["q"], 0_10) . "\">";'
 - |
   <?php echo "<input value='" . htmlspecialchars($_GET["q"], ENT_COMPAT | ENT_SUBSTITUTE) . "'>";
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], 2) . "'>";
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], (0b10)) . "'>";
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], 02) . "'>";
+# Digit-separated masks without bit 0 leave single quotes exposed.
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], (/* no quote bit */ 1_2)) . "'>";
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], 0x0_8) . "'>";
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], 0b1_0) . "'>";
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], 0o1_0) . "'>";
+- |
+  <?php echo "<input value='" . htmlspecialchars($_GET["q"], 0_10) . "'>";

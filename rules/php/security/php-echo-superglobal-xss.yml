@@ -15,7 +15,10 @@ note: >-
   htmlspecialchars/htmlentities with a literal flag mask that omits the quote
   escaping required by the surrounding delimiter still matches. `ENT_QUOTES`
   protects either delimiter; `ENT_COMPAT` protects only double-quoted
-  attributes. Those masks remain sufficient for ordinary element text. json_encode is not an
+  attributes. Decimal, hexadecimal, binary, and octal integer masks are checked
+  by the same quote bits (bit 0 for single quotes, bit 1 for double quotes);
+  valid PHP digit separators between digits are ignored for that check.
+  Those masks remain sufficient for ordinary element text. json_encode is not an
   HTML encoder (it leaves < alone without JSON_HEX_TAG), so it does not suppress the match. A value echoed
   into a non-HTML response (JSON with the right Content-Type) is the routine
   dismissal; escaping is still the safer default.
@@ -37,6 +40,20 @@ utils:
         regex: '(?i)<[^>]*\b[A-Za-z_:][A-Za-z0-9_:.-]*\s*=\s*\\?\x27["'']$'
       - kind: string
         regex: '(?i)<[^>]*\b[A-Za-z_:][A-Za-z0-9_:.-]*\s*=\s*\\?\x27["'']$'
+  single-quote-protective-flag:
+    any:
+      - kind: name
+        regex: '^ENT_QUOTES$'
+      - kind: integer
+        # Bit 0 is set: odd decimal/hex/octal, or a binary literal ending in 1.
+        regex: '^(?:[13579]|[1-9](?:_?[0-9])*_?[13579]|0[xX](?:[0-9A-Fa-f]_?)*[13579bBdDfF]|0[bB](?:[01]_?)*1|0[oO](?:[0-7]_?)*[1357]|0(?:_?[0-7])*_?[1357])$'
+  double-quote-protective-flag:
+    any:
+      - kind: name
+        regex: '^(ENT_QUOTES|ENT_COMPAT)$'
+      - kind: integer
+        # Bit 1 is set. Decimal alternatives encode value modulo four.
+        regex: '^(?:[2367]|[2468]_?[2367]|[13579]_?[014589]|[1-9](?:_?[0-9])*_?(?:[02468]_?[2367]|[13579]_?[014589])|0[xX](?:[0-9A-Fa-f]_?)*[2367aAbBeEfF]|0[bB](?:[01]_?)*1_?[01]|0[oO](?:[0-7]_?)*[2367]|0(?:_?[0-7])*_?[2367])$'
 rule:
   any:
     # Start at the unsafe flags argument and prove it is the value appended
@@ -49,18 +66,17 @@ rule:
                     position: 2
                     ofRule: {not: {kind: comment}}
                 - not: {regex: '^\s*flags\s*:'}
-                - regex: '(?s)^(?:\s|[()]|/\*.*?\*/)*(?:ENT_[A-Z0-9_]+|0)(?:(?:\s|[()]|/\*.*?\*/)*\|(?:\s|[()]|/\*.*?\*/)*(?:ENT_[A-Z0-9_]+|0))*(?:\s|[()]|/\*.*?\*/)*$'
+                - regex: '(?s)^(?:\s|[()]|/\*.*?\*/)*(?:ENT_[A-Z0-9_]+|0[xX][0-9A-Fa-f](?:_?[0-9A-Fa-f])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|0(?:_?[0-7])+|[1-9](?:_?[0-9])*|0)(?:(?:\s|[()]|/\*.*?\*/)*\|(?:\s|[()]|/\*.*?\*/)*(?:ENT_[A-Z0-9_]+|0[xX][0-9A-Fa-f](?:_?[0-9A-Fa-f])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|0(?:_?[0-7])+|[1-9](?:_?[0-9])*|0))*(?:\s|[()]|/\*.*?\*/)*$'
             - all:
                 - has: {field: name, regex: '^flags$'}
-                - regex: '(?s)^\s*flags\s*:(?:\s|[()]|/\*.*?\*/)*(?:ENT_[A-Z0-9_]+|0)(?:(?:\s|[()]|/\*.*?\*/)*\|(?:\s|[()]|/\*.*?\*/)*(?:ENT_[A-Z0-9_]+|0))*(?:\s|[()]|/\*.*?\*/)*$'
+                - regex: '(?s)^\s*flags\s*:(?:\s|[()]|/\*.*?\*/)*(?:ENT_[A-Z0-9_]+|0[xX][0-9A-Fa-f](?:_?[0-9A-Fa-f])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|0(?:_?[0-7])+|[1-9](?:_?[0-9])*|0)(?:(?:\s|[()]|/\*.*?\*/)*\|(?:\s|[()]|/\*.*?\*/)*(?:ENT_[A-Z0-9_]+|0[xX][0-9A-Fa-f](?:_?[0-9A-Fa-f])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|0(?:_?[0-7])+|[1-9](?:_?[0-9])*|0))*(?:\s|[()]|/\*.*?\*/)*$'
         - any:
             # Single-quoted attributes require ENT_QUOTES.
             - all:
                 - not:
                     has:
                       stopBy: end
-                      kind: name
-                      regex: '^ENT_QUOTES$'
+                      matches: single-quote-protective-flag
                 - inside:
                     stopBy: neighbor
                     kind: arguments
@@ -91,8 +107,7 @@ rule:
                 - not:
                     has:
                       stopBy: end
-                      kind: name
-                      regex: '^(ENT_QUOTES|ENT_COMPAT)$'
+                      matches: double-quote-protective-flag
                 - inside:
                     stopBy: neighbor
                     kind: arguments
