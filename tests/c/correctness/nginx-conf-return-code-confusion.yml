@@ -60,6 +60,12 @@ valid:
       /* return NGX_OK; */
       return "return NGX_ERROR;";
   }
+- |
+  char *
+  cycle_label(ngx_cycle_t *cycle)
+  {
+      return NGX_ERROR;
+  }
 invalid:
 - |
   char *

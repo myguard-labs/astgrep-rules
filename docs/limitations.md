@@ -115,8 +115,8 @@ Each rule's `note` names the commit that motivated it.
 - `nginx-conf-return-code-confusion` sees return statements only. A code
   stored in a local and returned later needs the local's type. `u_char *` and
   `char **` functions are excluded, and the `char *` side requires an
-  `ngx_conf_t *` or `ngx_cycle_t *` parameter, which covers both directive
-  handlers and the core module `init_conf` callback (`core/ngx_module.h`), so
+  `ngx_conf_t *` parameter, or the `ngx_cycle_t *` plus `void *` pair of the
+  core module `init_conf` callback (`core/ngx_module.h`), so
   an unrelated `char *` helper returning a sentinel is not flagged. A return
   inside a nested function is attributed to that function, not the enclosing
   handler.
@@ -124,10 +124,11 @@ Each rule's `note` names the commit that motivated it.
   same buffer expression. Two independent `if` statements, or a compound
   condition on the first branch, do not match.
 - `nginx-pool-cleanup-add-size-discarded` recognises the allocation as a plain
-  assignment, a declaration, or an assignment inside an `if` condition, and
-  requires the `->data` assignment to follow it in source order without
-  crossing into a nested function. It does no path analysis, so the two may
-  sit on branches that never both execute. `ngx_pool_cleanup_add`
-  allocates only when the runtime size is non-zero (`core/ngx_palloc.c`), and
+  assignment, a declaration with an initialiser, or an assignment inside an
+  `if` condition, and requires the `->data` assignment to follow it in source
+  order. Neither side may cross into a nested function. It does no path
+  analysis, so the two may sit on branches that never both execute.
+  `ngx_pool_cleanup_add` allocates only when the size is non-zero at runtime
+  (`core/ngx_palloc.c`), and
   the rule cannot evaluate the expression, so a macro or variable that
   happens to be zero still matches.

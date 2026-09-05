@@ -9,13 +9,21 @@ message: >-
   result against the other family.
 note: >-
   Real: nginx-zstd-module 1b52f42, merge_loc_conf returned NGX_OK from a
-  char * function. The char * side requires an ngx_conf_t * or ngx_cycle_t *
-  parameter, which covers both directive handlers and the core module
-  init_conf callback (core/ngx_module.h), so an unrelated char * helper
-  returning a sentinel is not flagged. A return nested inside an inner
+  char * function. The char * side requires either an ngx_conf_t * parameter
+  (a directive handler) or the ngx_cycle_t * plus void * pair of the core
+  module init_conf callback (core/ngx_module.h), so an unrelated char * helper
+  that merely takes a cycle is not flagged. A return nested inside an inner
   function is attributed to that function, not the enclosing handler. Only return
   statements are matched; a value stored in a local first needs the local's
   type, and u_char * / char ** functions are out of scope.
+utils:
+  conf-callback:
+    kind: function_declarator
+    any:
+      - regex: \bngx_conf_t\s*\*
+      - all:
+          - regex: \bngx_cycle_t\s*\*
+          - regex: \bvoid\s*\*
 rule:
   any:
     - kind: return_statement
@@ -33,8 +41,7 @@ rule:
                   kind: pointer_declarator
                   has:
                     field: declarator
-                    kind: function_declarator
-                    regex: \bngx_(conf|cycle)_t\s*\*
+                    matches: conf-callback
         - not:
             inside:
               kind: function_definition
@@ -45,8 +52,7 @@ rule:
                   kind: pointer_declarator
                   has:
                     field: declarator
-                    kind: function_declarator
-                    regex: \bngx_(conf|cycle)_t\s*\*
+                    matches: conf-callback
     - kind: return_statement
       regex: ^return\s+NGX_CONF_(OK|ERROR)\s*;$
       all:
