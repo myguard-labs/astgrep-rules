@@ -1,0 +1,52 @@
+id: php-echo-superglobal-xss
+snapshots:
+  <?php echo "<p>{$_COOKIE["last"]}</p>";:
+    labels:
+    - source: echo "<p>{$_COOKIE["last"]}</p>";
+      style: primary
+      start: 6
+      end: 39
+    - source: $_COOKIE
+      style: secondary
+      start: 16
+      end: 24
+  <?php echo "Hello " . $_GET["name"];:
+    labels:
+    - source: echo "Hello " . $_GET["name"];
+      style: primary
+      start: 6
+      end: 36
+    - source: $_GET
+      style: secondary
+      start: 22
+      end: 27
+  <?php echo $_GET["q"];:
+    labels:
+    - source: echo $_GET["q"];
+      style: primary
+      start: 6
+      end: 22
+    - source: $_GET
+      style: secondary
+      start: 11
+      end: 16
+  <?php echo $_POST["name"];:
+    labels:
+    - source: echo $_POST["name"];
+      style: primary
+      start: 6
+      end: 26
+    - source: $_POST
+      style: secondary
+      start: 11
+      end: 17
+  <?php print $_REQUEST["msg"];:
+    labels:
+    - source: print $_REQUEST["msg"]
+      style: primary
+      start: 6
+      end: 28
+    - source: $_REQUEST
+      style: secondary
+      start: 12
+      end: 21

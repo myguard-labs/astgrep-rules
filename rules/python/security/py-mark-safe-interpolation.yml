@@ -1,0 +1,29 @@
+id: py-mark-safe-interpolation
+language: python
+severity: error
+message: >-
+  mark_safe on an interpolated string — the value is concatenated before it is
+  marked, so any markup it carries is already embedded and Django's autoescaping
+  is switched off for the whole result (CWE-79). Use format_html, which escapes
+  each argument while leaving the template literal alone.
+note: >-
+  Fires on mark_safe given an f-string, a concatenation or .format(). mark_safe
+  over a constant literal is safe and does not match.
+rule:
+  kind: call
+  all:
+    - has:
+        field: function
+        regex: '(^|\.)mark_safe$'
+    - has:
+        field: arguments
+        has:
+          any:
+            - kind: string
+              has:
+                kind: interpolation
+            - kind: binary_operator
+            - kind: call
+              has:
+                field: function
+                regex: '\.format$'

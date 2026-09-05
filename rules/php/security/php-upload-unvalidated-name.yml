@@ -1,0 +1,31 @@
+id: php-upload-unvalidated-name
+language: php
+severity: error
+message: >-
+  Uploaded file moved to a destination built from the client-supplied name
+  (CWE-434). The browser controls $_FILES[...]["name"], so an attacker picks the
+  extension; a .php landing under the webroot is executed on the next request.
+  Generate the stored name yourself, validate against an extension allowlist and
+  the file's magic bytes, and store outside the document root.
+note: >-
+  Fires on move_uploaded_file whose destination references the client name.
+  A destination built from a generated identifier does not match. The client's
+  Content-Type is attacker-controlled and is not validation.
+rule:
+  kind: function_call_expression
+  all:
+    - has:
+        field: function
+        regex: '^move_uploaded_file$'
+    - has:
+        field: arguments
+        has:
+          kind: argument
+          nthChild: 2
+          has:
+            stopBy: end
+            kind: subscript_expression
+            has:
+              stopBy: end
+              kind: variable_name
+              regex: '^\$_FILES$'

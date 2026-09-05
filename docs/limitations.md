@@ -102,3 +102,37 @@ artifact, not a double match.
   declaration without a storage class, so a `static` local does not match. It
   does not resolve shadowing, so a name also declared in an inner scope, or one
   that is a parameter pointer, still needs the declaration checked.
+
+## Third batch
+
+Rules chosen against the 2025 CWE Top 25 (CISA/MITRE, published 2025-12-11,
+scored over 39,080 CVE records) after mapping the existing pack for gaps.
+See <https://cwe.mitre.org/data/definitions/1435.html>.
+
+- `php-echo-superglobal-xss` covers CWE-79, rank 1. It matches a superglobal
+  reaching echo/print and clears the match when a recognised escaper wraps the
+  value in the same statement. An escaper applied earlier and stored in a
+  variable is not visible to it, and a value echoed into a non-HTML response is
+  a legitimate dismissal.
+- `php-upload-unvalidated-name` covers CWE-434. `nthChild: 2` restricts the
+  match to the destination argument, so the legitimate
+  `$_FILES[...]["tmp_name"]` source does not fire. It cannot see validation
+  performed earlier in the function.
+- `go-zip-slip` covers CWE-22. It matches a `.Name` field read inside
+  filepath.Join, the archive-entry shape, and excludes a `.Name()` method call
+  because `os.DirEntry` over a local directory cannot carry traversal — that
+  distinction came from a false positive on
+  labs/mailstrix/internal/mailstrix/scanner.go. A containment check on a later
+  line is not seen; Go 1.24+ `os.OpenRoot` is the recommended fix and all
+  first-party Go modules here are 1.24 or newer.
+- `py-ssrf-request-fstring` covers CWE-918 and flags an interpolated URL, not a
+  proven SSRF. An interpolated path under a fixed host is the common benign
+  shape.
+- `py-mark-safe-interpolation` covers CWE-79 in Django: interpolation happens
+  before `mark_safe` marks the result, so the payload is already embedded.
+  `format_html` is the fix. `mark_safe` over a constant does not match.
+- `c-free-without-null` is hygiene for CWE-416/CWE-415, not a use-after-free
+  finding: ast-grep models no dataflow, so it cannot prove a later use. It is
+  `info` severity because short-lived scopes legitimately free without
+  clearing — measured zero hits under labs/nginx-http-shield-module/src and 124
+  across its ci/tests and ci/fuzz harnesses.

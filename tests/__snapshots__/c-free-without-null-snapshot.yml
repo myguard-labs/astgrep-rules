@@ -1,0 +1,68 @@
+id: c-free-without-null
+snapshots:
+  void f(void) { free(buf); }:
+    labels:
+    - source: free(buf);
+      style: primary
+      start: 15
+      end: 25
+    - source: free
+      style: secondary
+      start: 15
+      end: 19
+    - source: buf
+      style: secondary
+      start: 20
+      end: 23
+    - source: buf
+      style: secondary
+      start: 20
+      end: 23
+    - source: free(buf)
+      style: secondary
+      start: 15
+      end: 24
+  void f(void) { free(p); use(p); }:
+    labels:
+    - source: free(p);
+      style: primary
+      start: 15
+      end: 23
+    - source: free
+      style: secondary
+      start: 15
+      end: 19
+    - source: p
+      style: secondary
+      start: 20
+      end: 21
+    - source: p
+      style: secondary
+      start: 20
+      end: 21
+    - source: free(p)
+      style: secondary
+      start: 15
+      end: 22
+  void f(void) { ngx_free(tmp); log("done"); }:
+    labels:
+    - source: ngx_free(tmp);
+      style: primary
+      start: 15
+      end: 29
+    - source: ngx_free
+      style: secondary
+      start: 15
+      end: 23
+    - source: tmp
+      style: secondary
+      start: 24
+      end: 27
+    - source: tmp
+      style: secondary
+      start: 24
+      end: 27
+    - source: ngx_free(tmp)
+      style: secondary
+      start: 15
+      end: 28

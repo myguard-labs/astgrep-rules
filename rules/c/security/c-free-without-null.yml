@@ -1,0 +1,39 @@
+id: c-free-without-null
+language: c
+severity: info
+message: >-
+  Pointer freed and left dangling — no assignment clears it before the enclosing
+  block ends. A later dereference is a use-after-free (CWE-416, rank 7 in the
+  2025 CWE Top 25) and a second free is a double free; both are exploitable
+  primitives. Set the pointer to NULL immediately after freeing it.
+note: >-
+  Hygiene check, not a use-after-free finding: ast-grep sees no dataflow, so it
+  cannot tell whether the pointer is used again. A pointer going out of scope on
+  the next line, or a local whose function returns immediately, is the routine
+  dismissal. nginx pool allocations are freed with the pool and need no free at
+  all. Measured on labs/nginx-http-shield-module: zero hits under src/ and 124
+  in ci/tests and ci/fuzz, where freeing at scope end is correct — scope scans
+  to production sources.
+rule:
+  kind: expression_statement
+  all:
+    - has:
+        kind: call_expression
+        all:
+          - has:
+              field: function
+              regex: '^(free|ngx_free)$'
+          - has:
+              field: arguments
+              has:
+                kind: identifier
+                pattern: $PTR
+    - not:
+        precedes:
+          stopBy: end
+          kind: expression_statement
+          has:
+            kind: assignment_expression
+            has:
+              field: left
+              pattern: $PTR

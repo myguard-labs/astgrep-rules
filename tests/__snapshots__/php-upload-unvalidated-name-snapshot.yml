@@ -1,0 +1,54 @@
+id: php-upload-unvalidated-name
+snapshots:
+  <?php move_uploaded_file($_FILES["f"]["tmp_name"], $dir . basename($_FILES["f"]["name"]));:
+    labels:
+    - source: move_uploaded_file($_FILES["f"]["tmp_name"], $dir . basename($_FILES["f"]["name"]))
+      style: primary
+      start: 6
+      end: 89
+    - source: move_uploaded_file
+      style: secondary
+      start: 6
+      end: 24
+    - source: $_FILES
+      style: secondary
+      start: 67
+      end: 74
+    - source: $_FILES["f"]["name"]
+      style: secondary
+      start: 67
+      end: 87
+    - source: $dir . basename($_FILES["f"]["name"])
+      style: secondary
+      start: 51
+      end: 88
+    - source: $dir . basename($_FILES["f"]["name"])
+      style: secondary
+      start: 51
+      end: 88
+  <?php move_uploaded_file($tmp, "/var/www/up/" . $_FILES["f"]["name"]);:
+    labels:
+    - source: move_uploaded_file($tmp, "/var/www/up/" . $_FILES["f"]["name"])
+      style: primary
+      start: 6
+      end: 69
+    - source: move_uploaded_file
+      style: secondary
+      start: 6
+      end: 24
+    - source: $_FILES
+      style: secondary
+      start: 48
+      end: 55
+    - source: $_FILES["f"]["name"]
+      style: secondary
+      start: 48
+      end: 68
+    - source: '"/var/www/up/" . $_FILES["f"]["name"]'
+      style: secondary
+      start: 31
+      end: 68
+    - source: '"/var/www/up/" . $_FILES["f"]["name"]'
+      style: secondary
+      start: 31
+      end: 68

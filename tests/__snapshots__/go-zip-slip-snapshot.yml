@@ -1,0 +1,68 @@
+id: go-zip-slip
+snapshots:
+  package m; func f() { p := filepath.Join(dir, hdr.Name) }:
+    labels:
+    - source: filepath.Join(dir, hdr.Name)
+      style: primary
+      start: 27
+      end: 55
+    - source: filepath.Join
+      style: secondary
+      start: 27
+      end: 40
+    - source: Name
+      style: secondary
+      start: 50
+      end: 54
+    - source: hdr.Name
+      style: secondary
+      start: 46
+      end: 54
+    - source: hdr.Name
+      style: secondary
+      start: 46
+      end: 54
+  package m; func f() { p := filepath.Join(dst, f.Name) }:
+    labels:
+    - source: filepath.Join(dst, f.Name)
+      style: primary
+      start: 27
+      end: 53
+    - source: filepath.Join
+      style: secondary
+      start: 27
+      end: 40
+    - source: Name
+      style: secondary
+      start: 48
+      end: 52
+    - source: f.Name
+      style: secondary
+      start: 46
+      end: 52
+    - source: f.Name
+      style: secondary
+      start: 46
+      end: 52
+  package m; func f() { p := filepath.Join(dst, h.Name) }:
+    labels:
+    - source: filepath.Join(dst, h.Name)
+      style: primary
+      start: 27
+      end: 53
+    - source: filepath.Join
+      style: secondary
+      start: 27
+      end: 40
+    - source: Name
+      style: secondary
+      start: 48
+      end: 52
+    - source: h.Name
+      style: secondary
+      start: 46
+      end: 52
+    - source: h.Name
+      style: secondary
+      start: 46
+      end: 52

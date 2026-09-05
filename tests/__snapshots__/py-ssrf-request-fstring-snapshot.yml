@@ -1,0 +1,90 @@
+id: py-ssrf-request-fstring
+snapshots:
+  httpx.get(f"{base}/users/{uid}"):
+    labels:
+    - source: httpx.get(f"{base}/users/{uid}")
+      style: primary
+      start: 0
+      end: 32
+    - source: httpx.get
+      style: secondary
+      start: 0
+      end: 9
+    - source: '{base}'
+      style: secondary
+      start: 12
+      end: 18
+    - source: f"{base}/users/{uid}"
+      style: secondary
+      start: 10
+      end: 31
+    - source: f"{base}/users/{uid}"
+      style: secondary
+      start: 10
+      end: 31
+  requests.get("https://" + host + "/api"):
+    labels:
+    - source: requests.get("https://" + host + "/api")
+      style: primary
+      start: 0
+      end: 40
+    - source: requests.get
+      style: secondary
+      start: 0
+      end: 12
+    - source: '"/api"'
+      style: secondary
+      start: 33
+      end: 39
+    - source: '"https://" + host + "/api"'
+      style: secondary
+      start: 13
+      end: 39
+    - source: '"https://" + host + "/api"'
+      style: secondary
+      start: 13
+      end: 39
+  requests.get(f"https://{host}/api"):
+    labels:
+    - source: requests.get(f"https://{host}/api")
+      style: primary
+      start: 0
+      end: 35
+    - source: requests.get
+      style: secondary
+      start: 0
+      end: 12
+    - source: '{host}'
+      style: secondary
+      start: 23
+      end: 29
+    - source: f"https://{host}/api"
+      style: secondary
+      start: 13
+      end: 34
+    - source: f"https://{host}/api"
+      style: secondary
+      start: 13
+      end: 34
+  urlopen(f"http://{target}/meta"):
+    labels:
+    - source: urlopen(f"http://{target}/meta")
+      style: primary
+      start: 0
+      end: 32
+    - source: urlopen
+      style: secondary
+      start: 0
+      end: 7
+    - source: '{target}'
+      style: secondary
+      start: 17
+      end: 25
+    - source: f"http://{target}/meta"
+      style: secondary
+      start: 8
+      end: 31
+    - source: f"http://{target}/meta"
+      style: secondary
+      start: 8
+      end: 31
