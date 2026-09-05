@@ -18,4 +18,4 @@ rule:
   kind: function_call_expression
   has:
     field: function
-    regex: '^(md5|sha1|crypt|mt_rand|rand|uniqid)$'
+    regex: '(?i)^\\?(md5|sha1|crypt|mt_rand|rand|uniqid)$'

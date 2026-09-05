@@ -25,7 +25,14 @@ rule:
         field: arguments
         any:
           - has:
-              nthChild: 2
+              nthChild:
+                position: 2
+                ofRule:
+                  not:
+                    any:
+                      - kind: keyword_argument
+                      - kind: dictionary_splat
+                      - kind: comment
           - has:
               kind: list_splat
     - not:

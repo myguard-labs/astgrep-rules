@@ -17,22 +17,27 @@ note: >-
   clauses (BrokenPipeError, SystemExit, OSError), mostly in CI tooling. The bare
   form is the dangerous one and lives in py-bare-except at warning.
 rule:
-  all:
-    - kind: except_clause
-    - has:
-        kind: block
-        all:
-          # Exactly one statement, ignoring comments, and it is pass or ...
-          - has:
-              nthChild:
-                position: 1
-                ofRule: {not: {kind: comment}}
-              any:
-                - kind: pass_statement
-                - kind: expression_statement
-                  has: {kind: ellipsis}
-          - not:
+  any:
+    - all:
+        - pattern:
+            context: |
+              try:
+                  work()
+              except:
+                  pass
+            selector: pass_statement
+        - inside: &only-except-body
+            stopBy: neighbor
+            kind: block
+            inside:
+              stopBy: neighbor
+              kind: except_clause
+            not:
               has:
                 nthChild:
                   position: 2
                   ofRule: {not: {kind: comment}}
+    - all:
+        - kind: expression_statement
+        - regex: '^\.\.\.$'
+        - inside: *only-except-body

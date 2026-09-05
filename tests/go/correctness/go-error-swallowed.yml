@@ -11,6 +11,8 @@ valid:
 - 'package m; func f() { _ = f.Close() }'
 - 'package m; func f() { _, _ = file.Close(), conn.SetDeadline(t) }'
 - 'package m; func f() { _, ok := c.Get(k); use(ok) }'
+- 'package m; func f() { _, ok1 := c.Get(k); use(ok1) }'
+- 'package m; func f() { _, okJSON := c.Get(k); use(okJSON) }'
 - 'package m; func f() { _, e = io.Copy(dst, src); return e }'
 - 'package m; // _ = g()'
 invalid:

@@ -6,6 +6,9 @@ valid:
 - base64.decode(data)
 - codec.decode(data, verify=False)
 - decode(token, verify=False)
+- 'jwt.decode(token, metadata={"verify_signature": False})'
+- 'jwt.decode(token, options={"not_verify_signature": False})'
+- 'jwt.decode(token, data={"nested": {"verify_signature": False}})'
 - |
   def configure_decoder():
       from jwt import decode
@@ -14,6 +17,8 @@ valid:
 - s = 'jwt.decode(token, verify=False)'
 invalid:
 - jwt.decode(token, verify=False)
+- jwt . decode(token, verify=False)
+- (jwt).decode(token, verify=False)
 - |
   from jwt import decode
   decode(token, verify=False)

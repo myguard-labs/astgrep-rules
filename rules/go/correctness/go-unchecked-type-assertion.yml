@@ -7,10 +7,11 @@ message: >-
   `v, ok := x.(T)` and handle !ok, or a type switch, whenever the dynamic type
   is not guaranteed by the code immediately above.
 note: >-
-  Fires only when the assertion is not assigned through comma-ok, so
-  `v, ok := x.(T)` does not match while `v := x.(T)` does. An assertion right
-  after a type switch case, or on a value the same function just constructed, is
-  the routine dismissal; assertions on data crossing a trust boundary (decoded
+  Direct and once-parenthesized comma-ok assignments such as
+  `v, ok := x.(T)` do not match while `v := x.(T)` does. Redundantly nested
+  parentheses around the assertion can still report. An assertion right after
+  a type switch case, or on a value the same function just constructed, is the
+  routine dismissal; assertions on data crossing a trust boundary (decoded
   JSON, plugin returns) are the ones that matter.
 rule:
   kind: type_assertion_expression
@@ -18,6 +19,10 @@ rule:
     any:
       - inside:
           kind: expression_list
+          not:
+            has:
+              nthChild: 2
+              regex: '.'
           inside:
             any:
               - kind: assignment_statement
@@ -29,9 +34,44 @@ rule:
                 kind: identifier
                 nthChild: 2
       - inside:
+          kind: parenthesized_expression
+          inside:
+            kind: expression_list
+            not:
+              has:
+                nthChild: 2
+                regex: '.'
+            inside:
+              any:
+                - kind: assignment_statement
+                - kind: short_var_declaration
+              has:
+                field: left
+                kind: expression_list
+                has:
+                  kind: identifier
+                  nthChild: 2
+      - inside:
           kind: expression_list
+          not:
+            has:
+              nthChild: 2
+              regex: '.'
           inside:
             kind: var_spec
             has:
               kind: identifier
               nthChild: 2
+      - inside:
+          kind: parenthesized_expression
+          inside:
+            kind: expression_list
+            not:
+              has:
+                nthChild: 2
+                regex: '.'
+            inside:
+              kind: var_spec
+              has:
+                kind: identifier
+                nthChild: 2

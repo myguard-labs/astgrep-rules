@@ -63,7 +63,8 @@ resolution and remain outside this matcher.
 ## Added rules
 
 - `go-tls-insecure-skip-verify` and `py-requests-verify-false` match a literal
-  `true`/`False`. The Go rule requires the field to sit in the nearest
+  `true`/`False`. The Go rule also allows redundant parentheses and comments
+  and requires the field to sit in the nearest
   enclosing `tls.Config` composite literal; another struct carrying the same
   field name does not match. Post-construction assignments are not matched
   because the receiver type is unavailable syntactically. The Python rule
@@ -85,7 +86,8 @@ resolution and remain outside this matcher.
   an internal, non-request variable still matches and needs review.
 - `c-strncat-size-misuse` binds the size operand to the destination argument
   and matches only when that expression is the complete length argument. It
-  covers `strncat` with `sizeof`/`strlen` and `strncpy` with `sizeof`;
+  covers `strncat` with `sizeof`/`strlen` and `strncpy` with `sizeof`, including
+  parenthesized destinations and both `sizeof(dst)` and `sizeof dst`;
   `strncpy(dst, src, strlen(dst))` is not classified as a whole-buffer overflow.
   Correct remaining-space forms subtract and do not match. An array
   passed as a pointer parameter still makes `sizeof` wrong for a different
@@ -93,13 +95,15 @@ resolution and remain outside this matcher.
 
 ## Second batch
 
-- `go-http-no-timeout` keys on field names in an `http.Client` or
-  `http.Server` literal; the package qualifier is required, so an unrelated
-  `Client` type does not match and a dot-imported one is missed. Only direct
-  `*Timeout` fields count; nested `Transport` timeouts do not suppress the outer
-  client match. Timeouts assigned after construction are not detected. A direct
-  timeout field set to the literal `0` matches; computed zero values such as
-  `time.Duration(0)` are not evaluated and are treated as configured.
+- `go-http-no-timeout` treats clients and servers separately. A client needs a
+  positive `Timeout`; a server needs a positive `WriteTimeout` plus either a
+  positive `ReadHeaderTimeout` or a positive `ReadTimeout` from which a zero
+  `ReadHeaderTimeout` can inherit. A negative `ReadHeaderTimeout` disables that
+  protection, and `IdleTimeout` alone does not bound active requests. The
+  `http.` qualifier is required, so an unrelated type does not match and a
+  dot-imported one is missed. Nested transport timeouts and assignments after
+  construction are not detected. Literal zero and lexically unary-negative
+  values are caught; other computed values are treated as configured.
 - `go-error-swallowed` cannot tell an error from any other discarded return, so
   it approximates: an assignment binding `err*`, `e` or `ok*` is excluded, as
   is an assignment whose right-hand expressions are all common cleanup calls
@@ -133,14 +137,20 @@ See <https://cwe.mitre.org/data/definitions/1435.html>.
 
 - `php-echo-superglobal-xss` covers CWE-79, rank 1. It matches a superglobal
   reaching echo/print and clears the match only when a recognised HTML or URL
-  escaper wraps that value itself; an escaper around another operand of the
-  same statement does not count, and `json_encode` is not treated as an
-  escaper because it leaves `<` alone without `JSON_HEX_TAG`. An escaper
+  escaper wraps that value itself. In an attribute-like concatenation, literal
+  flag masks (including bitwise-OR combinations) must escape the surrounding
+  quote: `ENT_QUOTES` protects either delimiter, while `ENT_COMPAT` protects
+  only double-quoted attributes. Masks that omit the required quote escaping
+  remain findings but are sufficient for ordinary element text. An escaper
+  around another operand of the same statement does not count. `json_encode`
+  is not treated as an escaper because it leaves `<` alone without
+  `JSON_HEX_TAG`. An escaper
   applied earlier and stored in a variable is not visible to it, and a value
   echoed into a non-HTML response is
   a legitimate dismissal.
-- `php-upload-unvalidated-name` covers CWE-434. `nthChild: 2` restricts the
-  match to the destination argument and the nested key must be `"name"`, so
+- `php-upload-unvalidated-name` covers CWE-434. A structural call pattern binds
+  the destination expression, whose nested key may use either PHP quote style
+  but must be `name`, so
   the legitimate `$_FILES[...]["tmp_name"]` source, and a destination built
   from `size`, `type` or `error`, do not fire. It cannot see validation
   performed earlier in the function.
@@ -166,12 +176,12 @@ See <https://cwe.mitre.org/data/definitions/1435.html>.
 - `py-mark-safe-interpolation` covers CWE-79 in Django: interpolation happens
   before `mark_safe` marks the result, so the payload is already embedded.
   `format_html` is the fix. `mark_safe` over a constant, including a
-  concatenation of literals only, does not match.
+  concatenation of literals only or a no-argument `.format()`, does not match.
 - `c-free-without-null` is hygiene for CWE-416/CWE-415, not a use-after-free
   finding: ast-grep models no dataflow, so it cannot prove a later use. It is
   `info` severity because short-lived scopes legitimately free without
-  clearing — measured zero hits under labs/nginx-http-shield-module/src and 124
-  across its ci/tests and ci/fuzz harnesses.
+  clearing. Test and fuzz harnesses commonly have that shape; scope corpus
+  scans to production sources.
 
 ## Fourth batch
 
@@ -182,8 +192,9 @@ Conditions. SSRF was absorbed into A01 Broken Access Control in this edition.
 See <https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/>.
 
 - `py-bare-except` and `py-except-pass` cover A10/CWE-396/CWE-390.
-  `py-bare-except` excludes only a bare `raise`, the documented cleanup idiom;
-  `raise Other()` replaces KeyboardInterrupt or SystemExit and matches.
+  `py-bare-except` excludes only an unconditional terminal bare `raise`, the
+  documented cleanup idiom; a conditional re-raise, work after the re-raise,
+  or `raise Other()` still matches.
   `py-except-pass` matches only a body whose single statement is `pass` or
   `...`, comments aside, so `pass` followed by real work or nested in a loop
   does not match; ruff E722 and flake8
@@ -194,9 +205,10 @@ See <https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/>.
   `py-bare-except` stays `warning` — it catches KeyboardInterrupt and
   SystemExit, so it is the form that actually fails open.
 - `go-unchecked-type-assertion` covers CWE-476. It distinguishes `v := x.(T)`
-  from `v, ok := x.(T)` by the arity of the left expression list, so comma-ok
-  and type switches do not match. A parenthesized assertion in a `var`
-  comma-ok declaration, such as `var s, ok = (i.(string))`, can still report.
+  from `v, ok := x.(T)` by the arity of both expression lists, including
+  multi-value right-hand sides. Direct and once-parenthesized comma-ok
+  assignments and declarations do not match; redundantly nested parentheses
+  can still report. Type switches do not match.
   The rule cannot tell whether the dynamic type is already guaranteed, so an
   assertion immediately after a type switch still matches. Measured 6
   first-party hits, all genuine single-value assertions.
@@ -205,10 +217,11 @@ See <https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/>.
   declaration-initializer forms. Suppression requires the immediately
   following `if` either to test non-NULL and scope the use, or to detect NULL
   and directly return or `goto`. Unrelated comparisons and NULL checks that
-  merely log still match. Later guards remain advisory matches, and a guard in
-  a called helper is invisible. Measured zero hits across the nginx modules
-  here, which check
-  every push; upstream nginx tracks the same omission in nginx/nginx#526.
+  merely log still match. A reverse-order compound condition is rejected when
+  its direct earlier operand dereferences the pointer. Later guards remain
+  advisory matches, and a guard in
+  a called helper is invisible. Upstream nginx tracks the same omission in
+  nginx/nginx#526.
 - `php-strcmp-loose-compare` and `php-hash-loose-compare` cover CWE-697 type
   juggling. They match `==`, `!=` and `<>` only when the relevant call is a
   direct, optionally parenthesized operand, so a call nested in another
@@ -228,10 +241,13 @@ Failures — the remaining 2025 category with no coverage. Most of A03 is
 registry, SBOM and provenance territory that no AST matcher can reach; these
 two rules cover only its code-level slice.
 
-- `sh-curl-pipe-shell` matches a stdout fetch to its rightward interpreter. An
-  interpreter may be bare or use the explicit stdin forms `bash -s`/`python3 -`;
-  arguments after those selectors are argv and remain covered, while script-path
-  and inline-script forms do not match. Curl must not select an output file;
+- `sh-curl-pipe-shell` matches a stdout fetch to its rightward interpreter. A
+  shell may be bare, use stdin-preserving options, or end in `-s`/`--`; Python,
+  Perl and Ruby require the explicit `-` stdin form. Quoted curl, wget,
+  interpreter and option tokens are recognized; quoted `sudo` is not.
+  Arguments after explicit stdin selectors are argv and
+  remain covered, while script-path and inline-script forms do not match. Curl
+  must not select an output file;
   `-o -`, `-o-`, `--output=-`, and combined common-option forms such as `-sLo-`
   explicitly select stdout. Wget must explicitly select stdout. `sudo` supports
   any sequence or cluster of the no-argument `-E`, `-H`, `-n` and `-S` options;
@@ -244,7 +260,10 @@ two rules cover only its code-level slice.
   cluster of common no-argument flags such as `-sSk` too; argument-taking forms
   such as `-ok` and `-Hk` are not treated as `-k`, and `-K` is the config file),
   wget `--no-check-certificate`, and pip `--trusted-host` with or without
-  `=host`. wget `-k` is `--convert-links` and does not match. `curl --cacert`
+  `=host`; quoted command and option tokens are recognized. A token used as the
+  value of a known curl option that requires an argument is not treated as a
+  flag; that allowlist may need extending when curl adds options.
+  wget `-k` is `--convert-links` and does not match. `curl --cacert`
   or `--capath`
   and `pip --cert` pointing at a private CA bundle are the correct alternative
   and do not match; `curl --cert` is a client certificate, not a trust option.
@@ -259,7 +278,8 @@ two rules cover only its code-level slice.
   order. Outside the options-array form, each flag may be supplied either by its
   legacy positional slot or by its named argument, so a positional `secure`
   followed by a named `httponly:` is handled correctly. Both resolved values
-  must be literal `true`; missing, false or computed values match.
+  must be literal `true`; missing, false, computed, or later duplicate unsafe
+  entries match. Comments containing option-like text do not affect the result.
 - `py-tarfile-extractall` covers CWE-22. The receiver must be bound from
   `tarfile.open`, `tarfile.TarFile` or `tarfile.TarFile.open` by a preceding
   assignment in the same statement list, the statement list containing an
@@ -273,7 +293,9 @@ two rules cover only its code-level slice.
   parameter and is outside this tar-specific rule; Python only attempts to
   prevent path traversal there and still requires prior inspection for
   untrusted ZIP archives. The `filter` keyword must be on the extract call
-  itself, not on a nested call.
+  itself, not on a nested call. Only `"data"`, `"tar"`, `data_filter`,
+  `tar_filter`, and their `tarfile.` forms suppress the finding; `None`,
+  `"fully_trusted"`, and arbitrary computed filters remain findings.
   Per PEP 706, Python 3.12-3.13 emit a
   DeprecationWarning but still extract with the `fully_trusted` filter, so a
   match on those versions is exploitable; 3.14+ defaults to `data`. Check the
@@ -281,8 +303,10 @@ two rules cover only its code-level slice.
   positive outside this repo, at tools/patch-management.py:36.
 - `c-scanf-unbounded-string` matches a `%s`, `%[`, `%ls` or `%l[` conversion
   with no field width in the scanf family. An assignment-suppressed `%*s` and
-  an escaped `%%s` write nothing and do not match. It reads the format literal,
-  so a format passed through a variable is not seen.
+  an escaped `%%s` write nothing and do not match. Adjacent string literals are
+  treated as one format, and POSIX `n$` selectors are not confused with field
+  widths. It reads the format literal, so a format passed through a variable is
+  not seen.
 
 ## Sixth batch
 
@@ -294,24 +318,22 @@ generic catalog.
   call sites: a match means no recognized NULL guard of the assigned name is
   encountered before the first member access in the same block. Both the
   assignment form and the declaration-initializer form are covered. A
-  short-circuit member access inside `if (ctx && ctx->field)` is safe in that
-  condition, but a standalone `ctx && ready` or `ctx || fallback` does not
-  suppress a later dereference. A NULL condition suppresses later reports only
-  when its consequence directly returns or jumps; a branch that merely logs is
-  not a guard. Reversed `NULL == ctx` checks are recognized. Measured
-  34 hits across `modules/nginx/*/src` and 1 in first-party code, against 274
-  total fetch sites — the check is selective, not a census. All 34 third-party
-  hits were confirmed to have no guard within 25 lines. It cannot prove the
-  site is reachable with a NULL context: the single first-party hit
-  (`ngx_stream_label_autoconf_module.c`, the `nla_stream_remember_pick`
-  post-condition) is safe and carries a comment stating the invariant, which is
-  the documented way to dismiss a match. A handler installed only after the
-  context exists is the common benign shape.
+  short-circuit member access inside a non-NULL `&&` consequence is safe, as is
+  the alternative of a NULL `||` condition. The inverse branches do not prove
+  safety. A standalone `ctx && ready` or `ctx || fallback` does not suppress a
+  later dereference. A NULL condition suppresses later reports only when its
+  consequence directly returns or jumps without dereferencing the context; a
+  branch that logs or dereferences first is not a guard. Reversed `NULL == ctx`
+  checks and `(*ctx).field` accesses are recognized. The rule cannot prove the
+  site is reachable with a NULL context. A reverse-order compound condition is
+  rejected when its direct earlier operand dereferences the context. A
+  documented construction invariant remains a legitimate dismissal.
 - `c-send-without-nosignal` covers `send()` and `sendmsg()`; `sendto()` is
   the datagram call in practice and SIGPIPE is a stream-socket concern, so a
   stream socket written through `sendto()` with a NULL address is not seen. It
   considers the flags protected only when `MSG_NOSIGNAL` is used alone or in an
-  OR-only identifier/macro mask; clearing, masking, toggling, arithmetic and
+  OR-only identifier/macro/common decimal, octal or hexadecimal constant mask,
+  including parenthesized operands; clearing, masking, toggling, arithmetic and
   conditional expressions still match. It reads only that argument, so a
   program that installs `signal(SIGPIPE, SIG_IGN)` at startup or sets
   `SO_NOSIGPIPE` on the socket is safe and still matches. It does not model
@@ -334,24 +356,24 @@ is not separable at the AST level from the documented `p = ngx_sprintf(p, ...)`
 chaining idiom, which accounts for all 394 assignment sites sampled.
 
 - `nginx-atoi-unchecked` matches an ngx_atoi-family assignment or declaration
-  initializer with no binary comparison of the assigned name anywhere in the
+  initializer with no comparison operator involving the assigned lvalue in the
   enclosing function. The
   function-wide guard search is deliberate: an earlier draft that demanded a
   literal `NGX_ERROR` comparison, or that searched only sibling statements,
   produced 55 hits with 13 first-party matches that were all false positives —
   code correctly validating by range (`if (first < 100)`) or guarding after an
-  enclosing if/else. The shipped shape measures 9 hits across 260 call sites
-  with zero first-party matches. Two were confirmed real:
+  enclosing if/else. Two sites in the original corpus were confirmed real:
   `http-let/ngx_http_let_module.c:179` adds an unvalidated offset to a pointer,
   so `NGX_ERROR` underflows `ret->data` on attacker-shaped substring arguments,
   and `nchan/.../redis_nodeset_parser.c:61` stores `NGX_ERROR` directly into
   `r->min`/`r->max`. The trade is false negatives: a comparison on an unrelated
   path still suppresses the match, and the rule cannot see validation performed
-  in a callee.
-- `nginx-send-header-return-ignored` matches the call as a bare expression
-  statement. It does not model whether a body follows, so a handler that sends
-  only headers and finalizes is harmless and still matches. Measured 17 hits,
-  all third-party, zero first-party — the first-party modules already use the
+  in a callee. Member and indirect lvalues are included.
+- `nginx-send-header-return-ignored` matches a discarded direct call expression
+  statement, including one or two parenthesis layers and casts. It does not
+  model whether a body
+  follows, so a handler that sends only headers and finalizes is harmless and
+  still matches. First-party modules in the original sample already used the
   `rc == NGX_ERROR || rc > NGX_OK || r->header_only` idiom.
   `http-js-challenge/ngx_http_js_challenge.c:239` was confirmed: it calls
   `ngx_http_output_filter` unconditionally afterwards, which emits a body for a
@@ -461,13 +483,13 @@ first-party code before shipping;
   pairs feature names with importances, and
   `tools/mariadb-mcp/src/server.py:829` zips three parallel
   lists. It is `info` because shortest-wins is sometimes deliberate. The
-  `nthChild: 2` clause on the argument list is what excludes single-argument
-  `zip()`, which cannot mismatch. A `.zip()` method call is excluded by the
+  second-positional-argument test excludes one-positional-argument `zip()` even
+  when keyword arguments or dictionary splats are present; `zip(*rows)` is
+  included separately. A `.zip()` method call is excluded by the
   anchored `^zip$` regex, which sees the attribute node's full text `obj.zip`;
   the `kind: identifier` beside it is redundant and kept only as a guard
   against a future loosening of that anchor. A locally shadowed `zip` still
-  matches — the rule resolves no bindings. Snapshots show the second argument
-  as a duplicated secondary label.
+  matches — the rule resolves no bindings.
 
 Measured rejections, recorded so the seams are not re-mined:
 

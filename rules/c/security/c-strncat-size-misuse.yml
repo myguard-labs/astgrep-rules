@@ -16,6 +16,33 @@ rule:
   kind: call_expression
   any:
     - pattern:
+        context: void f(void) { strncat(($DST), $SRC, sizeof(($DST))); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { strncat(($DST), $SRC, strlen(($DST))); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { strncpy(($DST), $SRC, sizeof(($DST))); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { strncat($DST, $SRC, sizeof(($DST))); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { strncat($DST, $SRC, strlen(($DST))); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { strncpy($DST, $SRC, sizeof(($DST))); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { strncat(($DST), $SRC, sizeof($DST)); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { strncat(($DST), $SRC, strlen($DST)); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { strncpy(($DST), $SRC, sizeof($DST)); }
+        selector: call_expression
+    - pattern:
         context: void f(void) { strncat($DST, $SRC, sizeof($DST)); }
         selector: call_expression
     - pattern:
@@ -23,4 +50,10 @@ rule:
         selector: call_expression
     - pattern:
         context: void f(void) { strncpy($DST, $SRC, sizeof($DST)); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { strncat($DST, $SRC, sizeof $DST); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { strncpy($DST, $SRC, sizeof $DST); }
         selector: call_expression

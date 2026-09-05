@@ -13,6 +13,18 @@ note: >-
   carry the field name does not match. A test harness
   talking to a throwaway local server is the only routine dismissal, and even
   that should not ship in a production build path.
+utils:
+  literal-true:
+    any:
+      - kind: literal_element
+        regex: '^true$'
+      - kind: literal_element
+        all:
+          - has:
+              stopBy: end
+              kind: 'true'
+          - regex: '(?s)^(?:\s|[()]|/\*.*?\*/|//[^\n]*(?:\n|$))*true(?:\s|[()]|/\*.*?\*/|//[^\n]*(?:\n|$))*$'
+          - not: {regex: '^true$'}
 rule:
   kind: keyed_element
   all:
@@ -21,7 +33,7 @@ rule:
         regex: ^InsecureSkipVerify$
     - has:
         field: value
-        regex: ^true$
+        matches: literal-true
     - inside:
         kind: composite_literal
         stopBy:

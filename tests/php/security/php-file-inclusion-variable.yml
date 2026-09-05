@@ -7,6 +7,8 @@ valid:
 - '<?php // include $_GET["page"];'
 - '<?php $s = "include $page;";'
 - '<?php require_once dirname(__FILE__) . "/lib.php";'
+- '<?php require_once \dirname(__FILE__) . "/lib.php";'
+- '<?php require_once DIRNAME(__FILE__) . "/lib.php";'
 invalid:
 - '<?php include $page;'
 - '<?php include $_GET["page"];'

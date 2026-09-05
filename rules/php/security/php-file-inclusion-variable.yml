@@ -30,5 +30,5 @@ rule:
         - kind: function_call_expression
           not:
             all:
-              - has: {field: function, regex: '^dirname$'}
+              - has: {field: function, regex: '(?i)^\\?dirname$'}
               - has: {field: arguments, regex: '^\(__FILE__\)$'}

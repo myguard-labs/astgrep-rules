@@ -9,6 +9,10 @@ valid:
   tar = tarfile.open(p)
   tar.extract(member, path=dest, filter="tar")
 - tarfile.open(p).extractall(dest, filter="data")
+- tarfile.open(p).extractall(dest, filter="tar")
+- tarfile.open(p).extractall(dest, filter=tarfile.data_filter)
+- tarfile.open(p).extractall(dest, filter=("data"))
+- tarfile.open(p).extractall(dest, filter=(tarfile.data_filter))
 # ZipFile has no tar-style filter parameter and is outside this rule. Python's
 # documentation still requires prior inspection for untrusted ZIP archives.
 - |
@@ -84,7 +88,19 @@ valid:
 invalid:
 - |
   import tarfile
+  with (tarfile.open(p)) as tar:
+      tar.extractall(dest)
+- |
+  import tarfile
   tar = tarfile.open(p)
+  tar.extractall(dest)
+- |
+  import tarfile
+  tar: tarfile.TarFile = tarfile.open(p)
+  tar.extractall(dest)
+- |
+  import tarfile
+  tar = (tarfile.open(p))
   tar.extractall(dest)
 - |
   import tarfile
@@ -109,6 +125,23 @@ invalid:
   tar = tarfile.TarFile(p)
   tar.extract(member, dest)
 - tarfile.open(p).extractall(dest)
+- (tarfile.open(p)).extractall(dest)
+- |
+  import tarfile
+  tar = tarfile.open(p)
+  tar.extractall(dest, filter=None)
+- |
+  import tarfile
+  tar = tarfile.open(p)
+  tar.extractall(dest, filter="fully_trusted")
+- |
+  import tarfile
+  tar = tarfile.open(p)
+  tar.extractall(dest, filter=tarfile.fully_trusted_filter)
+- |
+  import tarfile
+  tar = tarfile.open(p)
+  tar.extractall(dest, filter=cfg.filter)
 # The filter keyword sits on a nested call, not on extractall.
 - |
   import tarfile

@@ -11,8 +11,12 @@ note: >-
   Fires on echo/print of a superglobal, directly or interpolated, unless
   that value is wrapped in htmlspecialchars, htmlentities, urlencode,
   rawurlencode or intval; an encoder around a different operand of the same
-  statement does not count. json_encode is not an HTML encoder (it leaves <
-  alone without JSON_HEX_TAG), so it does not suppress the match. A value echoed
+  statement does not count. In an HTML attribute-like concatenation,
+  htmlspecialchars/htmlentities with a literal flag mask that omits the quote
+  escaping required by the surrounding delimiter still matches. `ENT_QUOTES`
+  protects either delimiter; `ENT_COMPAT` protects only double-quoted
+  attributes. Those masks remain sufficient for ordinary element text. json_encode is not an
+  HTML encoder (it leaves < alone without JSON_HEX_TAG), so it does not suppress the match. A value echoed
   into a non-HTML response (JSON with the right Content-Type) is the routine
   dismissal; escaping is still the safer default.
 utils:
@@ -20,18 +24,111 @@ utils:
     kind: function_call_expression
     has:
       field: function
-      regex: '^(htmlspecialchars|htmlentities|urlencode|rawurlencode|intval)$'
+      regex: '(?i)^\\?(htmlspecialchars|htmlentities|urlencode|rawurlencode|intval)$'
+  double-quoted-attribute-fragment:
+    any:
+      - kind: encapsed_string
+        regex: '(?i)<[^>]*\b[A-Za-z_:][A-Za-z0-9_:.-]*\s*=\s*\\?"["'']$'
+      - kind: string
+        regex: '(?i)<[^>]*\b[A-Za-z_:][A-Za-z0-9_:.-]*\s*=\s*\\?"["'']$'
+  single-quoted-attribute-fragment:
+    any:
+      - kind: encapsed_string
+        regex: '(?i)<[^>]*\b[A-Za-z_:][A-Za-z0-9_:.-]*\s*=\s*\\?\x27["'']$'
+      - kind: string
+        regex: '(?i)<[^>]*\b[A-Za-z_:][A-Za-z0-9_:.-]*\s*=\s*\\?\x27["'']$'
 rule:
   any:
-    - kind: echo_statement
-    - kind: print_intrinsic
-  # The request value itself must sit outside any approved encoder; an
-  # encoder elsewhere in the statement does not cover it.
-  has:
-    stopBy: end
-    kind: variable_name
-    regex: '^\$_(GET|POST|REQUEST|COOKIE|SERVER)$'
-    not:
-      inside:
-        stopBy: end
-        matches: encoder
+    # Start at the unsafe flags argument and prove it is the value appended
+    # directly after an attribute-opening literal.
+    - all:
+        - kind: argument
+        - any:
+            - all:
+                - nthChild:
+                    position: 2
+                    ofRule: {not: {kind: comment}}
+                - not: {regex: '^\s*flags\s*:'}
+                - regex: '(?s)^(?:\s|[()]|/\*.*?\*/)*(?:ENT_[A-Z0-9_]+|0)(?:(?:\s|[()]|/\*.*?\*/)*\|(?:\s|[()]|/\*.*?\*/)*(?:ENT_[A-Z0-9_]+|0))*(?:\s|[()]|/\*.*?\*/)*$'
+            - all:
+                - has: {field: name, regex: '^flags$'}
+                - regex: '(?s)^\s*flags\s*:(?:\s|[()]|/\*.*?\*/)*(?:ENT_[A-Z0-9_]+|0)(?:(?:\s|[()]|/\*.*?\*/)*\|(?:\s|[()]|/\*.*?\*/)*(?:ENT_[A-Z0-9_]+|0))*(?:\s|[()]|/\*.*?\*/)*$'
+        - any:
+            # Single-quoted attributes require ENT_QUOTES.
+            - all:
+                - not:
+                    has:
+                      stopBy: end
+                      kind: name
+                      regex: '^ENT_QUOTES$'
+                - inside:
+                    stopBy: neighbor
+                    kind: arguments
+                    inside:
+                      stopBy: neighbor
+                      kind: function_call_expression
+                      all:
+                        - has:
+                            field: function
+                            regex: '(?i)^\\?(htmlspecialchars|htmlentities)$'
+                        - has:
+                            stopBy: end
+                            kind: variable_name
+                            regex: '^\$_(GET|POST|REQUEST|COOKIE|SERVER)$'
+                      inside:
+                        stopBy: neighbor
+                        kind: binary_expression
+                        all:
+                          - has: {field: operator, regex: '^\.$'}
+                          - has: {field: left, matches: single-quoted-attribute-fragment}
+                        inside:
+                          stopBy: end
+                          any:
+                            - kind: echo_statement
+                            - kind: print_intrinsic
+            # ENT_COMPAT is sufficient only for a double-quoted attribute.
+            - all:
+                - not:
+                    has:
+                      stopBy: end
+                      kind: name
+                      regex: '^(ENT_QUOTES|ENT_COMPAT)$'
+                - inside:
+                    stopBy: neighbor
+                    kind: arguments
+                    inside:
+                      stopBy: neighbor
+                      kind: function_call_expression
+                      all:
+                        - has:
+                            field: function
+                            regex: '(?i)^\\?(htmlspecialchars|htmlentities)$'
+                        - has:
+                            stopBy: end
+                            kind: variable_name
+                            regex: '^\$_(GET|POST|REQUEST|COOKIE|SERVER)$'
+                      inside:
+                        stopBy: neighbor
+                        kind: binary_expression
+                        all:
+                          - has: {field: operator, regex: '^\.$'}
+                          - has: {field: left, matches: double-quoted-attribute-fragment}
+                        inside:
+                          stopBy: end
+                          any:
+                            - kind: echo_statement
+                            - kind: print_intrinsic
+    - all:
+        - any:
+            - kind: echo_statement
+            - kind: print_intrinsic
+        # The request value itself must sit outside any approved encoder; an
+        # encoder elsewhere in the statement does not cover it.
+        - has:
+            stopBy: end
+            kind: variable_name
+            regex: '^\$_(GET|POST|REQUEST|COOKIE|SERVER)$'
+            not:
+              inside:
+                stopBy: end
+                matches: encoder

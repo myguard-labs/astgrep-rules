@@ -22,42 +22,74 @@ utils:
     has:
       field: function
       regex: '^(ngx_array_push|ngx_array_push_n|ngx_list_push)$'
+  p-deref:
+    any:
+      - pattern: $P->$F
+      - pattern: $P[$I]
+  nonnull-condition-on-p:
+    any:
+      - pattern: ($P)
+      - pattern: ($P != NULL)
+      - pattern: (NULL != $P)
+      - pattern: ($P && $X)
+      - pattern: ($X && $P)
+      - pattern: ($P != NULL && $X)
+      - pattern: ($X && $P != NULL)
+      - pattern: (NULL != $P && $X)
+      - pattern: ($X && NULL != $P)
+  null-condition-on-p:
+    any:
+      - pattern: ($P == NULL)
+      - pattern: (NULL == $P)
+      - pattern: (!$P)
+      - pattern: ($P == NULL || $X)
+      - pattern: ($X || $P == NULL)
+      - pattern: (NULL == $P || $X)
+      - pattern: ($X || NULL == $P)
+      - pattern: (!$P || $X)
+      - pattern: ($X || !$P)
+  unsafe-condition-before-p:
+    any:
+      - pattern: ($P->$BEFORE_F && $P)
+      - pattern: ($P[$BEFORE_I] && $P)
+      - pattern: ($P->$BEFORE_F && $P != NULL)
+      - pattern: ($P[$BEFORE_I] && $P != NULL)
+      - pattern: ($P->$BEFORE_F && NULL != $P)
+      - pattern: ($P[$BEFORE_I] && NULL != $P)
+      - pattern: ($P->$BEFORE_F || $P == NULL)
+      - pattern: ($P[$BEFORE_I] || $P == NULL)
+      - pattern: ($P->$BEFORE_F || NULL == $P)
+      - pattern: ($P[$BEFORE_I] || NULL == $P)
+      - pattern: ($P->$BEFORE_F || !$P)
+      - pattern: ($P[$BEFORE_I] || !$P)
   guard-on-p:
     kind: if_statement
+    not:
+      has:
+        field: condition
+        matches: unsafe-condition-before-p
     any:
       # The dereference is scoped to a branch entered only when P is non-NULL.
       - all:
           - has:
               field: condition
-              any:
-                - pattern: ($P)
-                - pattern: ($P != NULL)
-                - pattern: (NULL != $P)
+              matches: nonnull-condition-on-p
           - has:
               field: consequence
               has:
                 stopBy: end
-                any:
-                  - pattern: $P->$F
-                  - pattern: $P[$I]
+                matches: p-deref
           - not:
               precedes:
                 stopBy: end
                 has:
                   stopBy: end
-                  any:
-                    - pattern: $P->$F
-                    - pattern: $P[$I]
+                  matches: p-deref
       # The NULL branch exits before later code can use P.
       - all:
           - has:
               field: condition
-              has:
-                stopBy: end
-                any:
-                  - pattern: $P == NULL
-                  - pattern: NULL == $P
-                  - pattern: '!$P'
+              matches: null-condition-on-p
           - has:
               field: consequence
               any:
@@ -68,6 +100,12 @@ utils:
                     any:
                       - kind: return_statement
                       - kind: goto_statement
+          - not:
+              has:
+                field: consequence
+                has:
+                  stopBy: end
+                  matches: p-deref
 rule:
   any:
     - kind: expression_statement

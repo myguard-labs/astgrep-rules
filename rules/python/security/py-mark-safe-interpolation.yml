@@ -10,30 +10,43 @@ note: >-
   Fires on mark_safe given an f-string, a concatenation with a non-literal
   operand, or .format(). mark_safe over a constant literal, including a
   concatenation of literals, is safe and does not match.
-rule:
-  kind: call
-  all:
-    - has:
-        field: function
-        regex: '(^|\.)mark_safe$'
-    - has:
-        field: arguments
+utils:
+  mark-safe-function:
+    any:
+      - kind: identifier
+        regex: '^mark_safe$'
+      - kind: attribute
+        regex: '(?:^|\.)\s*mark_safe$'
+  formatting-call:
+    kind: call
+    all:
+      - has:
+          field: function
+          kind: attribute
+          has:
+            field: attribute
+            regex: '^format$'
+      - regex: '\.format\s*\(\s*[^)\s]'
+  interpolated-value:
+    any:
+      - kind: string
         has:
+          kind: interpolation
+      # A concatenation with at least one non-literal operand.
+      - kind: binary_operator
+        has:
+          stopBy: end
           any:
-            - kind: string
-              has:
-                kind: interpolation
-            # A concatenation with at least one non-literal operand.
-            - kind: binary_operator
-              has:
-                stopBy: end
-                any:
-                  - kind: identifier
-                  - kind: call
-                  - kind: attribute
-                  - kind: subscript
-                  - kind: interpolation
+            - kind: identifier
             - kind: call
-              has:
-                field: function
-                regex: '\.format$'
+            - kind: attribute
+            - kind: subscript
+            - kind: interpolation
+      - matches: formatting-call
+rule:
+  pattern: $MARK_SAFE($VALUE)
+constraints:
+  MARK_SAFE:
+    matches: mark-safe-function
+  VALUE:
+    matches: interpolated-value

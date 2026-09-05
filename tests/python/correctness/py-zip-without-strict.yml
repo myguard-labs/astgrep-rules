@@ -16,6 +16,8 @@ valid:
   rows = obj.zip(names, values)
 - |
   cols = zip(*rows, strict=True)
+- |
+  only = zip(names, key=f)
 invalid:
 - |
   for name, value in zip(names, values):

@@ -9,25 +9,28 @@ message: >-
 note: >-
   Fires on a positional or named expires_or_options array in which either
   httponly or secure is absent or not literally true. Named options are
-  recognized in any argument order. Outside the options-array form, secure and
+  recognized in any argument order. For duplicate option keys, PHP keeps the
+  last value, so an earlier unsafe value followed by literal true is accepted
+  while a later false or computed value still matches. Outside the options-array form, secure and
   httponly must each be literally true, supplied either at positional arguments
   six and seven or by a named argument. Mixed positional/named calls are
   supported. A deliberately readable, non-sensitive preference cookie is the
   routine dismissal.
 utils:
   positional-options-array:
-    kind: argument
-    nthChild: 3
-    has:
-      kind: array_creation_expression
+    kind: array_creation_expression
+    inside:
+      stopBy: neighbor
+      kind: argument
+      nthChild: 3
   named-options-array:
-    kind: argument
-    all:
-      - has:
-          field: name
-          regex: '^expires_or_options$'
-      - has:
-          kind: array_creation_expression
+    kind: array_creation_expression
+    inside:
+      stopBy: neighbor
+      kind: argument
+      has:
+        field: name
+        regex: '^expires_or_options$'
   options-array:
     any:
       - matches: positional-options-array
@@ -62,53 +65,117 @@ utils:
     any:
       - matches: positional-httponly-true
       - matches: named-httponly-true
-  flag-true:
+  secure-true-element:
     kind: array_element_initializer
-    regex: '(?i)^["\x27](httponly|secure)["\x27]\s*=>\s*true$'
+    all:
+      - has:
+          nthChild:
+            position: 1
+            ofRule: {not: {kind: comment}}
+          regex: '(?i)^["\x27]secure["\x27]$'
+      - has:
+          nthChild:
+            position: 2
+            ofRule: {not: {kind: comment}}
+          regex: '(?i)^true$'
+  httponly-true-element:
+    kind: array_element_initializer
+    all:
+      - has:
+          nthChild:
+            position: 1
+            ofRule: {not: {kind: comment}}
+          regex: '(?i)^["\x27]httponly["\x27]$'
+      - has:
+          nthChild:
+            position: 2
+            ofRule: {not: {kind: comment}}
+          regex: '(?i)^true$'
+  secure-unsafe-element:
+    kind: array_element_initializer
+    all:
+      - has:
+          nthChild:
+            position: 1
+            ofRule: {not: {kind: comment}}
+          regex: '(?i)^["\x27]secure["\x27]$'
+      - not:
+          has:
+            nthChild:
+              position: 2
+              ofRule: {not: {kind: comment}}
+            regex: '(?i)^true$'
+      - not:
+          precedes:
+            stopBy: end
+            matches: secure-true-element
+  httponly-unsafe-element:
+    kind: array_element_initializer
+    all:
+      - has:
+          nthChild:
+            position: 1
+            ofRule: {not: {kind: comment}}
+          regex: '(?i)^["\x27]httponly["\x27]$'
+      - not:
+          has:
+            nthChild:
+              position: 2
+              ofRule: {not: {kind: comment}}
+            regex: '(?i)^true$'
+      - not:
+          precedes:
+            stopBy: end
+            matches: httponly-true-element
 rule:
-  kind: function_call_expression
-  all:
-    - has:
-        field: function
-        regex: '^(setcookie|setrawcookie)$'
-    - any:
-        # Options array missing httponly => true.
-        - has:
-            field: arguments
-            has:
-              matches: options-array
-              not:
+  any:
+    # Match the options array itself so each diagnostic has one array label.
+    - all:
+        - kind: array_creation_expression
+        - inside:
+            stopBy: neighbor
+            kind: argument
+            any:
+              - nthChild: 3
+              - has:
+                  field: name
+                  regex: '^expires_or_options$'
+            inside:
+              stopBy: neighbor
+              kind: arguments
+              inside:
+                stopBy: neighbor
+                kind: function_call_expression
                 has:
-                  kind: array_creation_expression
-                  has:
-                    matches: flag-true
-                    regex: '(?i)httponly'
-        # Options array missing secure => true.
+                  field: function
+                  regex: '(?i)^\\?(setcookie|setrawcookie)$'
+        - any:
+            - not: {has: {matches: httponly-true-element}}
+            - not: {has: {matches: secure-true-element}}
+            - has:
+                any:
+                  - matches: secure-unsafe-element
+                  - matches: httponly-unsafe-element
+    # Non-options form missing or disabling either positional/named flag.
+    - all:
+        - kind: function_call_expression
         - has:
-            field: arguments
+            field: function
+            regex: '(?i)^\\?(setcookie|setrawcookie)$'
+        - not:
             has:
-              matches: options-array
-              not:
-                has:
-                  kind: array_creation_expression
-                  has:
-                    matches: flag-true
-                    regex: '(?i)secure'
-        # Non-options form missing or disabling either positional/named flag.
-        - all:
+              field: arguments
+              has:
+                stopBy: end
+                matches: options-array
+        - any:
             - not:
                 has:
                   field: arguments
                   has:
-                    matches: options-array
-            - any:
-                - not:
-                    has:
-                      field: arguments
-                      has:
-                        matches: secure-true
-                - not:
-                    has:
-                      field: arguments
-                      has:
-                        matches: httponly-true
+                    matches: secure-true
+            - not:
+                has:
+                  field: arguments
+                  has:
+                    matches: httponly-true

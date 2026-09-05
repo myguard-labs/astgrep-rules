@@ -19,10 +19,16 @@ rule:
         field: function
         regex: '^(scanf|fscanf|sscanf|vscanf|vfscanf|vsscanf)$'
     - has:
-        field: arguments
-        has:
-          stopBy: end
-          kind: string_literal
-          # A %s or %[ conversion with no width. An escaped %% is not a
-          # conversion and %*s suppresses assignment, so neither writes.
-          regex: '(?:^|[^%])(?:%%)*%l?(s|\[)'
+        # Stop at a concatenated string so its child literals cannot turn a
+        # split escaped %% into a false positive.
+        stopBy: {kind: concatenated_string}
+        any:
+          - kind: string_literal
+            # A %s or %[ conversion with no width. An escaped %% is not a
+            # conversion and %*s suppresses assignment, so neither writes.
+            # POSIX's n$ argument selector is not a field width.
+            regex: '(?:^|[^%])(?:%%)*%(?:[1-9][0-9]*\$)?l?(s|\[)'
+          - kind: concatenated_string
+            # Treat adjacent literal boundaries as zero-width while retaining
+            # percent-pair parity across those boundaries.
+            regex: '(?:^"|[^%"](?:"\s*")*)(?:%(?:"\s*")*%(?:"\s*")*)*%(?:"\s*")*(?:[1-9](?:"\s*")*(?:[0-9](?:"\s*")*)*\$(?:"\s*")*)?l?(?:"\s*")*(s|\[)'

@@ -14,9 +14,11 @@ valid:
 - d.get("k:" + key)
 - self.client.post(f"{base}/submit", json=p)
 - self.session.get(f"{base}/status")
+- requests.get("https://example.com" + "/status")
 invalid:
 - session.get(f"https://{host}/api")
 - requests.get(f"https://{host}/api")
+- requests . get(f"https://{host}/api")
 - requests.get(url=f"https://{host}/api")
 - requests.get("https://" + host + "/api")
 - session.request("GET", f"https://{host}/api")

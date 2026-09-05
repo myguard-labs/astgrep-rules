@@ -10,6 +10,26 @@ snapshots:
       style: secondary
       start: 11
       end: 16
+  <?php $h = MD5($password);:
+    labels:
+    - source: MD5($password)
+      style: primary
+      start: 11
+      end: 25
+    - source: MD5
+      style: secondary
+      start: 11
+      end: 14
+  <?php $h = \md5($password);:
+    labels:
+    - source: \md5($password)
+      style: primary
+      start: 11
+      end: 26
+    - source: \md5
+      style: secondary
+      start: 11
+      end: 15
   <?php $h = md5($password);:
     labels:
     - source: md5($password)

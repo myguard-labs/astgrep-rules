@@ -37,5 +37,6 @@ utils:
   nosignal-enabled:
     all:
       - regex: '(^|[^A-Za-z0-9_])MSG_NOSIGNAL([^A-Za-z0-9_]|$)'
-      # Only identifiers/constants ORed together are unconditionally safe.
-      - regex: '^\(*[A-Za-z_][A-Za-z0-9_]*(?:\s*\|\s*[A-Za-z_][A-Za-z0-9_]*)*\)*$'
+      # An OR-only mask of identifiers and integer constants is
+      # unconditionally safe. Parentheses may wrap the mask or its operands.
+      - regex: '^[\s()]*(?:[A-Za-z_][A-Za-z0-9_]*|(?:0[xX][0-9A-Fa-f]+|[0-9]+)[uUlL]*)(?:[\s()]*\|[\s()]*(?:[A-Za-z_][A-Za-z0-9_]*|(?:0[xX][0-9A-Fa-f]+|[0-9]+)[uUlL]*))*[\s()]*$'

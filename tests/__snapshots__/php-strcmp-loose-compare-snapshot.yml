@@ -22,6 +22,42 @@ snapshots:
       style: secondary
       start: 10
       end: 26
+  <?php if (STRCMP($a, $b) == 0) { no(); }:
+    labels:
+    - source: STRCMP($a, $b) == 0
+      style: primary
+      start: 10
+      end: 29
+    - source: ==
+      style: secondary
+      start: 25
+      end: 27
+    - source: STRCMP
+      style: secondary
+      start: 10
+      end: 16
+    - source: STRCMP($a, $b)
+      style: secondary
+      start: 10
+      end: 24
+  <?php if (\strcmp($a, $b) == 0) { no(); }:
+    labels:
+    - source: \strcmp($a, $b) == 0
+      style: primary
+      start: 10
+      end: 30
+    - source: ==
+      style: secondary
+      start: 26
+      end: 28
+    - source: \strcmp
+      style: secondary
+      start: 10
+      end: 17
+    - source: \strcmp($a, $b)
+      style: secondary
+      start: 10
+      end: 25
   <?php if (strcasecmp($u, $name) == 0) { ok(); }:
     labels:
     - source: strcasecmp($u, $name) == 0

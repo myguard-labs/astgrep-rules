@@ -12,12 +12,49 @@ note: >-
   aliases under other names are not resolved. A scan of a host with a known-bad
   certificate is the only routine dismissal; it should not reach production
   code.
+utils:
+  requests-module:
+    any:
+      - kind: identifier
+        regex: '^requests$'
+      - kind: parenthesized_expression
+        has:
+          kind: identifier
+          regex: '^requests$'
+  requests-session-constructor:
+    kind: call
+    has:
+      field: function
+      kind: attribute
+      all:
+        - has:
+            field: object
+            matches: requests-module
+        - has:
+            field: attribute
+            regex: '^Session$'
+  request-receiver:
+    any:
+      - matches: requests-module
+      - kind: identifier
+        regex: '^(session|sess|client)$'
+      - matches: requests-session-constructor
+      - kind: parenthesized_expression
+        has:
+          matches: requests-session-constructor
 rule:
   kind: call
   all:
     - has:
         field: function
-        regex: '^(requests|requests\.Session\(\)|session|sess|client)\.(get|post|put|patch|delete|head|options|request)$'
+        kind: attribute
+        all:
+          - has:
+              field: object
+              matches: request-receiver
+          - has:
+              field: attribute
+              regex: '^(get|post|put|patch|delete|head|options|request)$'
     - has:
         kind: argument_list
         has:

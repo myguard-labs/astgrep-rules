@@ -8,7 +8,8 @@ message: >-
   during handling rather than a deliberate direct cause, and tooling that reads
   `__cause__` cannot follow that link.
 note: >-
-  Fires on a `raise <call>` inside an `except` clause with no `from` clause.
+  Fires on a `raise <call>` inside an `except` clause with no `from` clause;
+  one parenthesis layer around the call is recognized in both forms.
   `raise ... from None` is the documented way to suppress a chain deliberately
   and does not match. A bare `re-raise` does not match either. The rule does
   not check whether the caught exception is referenced in the message: a raise
@@ -20,10 +21,13 @@ note: >-
 rule:
   all:
     - kind: raise_statement
-    - has:
-        kind: call
+    - any:
+        - pattern: raise $EXC($$$ARGS)
+        - pattern: raise ($EXC($$$ARGS))
     - not:
-        pattern: raise $EXC($$$ARGS) from $CAUSE
+        any:
+          - pattern: raise $EXC($$$ARGS) from $CAUSE
+          - pattern: raise ($EXC($$$ARGS)) from $CAUSE
     - inside:
         kind: except_clause
         stopBy: end

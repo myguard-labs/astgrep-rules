@@ -14,3 +14,5 @@ invalid:
 - '<?php if (sha1($token) == $expected) { no(); }'
 - '<?php if ($stored != hash("sha256", $in)) { no(); }'
 - '<?php if (md5($token) <> $stored) { no(); }'
+- '<?php if (MD5($token) == $stored) { no(); }'
+- '<?php if (\md5($token) == $stored) { no(); }'

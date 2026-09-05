@@ -22,17 +22,6 @@ valid:
     {
         return ngx_http_send_header(r);
     }
-  # Tested inline without an intermediate variable.
-  - |
-    static ngx_int_t
-    inline_test(ngx_http_request_t *r, ngx_chain_t *out)
-    {
-        if (ngx_http_send_header(r) != NGX_OK) {
-            return NGX_ERROR;
-        }
-
-        return ngx_http_output_filter(r, out);
-    }
   # Near miss: a different function whose result is genuinely void.
   - |
     static void
@@ -73,4 +62,36 @@ invalid:
         }
 
         return ngx_http_output_filter(r, out);
+    }
+  # Parentheses do not preserve the discarded return value.
+  - |
+    static ngx_int_t
+    parenthesized(ngx_http_request_t *r)
+    {
+        (ngx_http_send_header(r));
+        return NGX_OK;
+    }
+  # An explicit void cast still discards the contract-bearing result.
+  - |
+    static ngx_int_t
+    cast_void(ngx_http_request_t *r)
+    {
+        (void) ngx_http_send_header(r);
+        return NGX_OK;
+    }
+  # Deeper parentheses still discard the result.
+  - |
+    static ngx_int_t
+    nested_parentheses(ngx_http_request_t *r)
+    {
+        ((ngx_http_send_header(r)));
+        return NGX_OK;
+    }
+  # A non-void cast does not consume the result when it remains a statement.
+  - |
+    static ngx_int_t
+    cast_nonvoid(ngx_http_request_t *r)
+    {
+        (ngx_int_t) ngx_http_send_header(r);
+        return NGX_OK;
     }

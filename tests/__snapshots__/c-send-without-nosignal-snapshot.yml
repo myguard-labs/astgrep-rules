@@ -24,30 +24,6 @@ snapshots:
       end: 117
   ? |
     static int
-    dgram(int fd, const char *buf, size_t len, const struct sockaddr *to,
-        socklen_t tolen)
-    {
-        return (int) sendto(fd, buf, len, 0, to, tolen);
-    }
-  : labels:
-    - source: sendto(fd, buf, len, 0, to, tolen)
-      style: primary
-      start: 121
-      end: 155
-    - source: sendto
-      style: secondary
-      start: 121
-      end: 127
-    - source: '0'
-      style: secondary
-      start: 142
-      end: 143
-    - source: '0'
-      style: secondary
-      start: 142
-      end: 143
-  ? |
-    static int
     nonblocking(int fd, const char *buf, size_t len)
     {
         return (int) send(fd, buf, len, MSG_DONTWAIT);

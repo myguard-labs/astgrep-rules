@@ -57,4 +57,4 @@ rule:
           kind: expression_list
           has:
             kind: identifier
-            regex: '(?i)^(e|err[a-z0-9_]*|ok)$'
+            regex: '(?i)^(e|err[a-z0-9_]*|ok[a-z0-9_]*)$'

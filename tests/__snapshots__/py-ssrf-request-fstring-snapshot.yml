@@ -6,6 +6,14 @@ snapshots:
       style: primary
       start: 0
       end: 32
+    - source: httpx
+      style: secondary
+      start: 0
+      end: 5
+    - source: get
+      style: secondary
+      start: 6
+      end: 9
     - source: httpx.get
       style: secondary
       start: 0
@@ -22,20 +30,62 @@ snapshots:
       style: secondary
       start: 9
       end: 32
+  requests . get(f"https://{host}/api"):
+    labels:
+    - source: requests . get(f"https://{host}/api")
+      style: primary
+      start: 0
+      end: 37
+    - source: requests
+      style: secondary
+      start: 0
+      end: 8
+    - source: get
+      style: secondary
+      start: 11
+      end: 14
+    - source: requests . get
+      style: secondary
+      start: 0
+      end: 14
+    - source: '{host}'
+      style: secondary
+      start: 25
+      end: 31
+    - source: f"https://{host}/api"
+      style: secondary
+      start: 15
+      end: 36
+    - source: (f"https://{host}/api")
+      style: secondary
+      start: 14
+      end: 37
   requests.get("https://" + host + "/api"):
     labels:
     - source: requests.get("https://" + host + "/api")
       style: primary
       start: 0
       end: 40
+    - source: requests
+      style: secondary
+      start: 0
+      end: 8
+    - source: get
+      style: secondary
+      start: 9
+      end: 12
     - source: requests.get
       style: secondary
       start: 0
       end: 12
-    - source: '"/api"'
+    - source: '"https://"'
       style: secondary
-      start: 33
-      end: 39
+      start: 13
+      end: 23
+    - source: host
+      style: secondary
+      start: 26
+      end: 30
     - source: '"https://" + host + "/api"'
       style: secondary
       start: 13
@@ -50,6 +100,14 @@ snapshots:
       style: primary
       start: 0
       end: 35
+    - source: requests
+      style: secondary
+      start: 0
+      end: 8
+    - source: get
+      style: secondary
+      start: 9
+      end: 12
     - source: requests.get
       style: secondary
       start: 0
@@ -72,6 +130,14 @@ snapshots:
       style: primary
       start: 0
       end: 39
+    - source: requests
+      style: secondary
+      start: 0
+      end: 8
+    - source: get
+      style: secondary
+      start: 9
+      end: 12
     - source: requests.get
       style: secondary
       start: 0
@@ -102,6 +168,14 @@ snapshots:
       style: primary
       start: 0
       end: 34
+    - source: session
+      style: secondary
+      start: 0
+      end: 7
+    - source: get
+      style: secondary
+      start: 8
+      end: 11
     - source: session.get
       style: secondary
       start: 0
@@ -124,6 +198,14 @@ snapshots:
       style: primary
       start: 0
       end: 45
+    - source: session
+      style: secondary
+      start: 0
+      end: 7
+    - source: request
+      style: secondary
+      start: 8
+      end: 15
     - source: session.request
       style: secondary
       start: 0
@@ -146,6 +228,14 @@ snapshots:
       style: primary
       start: 0
       end: 56
+    - source: session
+      style: secondary
+      start: 0
+      end: 7
+    - source: request
+      style: secondary
+      start: 8
+      end: 15
     - source: session.request
       style: secondary
       start: 0

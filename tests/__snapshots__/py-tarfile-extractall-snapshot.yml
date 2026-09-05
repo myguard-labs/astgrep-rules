@@ -1,5 +1,11 @@
 id: py-tarfile-extractall
 snapshots:
+  (tarfile.open(p)).extractall(dest):
+    labels:
+    - source: (tarfile.open(p)).extractall(dest)
+      style: primary
+      start: 0
+      end: 34
   ? |
     import tarfile
     archive = tarfile.open(p)
@@ -13,10 +19,6 @@ snapshots:
       style: secondary
       start: 41
       end: 59
-    - source: archive = tarfile.open(p)
-      style: secondary
-      start: 15
-      end: 40
     - source: archive = tarfile.open(p)
       style: secondary
       start: 15
@@ -39,10 +41,6 @@ snapshots:
       style: secondary
       start: 55
       end: 73
-    - source: archive = tarfile.open(p)
-      style: secondary
-      start: 15
-      end: 40
     - source: archive = tarfile.open(p)
       style: secondary
       start: 15
@@ -71,14 +69,31 @@ snapshots:
       style: secondary
       start: 15
       end: 40
-    - source: archive = tarfile.open(p)
-      style: secondary
-      start: 15
-      end: 40
     - source: archive.extractall(dest)
       style: secondary
       start: 67
       end: 91
+  ? |
+    import tarfile
+    tar = (tarfile.open(p))
+    tar.extractall(dest)
+  : labels:
+    - source: tar.extractall(dest)
+      style: primary
+      start: 39
+      end: 59
+    - source: tar.extractall
+      style: secondary
+      start: 39
+      end: 53
+    - source: tar = (tarfile.open(p))
+      style: secondary
+      start: 15
+      end: 38
+    - source: tar.extractall(dest)
+      style: secondary
+      start: 39
+      end: 59
   ? |
     import tarfile
     tar = tarfile.TarFile(p)
@@ -92,10 +107,6 @@ snapshots:
       style: secondary
       start: 40
       end: 51
-    - source: tar = tarfile.TarFile(p)
-      style: secondary
-      start: 15
-      end: 39
     - source: tar = tarfile.TarFile(p)
       style: secondary
       start: 15
@@ -121,14 +132,150 @@ snapshots:
       style: secondary
       start: 15
       end: 36
-    - source: tar = tarfile.open(p)
-      style: secondary
-      start: 15
-      end: 36
     - source: tar.extractall(dest)
       style: secondary
       start: 37
       end: 57
+  ? |
+    import tarfile
+    tar = tarfile.open(p)
+    tar.extractall(dest, filter="fully_trusted")
+  : labels:
+    - source: tar.extractall(dest, filter="fully_trusted")
+      style: primary
+      start: 37
+      end: 81
+    - source: tar.extractall
+      style: secondary
+      start: 37
+      end: 51
+    - source: tar = tarfile.open(p)
+      style: secondary
+      start: 15
+      end: 36
+    - source: tar.extractall(dest, filter="fully_trusted")
+      style: secondary
+      start: 37
+      end: 81
+  ? |
+    import tarfile
+    tar = tarfile.open(p)
+    tar.extractall(dest, filter=None)
+  : labels:
+    - source: tar.extractall(dest, filter=None)
+      style: primary
+      start: 37
+      end: 70
+    - source: tar.extractall
+      style: secondary
+      start: 37
+      end: 51
+    - source: tar = tarfile.open(p)
+      style: secondary
+      start: 15
+      end: 36
+    - source: tar.extractall(dest, filter=None)
+      style: secondary
+      start: 37
+      end: 70
+  ? |
+    import tarfile
+    tar = tarfile.open(p)
+    tar.extractall(dest, filter=cfg.filter)
+  : labels:
+    - source: tar.extractall(dest, filter=cfg.filter)
+      style: primary
+      start: 37
+      end: 76
+    - source: tar.extractall
+      style: secondary
+      start: 37
+      end: 51
+    - source: tar = tarfile.open(p)
+      style: secondary
+      start: 15
+      end: 36
+    - source: tar.extractall(dest, filter=cfg.filter)
+      style: secondary
+      start: 37
+      end: 76
+  ? |
+    import tarfile
+    tar = tarfile.open(p)
+    tar.extractall(dest, filter=tarfile.fully_trusted_filter)
+  : labels:
+    - source: tar.extractall(dest, filter=tarfile.fully_trusted_filter)
+      style: primary
+      start: 37
+      end: 94
+    - source: tar.extractall
+      style: secondary
+      start: 37
+      end: 51
+    - source: tar = tarfile.open(p)
+      style: secondary
+      start: 15
+      end: 36
+    - source: tar.extractall(dest, filter=tarfile.fully_trusted_filter)
+      style: secondary
+      start: 37
+      end: 94
+  ? |
+    import tarfile
+    tar: tarfile.TarFile = tarfile.open(p)
+    tar.extractall(dest)
+  : labels:
+    - source: tar.extractall(dest)
+      style: primary
+      start: 54
+      end: 74
+    - source: tar.extractall
+      style: secondary
+      start: 54
+      end: 68
+    - source: 'tar: tarfile.TarFile = tarfile.open(p)'
+      style: secondary
+      start: 15
+      end: 53
+    - source: tar.extractall(dest)
+      style: secondary
+      start: 54
+      end: 74
+  ? |
+    import tarfile
+    with (tarfile.open(p)) as tar:
+        tar.extractall(dest)
+  : labels:
+    - source: tar.extractall(dest)
+      style: primary
+      start: 50
+      end: 70
+    - source: tar.extractall
+      style: secondary
+      start: 50
+      end: 64
+    - source: tarfile.open
+      style: secondary
+      start: 21
+      end: 33
+    - source: tarfile.open(p)
+      style: secondary
+      start: 21
+      end: 36
+    - source: tar
+      style: secondary
+      start: 41
+      end: 44
+    - source: (tarfile.open(p)) as tar
+      style: secondary
+      start: 20
+      end: 44
+    - source: |-
+        with (tarfile.open(p)) as tar:
+            tar.extractall(dest)
+      style: secondary
+      start: 15
+      end: 70
   ? |
     import tarfile
     with tarfile.TarFile.open(p) as tar:
@@ -153,10 +300,6 @@ snapshots:
     - source: tar
       style: secondary
       start: 47
-      end: 50
-    - source: tarfile.TarFile.open(p) as tar
-      style: secondary
-      start: 20
       end: 50
     - source: tarfile.TarFile.open(p) as tar
       style: secondary
@@ -192,10 +335,6 @@ snapshots:
     - source: tar
       style: secondary
       start: 39
-      end: 42
-    - source: tarfile.open(p) as tar
-      style: secondary
-      start: 20
       end: 42
     - source: tarfile.open(p) as tar
       style: secondary

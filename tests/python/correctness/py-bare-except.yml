@@ -13,6 +13,12 @@ valid:
 - |
   try:
       f()
+  except:
+      cleanup()
+      raise
+- |
+  try:
+      f()
   except ValueError:
       pass
 invalid:
@@ -38,3 +44,18 @@ invalid:
       f()
   except:
       pass
+- |
+  try:
+      f()
+  except:
+      if debug:
+          raise
+      pass
+- |
+  try:
+      f()
+  except:
+      for item in items:
+          if item.bad:
+              raise
+      log.info("ignored")

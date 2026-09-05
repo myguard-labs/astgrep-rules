@@ -14,3 +14,14 @@ invalid:
 - void f(void) { strncat(dst, src, strlen(dst)); }
 - void f(void) { strncpy(dst, src, sizeof(dst)); }
 - void f(void) { strncat(ctx->buf, src, sizeof(ctx->buf)); }
+- void f(void) { strncat(dst, src, sizeof dst); }
+- void f(void) { strncpy(dst, src, sizeof dst); }
+- void f(void) { strncat((dst), src, sizeof(dst)); }
+- void f(void) { strncat((dst), src, strlen(dst)); }
+- void f(void) { strncpy((dst), src, sizeof(dst)); }
+- void f(void) { strncat(dst, src, sizeof((dst))); }
+- void f(void) { strncat(dst, src, strlen((dst))); }
+- void f(void) { strncpy(dst, src, sizeof((dst))); }
+- void f(void) { strncat((dst), src, sizeof((dst))); }
+- void f(void) { strncat((dst), src, strlen((dst))); }
+- void f(void) { strncpy((dst), src, sizeof((dst))); }

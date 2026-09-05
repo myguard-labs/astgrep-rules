@@ -1,5 +1,25 @@
 id: php-insecure-cookie-flags
 snapshots:
+  <?php SETCOOKIE("sid", $v);:
+    labels:
+    - source: SETCOOKIE("sid", $v)
+      style: primary
+      start: 6
+      end: 26
+    - source: SETCOOKIE
+      style: secondary
+      start: 6
+      end: 15
+  <?php \setcookie("sid", $v);:
+    labels:
+    - source: \setcookie("sid", $v)
+      style: primary
+      start: 6
+      end: 27
+    - source: \setcookie
+      style: secondary
+      start: 6
+      end: 16
   <?php setcookie("sid", $v);:
     labels:
     - source: setcookie("sid", $v)
@@ -32,110 +52,200 @@ snapshots:
       end: 15
   <?php setcookie("sid", $v, ["httponly" => true, "samesite" => "Lax"]);:
     labels:
-    - source: setcookie("sid", $v, ["httponly" => true, "samesite" => "Lax"])
+    - source: '["httponly" => true, "samesite" => "Lax"]'
       style: primary
-      start: 6
-      end: 69
+      start: 27
+      end: 68
     - source: setcookie
       style: secondary
       start: 6
       end: 15
-    - source: '["httponly" => true, "samesite" => "Lax"]'
+    - source: setcookie("sid", $v, ["httponly" => true, "samesite" => "Lax"])
       style: secondary
-      start: 27
-      end: 68
-    - source: '["httponly" => true, "samesite" => "Lax"]'
+      start: 6
+      end: 69
+    - source: ("sid", $v, ["httponly" => true, "samesite" => "Lax"])
       style: secondary
-      start: 27
-      end: 68
+      start: 15
+      end: 69
     - source: '["httponly" => true, "samesite" => "Lax"]'
       style: secondary
       start: 27
       end: 68
   <?php setcookie("sid", $v, ["meta" => ["secure" => true, "httponly" => true]]);:
     labels:
-    - source: setcookie("sid", $v, ["meta" => ["secure" => true, "httponly" => true]])
+    - source: '["meta" => ["secure" => true, "httponly" => true]]'
       style: primary
-      start: 6
-      end: 78
+      start: 27
+      end: 77
     - source: setcookie
       style: secondary
       start: 6
       end: 15
-    - source: '["meta" => ["secure" => true, "httponly" => true]]'
+    - source: setcookie("sid", $v, ["meta" => ["secure" => true, "httponly" => true]])
       style: secondary
-      start: 27
-      end: 77
-    - source: '["meta" => ["secure" => true, "httponly" => true]]'
+      start: 6
+      end: 78
+    - source: ("sid", $v, ["meta" => ["secure" => true, "httponly" => true]])
       style: secondary
-      start: 27
-      end: 77
+      start: 15
+      end: 78
     - source: '["meta" => ["secure" => true, "httponly" => true]]'
       style: secondary
       start: 27
       end: 77
   <?php setcookie("sid", $v, ["secure" => false, "httponly" => true]);:
     labels:
-    - source: setcookie("sid", $v, ["secure" => false, "httponly" => true])
+    - source: '["secure" => false, "httponly" => true]'
       style: primary
-      start: 6
-      end: 67
+      start: 27
+      end: 66
     - source: setcookie
       style: secondary
       start: 6
       end: 15
-    - source: '["secure" => false, "httponly" => true]'
+    - source: setcookie("sid", $v, ["secure" => false, "httponly" => true])
       style: secondary
-      start: 27
-      end: 66
-    - source: '["secure" => false, "httponly" => true]'
+      start: 6
+      end: 67
+    - source: ("sid", $v, ["secure" => false, "httponly" => true])
       style: secondary
-      start: 27
-      end: 66
+      start: 15
+      end: 67
     - source: '["secure" => false, "httponly" => true]'
       style: secondary
       start: 27
       end: 66
   <?php setcookie("sid", $v, ["secure" => true, "httponly" => false]);:
     labels:
-    - source: setcookie("sid", $v, ["secure" => true, "httponly" => false])
+    - source: '["secure" => true, "httponly" => false]'
       style: primary
+      start: 27
+      end: 66
+    - source: setcookie
+      style: secondary
+      start: 6
+      end: 15
+    - source: setcookie("sid", $v, ["secure" => true, "httponly" => false])
+      style: secondary
       start: 6
       end: 67
+    - source: ("sid", $v, ["secure" => true, "httponly" => false])
+      style: secondary
+      start: 15
+      end: 67
+    - source: '["secure" => true, "httponly" => false]'
+      style: secondary
+      start: 27
+      end: 66
+  <?php setcookie("sid", $v, ["secure" => true, "httponly" => true, "httponly" => false]);:
+    labels:
+    - source: '["secure" => true, "httponly" => true, "httponly" => false]'
+      style: primary
+      start: 27
+      end: 86
     - source: setcookie
       style: secondary
       start: 6
       end: 15
-    - source: '["secure" => true, "httponly" => false]'
+    - source: setcookie("sid", $v, ["secure" => true, "httponly" => true, "httponly" => false])
+      style: secondary
+      start: 6
+      end: 87
+    - source: ("sid", $v, ["secure" => true, "httponly" => true, "httponly" => false])
+      style: secondary
+      start: 15
+      end: 87
+    - source: '["secure" => true, "httponly" => true, "httponly" => false]'
       style: secondary
       start: 27
-      end: 66
-    - source: '["secure" => true, "httponly" => false]'
+      end: 86
+    - source: '"httponly"'
+      style: secondary
+      start: 66
+      end: 76
+    - source: '"httponly" => false'
+      style: secondary
+      start: 66
+      end: 85
+  <?php setcookie("sid", $v, ["secure" => true, "secure" => $configured, "httponly" => true]);:
+    labels:
+    - source: '["secure" => true, "secure" => $configured, "httponly" => true]'
+      style: primary
+      start: 27
+      end: 90
+    - source: setcookie
+      style: secondary
+      start: 6
+      end: 15
+    - source: setcookie("sid", $v, ["secure" => true, "secure" => $configured, "httponly" => true])
+      style: secondary
+      start: 6
+      end: 91
+    - source: ("sid", $v, ["secure" => true, "secure" => $configured, "httponly" => true])
+      style: secondary
+      start: 15
+      end: 91
+    - source: '["secure" => true, "secure" => $configured, "httponly" => true]'
       style: secondary
       start: 27
-      end: 66
-    - source: '["secure" => true, "httponly" => false]'
+      end: 90
+    - source: '"secure"'
+      style: secondary
+      start: 46
+      end: 54
+    - source: '"secure" => $configured'
+      style: secondary
+      start: 46
+      end: 69
+  <?php setcookie("sid", $v, ["secure" => true, "secure" => false, "httponly" => true]);:
+    labels:
+    - source: '["secure" => true, "secure" => false, "httponly" => true]'
+      style: primary
+      start: 27
+      end: 84
+    - source: setcookie
+      style: secondary
+      start: 6
+      end: 15
+    - source: setcookie("sid", $v, ["secure" => true, "secure" => false, "httponly" => true])
+      style: secondary
+      start: 6
+      end: 85
+    - source: ("sid", $v, ["secure" => true, "secure" => false, "httponly" => true])
+      style: secondary
+      start: 15
+      end: 85
+    - source: '["secure" => true, "secure" => false, "httponly" => true]'
       style: secondary
       start: 27
-      end: 66
+      end: 84
+    - source: '"secure"'
+      style: secondary
+      start: 46
+      end: 54
+    - source: '"secure" => false'
+      style: secondary
+      start: 46
+      end: 63
   <?php setcookie("sid", $v, ["secure" => true]);:
     labels:
-    - source: setcookie("sid", $v, ["secure" => true])
+    - source: '["secure" => true]'
       style: primary
-      start: 6
-      end: 46
+      start: 27
+      end: 45
     - source: setcookie
       style: secondary
       start: 6
       end: 15
-    - source: '["secure" => true]'
+    - source: setcookie("sid", $v, ["secure" => true])
       style: secondary
-      start: 27
-      end: 45
-    - source: '["secure" => true]'
+      start: 6
+      end: 46
+    - source: ("sid", $v, ["secure" => true])
       style: secondary
-      start: 27
-      end: 45
+      start: 15
+      end: 46
     - source: '["secure" => true]'
       style: secondary
       start: 27
@@ -182,26 +292,26 @@ snapshots:
       end: 15
   '<?php setcookie(expires_or_options: ["secure" => true], name: "sid");':
     labels:
-    - source: 'setcookie(expires_or_options: ["secure" => true], name: "sid")'
+    - source: '["secure" => true]'
       style: primary
-      start: 6
-      end: 68
-    - source: setcookie
-      style: secondary
-      start: 6
-      end: 15
+      start: 36
+      end: 54
     - source: expires_or_options
       style: secondary
       start: 16
       end: 34
-    - source: '["secure" => true]'
+    - source: setcookie
       style: secondary
-      start: 36
-      end: 54
-    - source: 'expires_or_options: ["secure" => true]'
+      start: 6
+      end: 15
+    - source: 'setcookie(expires_or_options: ["secure" => true], name: "sid")'
       style: secondary
-      start: 16
-      end: 54
+      start: 6
+      end: 68
+    - source: '(expires_or_options: ["secure" => true], name: "sid")'
+      style: secondary
+      start: 15
+      end: 68
     - source: 'expires_or_options: ["secure" => true]'
       style: secondary
       start: 16
@@ -228,22 +338,22 @@ snapshots:
       end: 15
   '<?php setcookie(value: $v, name: "sid", expires_or_options: ["secure" => true]);':
     labels:
-    - source: 'setcookie(value: $v, name: "sid", expires_or_options: ["secure" => true])'
+    - source: '["secure" => true]'
       style: primary
-      start: 6
-      end: 79
+      start: 60
+      end: 78
     - source: setcookie
       style: secondary
       start: 6
       end: 15
-    - source: '["secure" => true]'
+    - source: 'setcookie(value: $v, name: "sid", expires_or_options: ["secure" => true])'
       style: secondary
-      start: 60
-      end: 78
-    - source: 'expires_or_options: ["secure" => true]'
+      start: 6
+      end: 79
+    - source: '(value: $v, name: "sid", expires_or_options: ["secure" => true])'
       style: secondary
-      start: 40
-      end: 78
+      start: 15
+      end: 79
     - source: 'expires_or_options: ["secure" => true]'
       style: secondary
       start: 40
@@ -260,26 +370,26 @@ snapshots:
       end: 18
   '<?php setrawcookie(expires_or_options: ["secure" => false, "httponly" => true], name: "t", value: $v);':
     labels:
-    - source: 'setrawcookie(expires_or_options: ["secure" => false, "httponly" => true], name: "t", value: $v)'
+    - source: '["secure" => false, "httponly" => true]'
       style: primary
-      start: 6
-      end: 101
-    - source: setrawcookie
-      style: secondary
-      start: 6
-      end: 18
+      start: 39
+      end: 78
     - source: expires_or_options
       style: secondary
       start: 19
       end: 37
-    - source: '["secure" => false, "httponly" => true]'
+    - source: setrawcookie
       style: secondary
-      start: 39
-      end: 78
-    - source: 'expires_or_options: ["secure" => false, "httponly" => true]'
+      start: 6
+      end: 18
+    - source: 'setrawcookie(expires_or_options: ["secure" => false, "httponly" => true], name: "t", value: $v)'
       style: secondary
-      start: 19
-      end: 78
+      start: 6
+      end: 101
+    - source: '(expires_or_options: ["secure" => false, "httponly" => true], name: "t", value: $v)'
+      style: secondary
+      start: 18
+      end: 101
     - source: 'expires_or_options: ["secure" => false, "httponly" => true]'
       style: secondary
       start: 19

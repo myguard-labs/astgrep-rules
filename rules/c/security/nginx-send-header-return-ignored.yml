@@ -17,7 +17,21 @@ note: >-
   path is the one that bites most often, because r->header_only makes a
   correct-looking handler emit a body for a request that must not have one.
 rule:
-  kind: expression_statement
-  has:
-    kind: call_expression
-    has: {field: function, regex: '^ngx_http_send_header$'}
+  any:
+    # Specific wrappers precede the broad form so smart matching binds the
+    # intended expression shape.
+    - pattern:
+        context: void f(void) { ((ngx_http_send_header($R))); }
+        selector: expression_statement
+    - pattern:
+        context: void f(void) { ($TYPE) ngx_http_send_header($R); }
+        selector: expression_statement
+    - pattern:
+        context: void f(void) { (void) ngx_http_send_header($R); }
+        selector: expression_statement
+    - pattern:
+        context: void f(void) { (ngx_http_send_header($R)); }
+        selector: expression_statement
+    - pattern:
+        context: void f(void) { ngx_http_send_header($R); }
+        selector: expression_statement

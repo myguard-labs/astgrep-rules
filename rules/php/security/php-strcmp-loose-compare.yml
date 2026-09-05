@@ -16,7 +16,7 @@ utils:
     kind: function_call_expression
     has:
       field: function
-      regex: '^(strcmp|strcasecmp|strncmp|strncasecmp)$'
+      regex: '(?i)^\\?(strcmp|strcasecmp|strncmp|strncasecmp)$'
   string-comparison-operand:
     any:
       - matches: direct-string-comparison-call

@@ -11,29 +11,61 @@ note: >-
   cannot tell whether the pointer is used again. A pointer going out of scope on
   the next line, or a local whose function returns immediately, is the routine
   dismissal. nginx pool allocations are freed with the pool and need no free at
-  all. Measured on labs/nginx-http-shield-module: zero hits under src/ and 124
-  in ci/tests and ci/fuzz, where freeing at scope end is correct — scope scans
-  to production sources.
+  all. Test and fuzz harnesses commonly free at scope end, so scope corpus
+  scans to production sources.
+utils:
+  not-cleared:
+    not:
+      precedes:
+        stopBy: end
+        kind: expression_statement
+        has:
+          kind: assignment_expression
+          pattern: $PTR = $_
 rule:
-  kind: expression_statement
-  all:
-    - has:
-        kind: call_expression
-        all:
-          - has:
-              field: function
-              regex: '^(free|ngx_free)$'
-          - has:
-              field: arguments
-              has:
-                kind: identifier
-                pattern: $PTR
-    - not:
-        precedes:
-          stopBy: end
-          kind: expression_statement
-          has:
-            kind: assignment_expression
-            has:
-              field: left
-              pattern: $PTR
+  any:
+    # Put specific wrappers first: ast-grep's smart matching can otherwise let
+    # the broad form capture the wrapper and fail the identifier constraint.
+    - all:
+        - pattern:
+            context: void f(void) { free((($PTR))); }
+            selector: expression_statement
+        - matches: not-cleared
+    - all:
+        - pattern:
+            context: void f(void) { free(($TYPE) $PTR); }
+            selector: expression_statement
+        - matches: not-cleared
+    - all:
+        - pattern:
+            context: void f(void) { free(($PTR)); }
+            selector: expression_statement
+        - matches: not-cleared
+    - all:
+        - pattern:
+            context: void f(void) { free($PTR); }
+            selector: expression_statement
+        - matches: not-cleared
+    - all:
+        - pattern:
+            context: void f(void) { ngx_free((($PTR))); }
+            selector: expression_statement
+        - matches: not-cleared
+    - all:
+        - pattern:
+            context: void f(void) { ngx_free(($TYPE) $PTR); }
+            selector: expression_statement
+        - matches: not-cleared
+    - all:
+        - pattern:
+            context: void f(void) { ngx_free(($PTR)); }
+            selector: expression_statement
+        - matches: not-cleared
+    - all:
+        - pattern:
+            context: void f(void) { ngx_free($PTR); }
+            selector: expression_statement
+        - matches: not-cleared
+constraints:
+  PTR:
+    kind: identifier

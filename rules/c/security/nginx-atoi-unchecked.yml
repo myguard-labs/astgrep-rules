@@ -32,7 +32,7 @@ rule:
         - has:
             kind: assignment_expression
             all:
-              - has: {field: left, kind: identifier, pattern: $V}
+              - has: {field: left, pattern: $V}
               - has: {field: right, matches: converter-call}
         - not:
             inside:
@@ -41,7 +41,11 @@ rule:
               has:
                 stopBy: end
                 kind: binary_expression
-                has: {kind: identifier, pattern: $V}
+                all:
+                  - has:
+                      field: operator
+                      regex: '^(==|!=|<|<=|>|>=)$'
+                  - has: {pattern: $V}
     - kind: declaration
       all:
         - has:
@@ -56,4 +60,8 @@ rule:
               has:
                 stopBy: end
                 kind: binary_expression
-                has: {kind: identifier, pattern: $V}
+                all:
+                  - has:
+                      field: operator
+                      regex: '^(==|!=|<|<=|>|>=)$'
+                  - has: {pattern: $V}

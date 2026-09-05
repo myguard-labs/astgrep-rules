@@ -32,13 +32,28 @@ valid:
     {
         return (int) send(fd, buf, len, flags | MSG_NOSIGNAL);
     }
+  # Parenthesized operands remain an OR-only mask.
+  - |
+    static int
+    parenthesized_flag(int fd, const char *buf, size_t len)
+    {
+        return (int) send(fd, buf, len,
+                          MSG_NOSIGNAL | (MSG_DONTWAIT));
+    }
+  # ORing with an integer constant cannot clear MSG_NOSIGNAL.
+  - |
+    static int
+    numeric_flag(int fd, const char *buf, size_t len)
+    {
+        return (int) send(fd, buf, len, MSG_NOSIGNAL | 0U);
+    }
   # sendto with the flag set.
   - |
     static int
     dgram(int fd, const char *buf, size_t len, const struct sockaddr *to,
-        socklen_t tolen)
+        socklen_t addrlen)
     {
-        return (int) sendto(fd, buf, len, MSG_NOSIGNAL, to, tolen);
+        return (int) sendto(fd, buf, len, MSG_NOSIGNAL, to, addrlen);
     }
   # write() is a different call — out of scope for this rule.
   - |
@@ -60,9 +75,9 @@ valid:
   - |
     static int
     dgram(int fd, const char *buf, size_t len, const struct sockaddr *to,
-        socklen_t tolen)
+        socklen_t addrlen)
     {
-        return (int) sendto(fd, buf, len, 0, to, tolen);
+        return (int) sendto(fd, buf, len, 0, to, addrlen);
     }
 invalid:
   # Nonzero mask that omits MSG_NOSIGNAL — still raises SIGPIPE on a closed peer.

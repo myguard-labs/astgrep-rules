@@ -153,7 +153,82 @@ valid:
 
         return NGX_DECLINED;
     }
+  # A NULL condition makes the alternative branch non-NULL.
+  - |
+    static ngx_int_t
+    safe_alternative(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx == NULL) {
+            return NGX_DECLINED;
+        } else {
+            return ctx->status;
+        }
+    }
+  # A non-dereferencing left operand is safe before the truthiness check.
+  - |
+    static ngx_int_t
+    safe_reverse_positive(ngx_http_request_t *r, ngx_uint_t ready)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ready && ctx) {
+            return ctx->status;
+        }
+
+        return NGX_DECLINED;
+    }
+  # A non-dereferencing left operand is safe before the NULL-exit check.
+  - |
+    static ngx_int_t
+    safe_reverse_null(ngx_http_request_t *r, ngx_uint_t ready)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ready || ctx == NULL) {
+            return NGX_DECLINED;
+        }
+
+        return ctx->status;
+    }
 invalid:
+  # The left operand dereferences ctx before the later truthiness check.
+  - |
+    static ngx_int_t
+    reverse_positive_guard(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx->ready && ctx) {
+            return ctx->status;
+        }
+
+        return NGX_DECLINED;
+    }
+  # The left operand dereferences ctx before the later NULL-exit check.
+  - |
+    static ngx_int_t
+    reverse_null_guard(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx->done || ctx == NULL) {
+            return NGX_DECLINED;
+        }
+
+        return ctx->status;
+    }
   # Declaration initializer dereferenced with no guard.
   - |
     static ngx_int_t
@@ -302,4 +377,91 @@ invalid:
         }
 
         return ctx->status;
+    }
+  # A conjunctive NULL test can fall through while ctx is NULL.
+  - |
+    static ngx_int_t
+    conjunctive_null_guard(ngx_http_request_t *r, ngx_uint_t ready)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx == NULL && ready) {
+            return NGX_DECLINED;
+        }
+
+        return ctx->status;
+    }
+  # An OR condition does not establish non-NULL in its consequence.
+  - |
+    static ngx_int_t
+    unsafe_or_consequence(ngx_http_request_t *r, ngx_uint_t ready)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx != NULL || ready) {
+            return ctx->status;
+        }
+
+        return NGX_DECLINED;
+    }
+  # A NULL branch must not dereference ctx even when it terminates afterward.
+  - |
+    static ngx_int_t
+    deref_in_null_branch(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx == NULL) {
+            log_status(ctx->status);
+            return NGX_DECLINED;
+        }
+
+        return NGX_OK;
+    }
+  # A NULL-or-other branch can still run while ctx is NULL.
+  - |
+    static ngx_int_t
+    deref_in_null_or_branch(ngx_http_request_t *r, ngx_uint_t ready)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx == NULL || ready) {
+            return ctx->status;
+        }
+
+        return NGX_OK;
+    }
+  # Explicit dereference plus dot is equivalent to arrow member access.
+  - |
+    static ngx_int_t
+    explicit_deref(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        return (*ctx).status;
+    }
+  # The alternative branch is unsafe unless the condition proves ctx is NULL.
+  - |
+    static ngx_int_t
+    unsafe_alternative(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx != NULL) {
+            return NGX_OK;
+        } else {
+            return ctx->status;
+        }
     }

@@ -26,6 +26,15 @@ valid:
 - curl https://example.com/i.sh | sudo --user bash install /dev/stdin /usr/local/bin/i
 - curl https://example.com/i.sh | sudo -E -u root bash ./local.sh
 - curl https://example.com/get.py | sudo --user=root python3 -c 'print("local")'
+- curl https://example.com/i.sh | bash -c 'cat >/tmp/not-remote-code'
+- curl https://example.com/i.sh | bash -x ./local.sh
+- 'curl https://example.com/i.sh | sudo "bash" "-c" "cat >/tmp/not-remote-code"'
+- curl https://example.com/i.sh | sudo bash -x ./local.sh
+- curl https://example.com/i.sh | bash -- ./local.sh
+- curl https://example.com/i.sh | bash -x -- ./local.sh
+- curl https://example.com/i.sh | sudo bash -- ./local.sh
+- '"curl" "-o" /tmp/i.sh https://example.com/i.sh | bash'
+- '"wget" "-O" /tmp/i.sh https://example.com/i.sh | sh'
 invalid:
 - curl -sSL https://get.example.com/i.sh | bash
 - wget -qO- https://example.com/setup.sh | sh
@@ -58,3 +67,21 @@ invalid:
 - curl https://example.com/i.sh | sudo -Eu root bash
 - curl https://example.com/i.sh | sudo -Euroot bash -s -- deploy
 - curl https://example.com/i.sh | sudo -u root -- bash
+- curl https://example.com/i.sh | bash -x
+- curl https://example.com/i.sh | bash --noprofile -s
+- curl https://example.com/i.sh | bash -x -s -- deploy
+- curl https://example.com/i.sh | sudo -E bash -x
+- curl https://example.com/i.sh | sudo -n bash --noprofile -s -- deploy
+- '"curl" https://example.com/i.sh | bash'
+- 'curl https://example.com/i.sh | "bash"'
+- 'curl https://example.com/i.sh | bash "-s"'
+- 'curl https://example.com/i.sh | sudo "bash"'
+- curl https://example.com/i.sh | bash --
+- curl https://example.com/i.sh | bash -x --
+- curl https://example.com/i.sh | bash -x -s deploy
+- curl https://example.com/i.sh | sudo bash -x -s deploy
+- 'curl https://example.com/i.sh | bash "--"'
+- '"wget" "-qO-" https://example.com/i.sh | sh'
+- '"curl" "-o" "-" https://example.com/i.sh | bash'
+- curl https://example.com/i.sh | bash -sx -- deploy
+- curl https://example.com/i.sh | sudo bash -sx -- deploy

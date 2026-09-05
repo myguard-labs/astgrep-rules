@@ -14,3 +14,5 @@ invalid:
 - '<?php if (strcasecmp($u, $name) == 0) { ok(); }'
 - '<?php if (strcmp($pass, $stored) != 1) { no(); }'
 - '<?php if (strcmp($a, $b) <> 0) { no(); }'
+- '<?php if (STRCMP($a, $b) == 0) { no(); }'
+- '<?php if (\strcmp($a, $b) == 0) { no(); }'

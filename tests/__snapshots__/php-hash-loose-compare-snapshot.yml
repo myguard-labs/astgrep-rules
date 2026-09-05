@@ -40,6 +40,42 @@ snapshots:
       style: secondary
       start: 10
       end: 19
+  <?php if (MD5($token) == $stored) { no(); }:
+    labels:
+    - source: MD5($token) == $stored
+      style: primary
+      start: 10
+      end: 32
+    - source: ==
+      style: secondary
+      start: 22
+      end: 24
+    - source: MD5
+      style: secondary
+      start: 10
+      end: 13
+    - source: MD5($token)
+      style: secondary
+      start: 10
+      end: 21
+  <?php if (\md5($token) == $stored) { no(); }:
+    labels:
+    - source: \md5($token) == $stored
+      style: primary
+      start: 10
+      end: 33
+    - source: ==
+      style: secondary
+      start: 23
+      end: 25
+    - source: \md5
+      style: secondary
+      start: 10
+      end: 14
+    - source: \md5($token)
+      style: secondary
+      start: 10
+      end: 22
   <?php if (md5($p) == $stored) { ok(); }:
     labels:
     - source: md5($p) == $stored

@@ -26,17 +26,55 @@ utils:
     has:
       field: function
       regex: '^(ngx_http_get_module_ctx|ngx_stream_get_module_ctx)$'
+  ctx-deref:
+    any:
+      - pattern: $C->$F
+      - pattern: (*$C).$F
+  no-ctx-deref:
+    all:
+      - regex: '(?s).+'
+      - not:
+          any:
+            - matches: ctx-deref
+            - has:
+                stopBy: end
+                matches: ctx-deref
+  nonnull-condition-on-c:
+    any:
+      - pattern: ($C)
+      - pattern: ($C != NULL)
+      - pattern: (NULL != $C)
+      - pattern: ($C && $X)
+      - pattern: ($SAFE_X && $C)
+      - pattern: ($C != NULL && $X)
+      - pattern: ($SAFE_X && $C != NULL)
+      - pattern: (NULL != $C && $X)
+      - pattern: ($SAFE_X && NULL != $C)
+  null-condition-on-c:
+    any:
+      - pattern: ($C == NULL)
+      - pattern: (NULL == $C)
+      - pattern: (!$C)
+      - pattern: ($C == NULL || $X)
+      - pattern: ($SAFE_X || $C == NULL)
+      - pattern: (NULL == $C || $X)
+      - pattern: ($SAFE_X || NULL == $C)
+      - pattern: (!$C || $X)
+      - pattern: ($SAFE_X || !$C)
+  unsafe-condition-before-c:
+    any:
+      - pattern: ($BAD_X && $C)
+      - pattern: ($BAD_X && $C != NULL)
+      - pattern: ($BAD_X && NULL != $C)
+      - pattern: ($BAD_X || $C == NULL)
+      - pattern: ($BAD_X || NULL == $C)
+      - pattern: ($BAD_X || !$C)
   null-exit-guard:
     kind: if_statement
     all:
       - has:
           field: condition
-          has:
-            stopBy: end
-            any:
-              - pattern: $C == NULL
-              - pattern: NULL == $C
-              - pattern: '!$C'
+          matches: null-condition-on-c
       - has:
           field: consequence
           any:
@@ -47,31 +85,64 @@ utils:
                 any:
                   - kind: return_statement
                   - kind: goto_statement
+      - not:
+          has:
+            field: consequence
+            has:
+              stopBy: end
+              matches: ctx-deref
   # Walk following statements until a terminating NULL guard; report the first
   # dereference reached before that guard.
   unguarded-deref:
     precedes:
       stopBy:
         matches: null-exit-guard
-      all:
-        - has:
-            stopBy: end
-            pattern: $C->$F
-        # A short-circuit condition can safely contain the first member
-        # access; do not report the guard statement itself.
-        - not:
-            kind: if_statement
-            has:
-              stopBy: end
-              any:
-                - pattern: $C == NULL
-                - pattern: $C != NULL
-                - pattern: '!$C'
-                - pattern: $C && $X
-                - pattern: $X && $C
-                - pattern: $C || $X
-                - pattern: $X || $C
-                - pattern: ($C)
+      any:
+        # A dereference evaluated before the pointer check is itself unsafe.
+        - kind: if_statement
+          has:
+            field: condition
+            matches: unsafe-condition-before-c
+        # Non-if statements do not establish a branch-local pointer fact.
+        - all:
+            - not: {kind: if_statement}
+            - has:
+                stopBy: end
+                matches: ctx-deref
+        # A consequence is safe only when entering it proves C non-NULL.
+        - kind: if_statement
+          all:
+            - has:
+                stopBy: end
+                all:
+                  - matches: ctx-deref
+                  - not:
+                      not:
+                        inside:
+                          stopBy: end
+                          field: consequence
+                          regex: '(?s).+'
+            - not:
+                has:
+                  field: condition
+                  matches: nonnull-condition-on-c
+        # An alternative is safe only when the condition proves C is NULL.
+        - kind: if_statement
+          all:
+            - has:
+                stopBy: end
+                all:
+                  - matches: ctx-deref
+                  - not:
+                      not:
+                        inside:
+                          stopBy: end
+                          field: alternative
+                          regex: '(?s).+'
+            - not:
+                has:
+                  field: condition
+                  matches: null-condition-on-c
 rule:
   any:
     - kind: expression_statement
@@ -103,3 +174,12 @@ rule:
                   field: value
                   matches: ctx-call
         - matches: unguarded-deref
+constraints:
+  SAFE_X:
+    matches: no-ctx-deref
+  BAD_X:
+    any:
+      - matches: ctx-deref
+      - has:
+          stopBy: end
+          matches: ctx-deref

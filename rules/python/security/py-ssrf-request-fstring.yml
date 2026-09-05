@@ -23,8 +23,18 @@ utils:
         has:
           kind: interpolation
       - kind: binary_operator
-        has:
-          kind: string
+        all:
+          - has:
+              stopBy: end
+              kind: string
+          - has:
+              stopBy: end
+              any:
+                - kind: identifier
+                - kind: call
+                - kind: attribute
+                - kind: subscript
+                - kind: interpolation
   named-interpolated-url:
     kind: keyword_argument
     all:
@@ -34,6 +44,22 @@ utils:
       - has:
           field: value
           matches: interpolated-url
+  request-receiver:
+    any:
+      - kind: identifier
+        regex: '^(requests|httpx|urllib3|aiohttp|http|session|sess|client)$'
+      - kind: parenthesized_expression
+        has:
+          kind: identifier
+          regex: '^(requests|httpx|urllib3|aiohttp|http|session|sess|client)$'
+  urlopen-function:
+    any:
+      - kind: identifier
+        regex: '^urlopen$'
+      - kind: attribute
+        has:
+          field: attribute
+          regex: '^urlopen$'
 rule:
   kind: call
   all:
@@ -42,7 +68,16 @@ rule:
         - all:
             - has:
                 field: function
-                regex: '^(requests|httpx|urllib3|aiohttp|http|session|sess|client)\.(get|post|put|patch|delete|head)$|(^|\.)urlopen$'
+                any:
+                  - kind: attribute
+                    all:
+                      - has:
+                          field: object
+                          matches: request-receiver
+                      - has:
+                          field: attribute
+                          regex: '^(get|post|put|patch|delete|head)$'
+                  - matches: urlopen-function
             - has:
                 field: arguments
                 any:
@@ -55,7 +90,14 @@ rule:
         - all:
             - has:
                 field: function
-                regex: '^(requests|httpx|urllib3|aiohttp|http|session|sess|client)\.request$'
+                kind: attribute
+                all:
+                  - has:
+                      field: object
+                      matches: request-receiver
+                  - has:
+                      field: attribute
+                      regex: '^request$'
             - has:
                 field: arguments
                 any:

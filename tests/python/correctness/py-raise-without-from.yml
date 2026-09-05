@@ -13,6 +13,11 @@ valid:
 - |
   try:
       connect()
+  except OSError as e:
+      raise (RuntimeError("connect failed")) from e
+- |
+  try:
+      connect()
   except OSError:
       raise
 - |
@@ -47,3 +52,8 @@ invalid:
   except OSError:
       with lock:
           raise RuntimeError("connect failed")
+- |
+  try:
+      connect()
+  except OSError:
+      raise (RuntimeError("connect failed"))

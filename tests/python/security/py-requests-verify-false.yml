@@ -15,4 +15,7 @@ invalid:
 - requests.post(url, json=payload, verify=False)
 - session.request("GET", url, verify=False)
 - requests.Session().request("GET", url, verify=False)
+- requests.Session( ).get(url, verify=False)
+- (requests.Session()).get(url, verify=False)
+- requests . get(url, verify=False)
 - requests.delete(url, verify=False, timeout=5)
