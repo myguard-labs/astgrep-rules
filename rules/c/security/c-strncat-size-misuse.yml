@@ -9,8 +9,9 @@ message: >-
   that long. Pass the remaining space (sizeof(dst) - strlen(dst) - 1) and
   terminate explicitly, or use snprintf.
 note: >-
-  Fires when the length argument is sizeof/strlen of the destination itself.
-  A correct remaining-space computation subtracts from that and does not match.
+  Fires when strncat's length is sizeof/strlen of the destination itself, or
+  when strncpy's length is sizeof of the destination. A correct remaining-space
+  computation subtracts from that and does not match.
 rule:
   kind: call_expression
   any:
@@ -22,7 +23,4 @@ rule:
         selector: call_expression
     - pattern:
         context: void f(void) { strncpy($DST, $SRC, sizeof($DST)); }
-        selector: call_expression
-    - pattern:
-        context: void f(void) { strncpy($DST, $SRC, strlen($DST)); }
         selector: call_expression

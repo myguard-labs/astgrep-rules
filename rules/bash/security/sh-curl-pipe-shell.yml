@@ -10,7 +10,8 @@ message: >-
   run it.
 note: >-
   Fires when curl writes its response to stdout, or wget explicitly selects
-  stdout, and that stream reaches a bare sh/bash/zsh/python interpreter.
+  stdout, and that stream reaches a bare sh/bash/zsh/python interpreter or one
+  with an explicit stdin selector (`-s` or `-`).
   Also covers sudo with no options or the common no-argument -E/-H/-n/-S
   options. Commands that select an output file, interpreters given a script
   path, and sudo tee/install do not match.
@@ -21,17 +22,22 @@ note: >-
 utils:
   interpreter:
     regex: '^(sh|bash|zsh|ksh|dash|python|python3|perl|ruby)$'
+  stdin-marker:
+    regex: '^(-s|-)$'
   stdout-fetch:
     kind: command
     any:
       - all:
           - has: {field: name, regex: '^curl$'}
-          - not:
-              has:
-                field: argument
-                # curl short -o/-O forms and their common no-argument prefixes,
-                # plus the equivalent long output-file options.
-                regex: '^(?:-o.*|-O.*|-[sSfLvikN]*[oO].*|--output(?:=.*)?|--remote-name|--remote-name-all|--remote-header-name)$'
+          - any:
+              # These output-option forms explicitly select stdout.
+              - regex: '(^|\s)(-o\s+-|--output\s+-|-o-|--output=-)(\s|$)'
+              - not:
+                  has:
+                    field: argument
+                    # curl short -o/-O forms and their common no-argument
+                    # prefixes, plus the equivalent long output-file options.
+                    regex: '^(?:-o.*|-O.*|-[sSfLvikN]*[oO].*|--output(?:=.*)?|--remote-name|--remote-name-all|--remote-header-name)$'
       - all:
           - has: {field: name, regex: '^wget$'}
           - any:
@@ -47,26 +53,42 @@ utils:
       # A direct, bare interpreter reads the pipe as program text.
       - all:
           - has: {field: name, matches: interpreter}
-          - not:
-              has: {field: argument, regex: '.+'}
+          - any:
+              - not:
+                  has: {field: argument, regex: '.+'}
+              - all:
+                  - has: {nthChild: 2, matches: stdin-marker}
+                  - not:
+                      has: {nthChild: 3, regex: '.+'}
       # With no sudo options, the command word is its first argument.
       - all:
           - has: {field: name, regex: '^sudo$'}
           - has: {nthChild: 2, matches: interpreter}
-          - not:
-              has: {nthChild: 3, regex: '.+'}
+          - any:
+              - not:
+                  has: {nthChild: 3, regex: '.+'}
+              - all:
+                  - has: {nthChild: 3, matches: stdin-marker}
+                  - not:
+                      has: {nthChild: 4, regex: '.+'}
       # These common sudo options take no argument, so the next word is the
       # command rather than an option value.
       - all:
           - has: {field: name, regex: '^sudo$'}
           - has: {nthChild: 2, regex: '^-[EHnS]+$'}
           - has: {nthChild: 3, matches: interpreter}
-          - not:
-              has: {nthChild: 4, regex: '.+'}
+          - any:
+              - not:
+                  has: {nthChild: 4, regex: '.+'}
+              - all:
+                  - has: {nthChild: 4, matches: stdin-marker}
+                  - not:
+                      has: {nthChild: 5, regex: '.+'}
 rule:
   kind: pipeline
-  all:
-    - has:
-        matches: stdout-fetch
-    - has:
-        matches: stdin-interpreter
+  has:
+    all:
+      - matches: stdout-fetch
+      - precedes:
+          stopBy: end
+          matches: stdin-interpreter

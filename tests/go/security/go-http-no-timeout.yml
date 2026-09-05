@@ -9,6 +9,8 @@ valid:
 - 'package m; func f() { s := &grpc.Server{} }'
 invalid:
 - 'package m; func f() { c := &http.Client{} }'
+- 'package m; func f() { c := &http.Client{Timeout: 0} }'
+- 'package m; func f() { s := &http.Server{ReadHeaderTimeout: 0, WriteTimeout: time.Second} }'
 - 'package m; func f() { s := &http.Server{Addr: ":8080", Handler: mux} }'
 - 'package m; func f() { c := http.Client{Transport: tr} }'
 - 'package m; func f() { c := &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: time.Second}} }'

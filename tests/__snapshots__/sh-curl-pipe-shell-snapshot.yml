@@ -1,5 +1,27 @@
 id: sh-curl-pipe-shell
 snapshots:
+  curl --output=- https://example.com/i.sh | bash:
+    labels:
+    - source: curl --output=- https://example.com/i.sh | bash
+      style: primary
+      start: 0
+      end: 47
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: bash
+      style: secondary
+      start: 43
+      end: 47
+    - source: bash
+      style: secondary
+      start: 43
+      end: 47
+    - source: curl --output=- https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 40
   curl -fsSL https://example.com/i.sh | sudo -E bash:
     labels:
     - source: curl -fsSL https://example.com/i.sh | sudo -E bash
@@ -10,10 +32,6 @@ snapshots:
       style: secondary
       start: 0
       end: 4
-    - source: curl -fsSL https://example.com/i.sh
-      style: secondary
-      start: 0
-      end: 35
     - source: sudo
       style: secondary
       start: 38
@@ -30,6 +48,10 @@ snapshots:
       style: secondary
       start: 38
       end: 50
+    - source: curl -fsSL https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 35
   curl -fsSL https://example.com/i.sh | sudo bash:
     labels:
     - source: curl -fsSL https://example.com/i.sh | sudo bash
@@ -40,10 +62,6 @@ snapshots:
       style: secondary
       start: 0
       end: 4
-    - source: curl -fsSL https://example.com/i.sh
-      style: secondary
-      start: 0
-      end: 35
     - source: sudo
       style: secondary
       start: 38
@@ -56,6 +74,54 @@ snapshots:
       style: secondary
       start: 38
       end: 47
+    - source: curl -fsSL https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 35
+  curl -o - https://example.com/i.sh | bash:
+    labels:
+    - source: curl -o - https://example.com/i.sh | bash
+      style: primary
+      start: 0
+      end: 41
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: bash
+      style: secondary
+      start: 37
+      end: 41
+    - source: bash
+      style: secondary
+      start: 37
+      end: 41
+    - source: curl -o - https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 34
+  curl -o- https://example.com/i.sh | bash:
+    labels:
+    - source: curl -o- https://example.com/i.sh | bash
+      style: primary
+      start: 0
+      end: 40
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: bash
+      style: secondary
+      start: 36
+      end: 40
+    - source: bash
+      style: secondary
+      start: 36
+      end: 40
+    - source: curl -o- https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 33
   curl -sSL https://get.example.com/i.sh | bash:
     labels:
     - source: curl -sSL https://get.example.com/i.sh | bash
@@ -66,18 +132,18 @@ snapshots:
       style: secondary
       start: 0
       end: 4
+    - source: bash
+      style: secondary
+      start: 41
+      end: 45
+    - source: bash
+      style: secondary
+      start: 41
+      end: 45
     - source: curl -sSL https://get.example.com/i.sh
       style: secondary
       start: 0
       end: 38
-    - source: bash
-      style: secondary
-      start: 41
-      end: 45
-    - source: bash
-      style: secondary
-      start: 41
-      end: 45
   curl https://example.com/get.py | python3:
     labels:
     - source: curl https://example.com/get.py | python3
@@ -88,18 +154,134 @@ snapshots:
       style: secondary
       start: 0
       end: 4
+    - source: python3
+      style: secondary
+      start: 34
+      end: 41
+    - source: python3
+      style: secondary
+      start: 34
+      end: 41
     - source: curl https://example.com/get.py
       style: secondary
       start: 0
       end: 31
+  curl https://example.com/get.py | python3 -:
+    labels:
+    - source: curl https://example.com/get.py | python3 -
+      style: primary
+      start: 0
+      end: 43
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
     - source: python3
       style: secondary
       start: 34
       end: 41
-    - source: python3
+    - source: '-'
+      style: secondary
+      start: 42
+      end: 43
+    - source: python3 -
       style: secondary
       start: 34
+      end: 43
+    - source: curl https://example.com/get.py
+      style: secondary
+      start: 0
+      end: 31
+  curl https://example.com/get.py | sudo -E python3 -:
+    labels:
+    - source: curl https://example.com/get.py | sudo -E python3 -
+      style: primary
+      start: 0
+      end: 51
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: sudo
+      style: secondary
+      start: 34
+      end: 38
+    - source: -E
+      style: secondary
+      start: 39
       end: 41
+    - source: python3
+      style: secondary
+      start: 42
+      end: 49
+    - source: '-'
+      style: secondary
+      start: 50
+      end: 51
+    - source: sudo -E python3 -
+      style: secondary
+      start: 34
+      end: 51
+    - source: curl https://example.com/get.py
+      style: secondary
+      start: 0
+      end: 31
+  curl https://example.com/i.sh | bash -s:
+    labels:
+    - source: curl https://example.com/i.sh | bash -s
+      style: primary
+      start: 0
+      end: 39
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: bash
+      style: secondary
+      start: 32
+      end: 36
+    - source: -s
+      style: secondary
+      start: 37
+      end: 39
+    - source: bash -s
+      style: secondary
+      start: 32
+      end: 39
+    - source: curl https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 29
+  curl https://example.com/i.sh | sudo bash -s:
+    labels:
+    - source: curl https://example.com/i.sh | sudo bash -s
+      style: primary
+      start: 0
+      end: 44
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: sudo
+      style: secondary
+      start: 32
+      end: 36
+    - source: bash
+      style: secondary
+      start: 37
+      end: 41
+    - source: -s
+      style: secondary
+      start: 42
+      end: 44
+    - source: sudo bash -s
+      style: secondary
+      start: 32
+      end: 44
+    - source: curl https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 29
   wget -qO- https://example.com/setup.sh | sh:
     labels:
     - source: wget -qO- https://example.com/setup.sh | sh
@@ -114,15 +296,15 @@ snapshots:
       style: secondary
       start: 5
       end: 9
+    - source: sh
+      style: secondary
+      start: 41
+      end: 43
+    - source: sh
+      style: secondary
+      start: 41
+      end: 43
     - source: wget -qO- https://example.com/setup.sh
       style: secondary
       start: 0
       end: 38
-    - source: sh
-      style: secondary
-      start: 41
-      end: 43
-    - source: sh
-      style: secondary
-      start: 41
-      end: 43

@@ -24,9 +24,3 @@ snapshots:
       style: primary
       start: 15
       end: 45
-  void f(void) { strncpy(dst, src, strlen(dst)); }:
-    labels:
-    - source: strncpy(dst, src, strlen(dst))
-      style: primary
-      start: 15
-      end: 45

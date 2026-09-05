@@ -105,6 +105,54 @@ valid:
         }
         return ctx->status;
     }
+  # Reversed NULL comparison with a direct jump also protects later access.
+  - |
+    static ngx_int_t
+    reversed_goto_guard(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (NULL == ctx) {
+            goto failed;
+        }
+
+        return ctx->status;
+
+    failed:
+        return NGX_DECLINED;
+    }
+  # A member access inside a positive branch is scoped to non-NULL ctx.
+  - |
+    static ngx_int_t
+    positive_scope(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx) {
+            return ctx->status;
+        }
+
+        return NGX_DECLINED;
+    }
+  # A true AND condition also establishes ctx for its consequence.
+  - |
+    static ngx_int_t
+    short_circuit_scope(ngx_http_request_t *r, ngx_uint_t ready)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx && ready) {
+            return ctx->status;
+        }
+
+        return NGX_DECLINED;
+    }
 invalid:
   # Declaration initializer dereferenced with no guard.
   - |
@@ -176,5 +224,82 @@ invalid:
         ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
 
         trace_request(r);
+        return ctx->status;
+    }
+  # A truthy OR condition does not establish that ctx is non-NULL afterward.
+  - |
+    static ngx_int_t
+    or_then_deref(ngx_http_request_t *r, ngx_uint_t fallback)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx || fallback) {
+            trace_request(r);
+        }
+
+        return ctx->status;
+    }
+  # A truthy AND condition can fail because ctx is NULL, then execution resumes.
+  - |
+    static ngx_int_t
+    and_then_deref(ngx_http_request_t *r, ngx_uint_t ready)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx && ready) {
+            trace_request(r);
+        }
+
+        return ctx->status;
+    }
+  # A NULL check that merely logs does not protect the following dereference.
+  - |
+    static ngx_int_t
+    negated_nonterminating(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (!ctx) {
+            log_missing_ctx(r);
+        }
+
+        return ctx->status;
+    }
+  # An explicit comparison likewise needs to exit its NULL consequence.
+  - |
+    static ngx_int_t
+    null_compare_nonterminating(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx == NULL) {
+            log_missing_ctx(r);
+        }
+
+        return ctx->status;
+    }
+  # A nested conditional return does not terminate every NULL path.
+  - |
+    static ngx_int_t
+    nested_return_nonterminating(ngx_http_request_t *r, ngx_uint_t noisy)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx == NULL) {
+            if (noisy) {
+                return NGX_DECLINED;
+            }
+        }
+
         return ctx->status;
     }

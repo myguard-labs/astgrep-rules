@@ -21,10 +21,10 @@ note: >-
   zipfile.ZipFile.extractall has no filter parameter and is outside this
   tar-specific rule; Python still requires prior inspection of untrusted ZIP
   archives. Python 3.12 and 3.13 accept filter="data" but do not default to it;
-  PEP 706 made it the default in 3.14, so a match on a codebase pinned to 3.14+
-  is already safe from this rule's path-traversal concern — check the floor in
-  pyproject before dismissing, since the same call on an older interpreter is
-  exploitable.
+  PEP 706 made it the default in 3.14, reducing path and link risks. Untrusted
+  archives still require prior inspection and resource limits. Check the
+  interpreter floor and archive trust before dismissing, since the same call on
+  an older interpreter is exploitable.
 utils:
   # The filter keyword must be on this call, not on a nested one.
   has-filter:

@@ -83,9 +83,11 @@ resolution and remain outside this matcher.
   literals, constants, `__DIR__` or `dirname(__FILE__)` does not match; any
   other call in the path still does. It does not model taint, so
   an internal, non-request variable still matches and needs review.
-- `c-strncat-size-misuse` binds the `sizeof`/`strlen` operand to the destination
-  argument and matches only when that expression is the complete length
-  argument. Correct remaining-space forms subtract and do not match. An array
+- `c-strncat-size-misuse` binds the size operand to the destination argument
+  and matches only when that expression is the complete length argument. It
+  covers `strncat` with `sizeof`/`strlen` and `strncpy` with `sizeof`;
+  `strncpy(dst, src, strlen(dst))` is not classified as a whole-buffer overflow.
+  Correct remaining-space forms subtract and do not match. An array
   passed as a pointer parameter still makes `sizeof` wrong for a different
   reason this rule does not diagnose.
 
@@ -96,8 +98,9 @@ resolution and remain outside this matcher.
   `Client` type does not match and a dot-imported one is missed. Only direct
   `*Timeout` fields count; a nested `Transport` timeout does not satisfy the
   outer client. A client configured after construction, or one whose transport
-  carries its own deadlines, is not detected; a literal naming any direct
-  `*Timeout` field is treated as handled even if the value is zero.
+  carries its own deadlines, is not detected. A direct timeout field set to the
+  literal `0` matches; computed zero values such as `time.Duration(0)` are not
+  evaluated and are treated as configured.
 - `go-error-swallowed` cannot tell an error from any other discarded return, so
   it approximates: an assignment binding `err*`, `e` or `ok*` is excluded, as
   is an assignment whose right-hand expressions are all common cleanup calls
@@ -155,9 +158,12 @@ See <https://cwe.mitre.org/data/definitions/1435.html>.
 - `py-ssrf-request-fstring` covers CWE-918 and flags an interpolated URL, not a
   proven SSRF. The receiver is matched lexically (`requests`, `httpx`,
   `urllib3`, `aiohttp`, a local `session`/`client` name, or bare `urlopen`), so
-  a dict or cache `.get()` with an interpolated key does not match. Object
-  attributes and clients held under other names are missed. An interpolated
-  path under a fixed host is the common benign shape.
+  a dict or cache `.get()` with an interpolated key does not match. Only the
+  first positional or named `url` argument is inspected, except that
+  `request(method, url)` uses the second positional argument; interpolated
+  payloads do not match. Object attributes and clients held under other names
+  are missed. An interpolated path under a fixed host is the common benign
+  shape.
 - `py-mark-safe-interpolation` covers CWE-79 in Django: interpolation happens
   before `mark_safe` marks the result, so the payload is already embedded.
   `format_html` is the fix. `mark_safe` over a constant, including a
@@ -223,9 +229,11 @@ Failures — the remaining 2025 category with no coverage. Most of A03 is
 registry, SBOM and provenance territory that no AST matcher can reach; these
 two rules cover only its code-level slice.
 
-- `sh-curl-pipe-shell` matches a fetch piped into an interpreter. An interpreter
-  must be bare: script-path and inline-script forms do not match. Curl must not
-  select an output file, while wget must explicitly select stdout. `sudo`
+- `sh-curl-pipe-shell` matches a stdout fetch to its rightward interpreter. An
+  interpreter may be bare or use the explicit stdin forms `bash -s`/`python3 -`;
+  script-path and inline-script forms do not match. Curl must not select an
+  output file (`-o -`, `-o-`, and `--output=-` explicitly select stdout), while
+  wget must explicitly select stdout. `sudo`
   supports no options or the common no-argument `-E`, `-H`, `-n` and `-S`;
   `sudo tee` and `sudo install` do not match. The rule cannot see whether a
   checksum is verified elsewhere in the script.
@@ -243,8 +251,10 @@ two rules cover only its code-level slice.
   and is invisible to this matcher; `go vet` does catch the lostcancel case.
 - `php-insecure-cookie-flags` checks the options-array form, reporting when
   either `httponly` or `secure` is absent or not literally `true`, and the
-  legacy positional form. Positional arguments six and seven must both be the
-  literal `true`; calls too short to carry those flags also match.
+  legacy positional form. A named `expires_or_options:` array is recognized in
+  any argument order and is not interpreted as the positional signature.
+  Positional arguments six and seven must both be the literal `true`; calls too
+  short to carry those flags also match unless they supply a named options array.
 - `py-tarfile-extractall` covers CWE-22. The receiver must be bound from
   `tarfile.open`, `tarfile.TarFile` or `tarfile.TarFile.open` by a preceding
   assignment in the same statement list, the statement list containing an
@@ -252,16 +262,18 @@ two rules cover only its code-level slice.
   be chained directly on that open. A simple intervening assignment in the
   relevant statement list stops the match. Other control-flow bindings and
   reassignments, and bindings in another file, are not modelled, so the rule is
-  a warning rather than an error. `zipfile.ZipFile.extractall` has no `filter`
+  a warning rather than an error. On Python 3.14+, the default `data` filter
+  reduces path and link risks, but untrusted archives still require prior
+  inspection and resource limits. `zipfile.ZipFile.extractall` has no `filter`
   parameter and is outside this tar-specific rule; Python only attempts to
   prevent path traversal there and still requires prior inspection for
   untrusted ZIP archives. The `filter` keyword must be on the extract call
   itself, not on a nested call.
   Per PEP 706, Python 3.12-3.13 emit a
   DeprecationWarning but still extract with the `fully_trusted` filter, so a
-  match on those versions is exploitable; 3.14+ defaults to `data` and a match
-  there is already safe. Check the interpreter floor before dismissing. Found
-  one true positive outside this repo, at tools/patch-management.py:36.
+  match on those versions is exploitable; 3.14+ defaults to `data`. Check the
+  interpreter floor and archive trust before dismissing. Found one true
+  positive outside this repo, at tools/patch-management.py:36.
 - `c-scanf-unbounded-string` matches a `%s`, `%[`, `%ls` or `%l[` conversion
   with no field width in the scanf family. An assignment-suppressed `%*s` and
   an escaped `%%s` write nothing and do not match. It reads the format literal,
@@ -274,9 +286,14 @@ selecting shapes with a measured hit rate on this codebase rather than from a
 generic catalog.
 
 - `nginx-unchecked-module-ctx` checks for the guard rather than inventorying
-  call sites: a match means no NULL comparison or truthiness test of the
-  assigned name precedes the first member access in the same block. Both the
-  assignment form and the declaration-initializer form are covered. Measured
+  call sites: a match means no recognized NULL guard of the assigned name is
+  encountered before the first member access in the same block. Both the
+  assignment form and the declaration-initializer form are covered. A
+  short-circuit member access inside `if (ctx && ctx->field)` is safe in that
+  condition, but a standalone `ctx && ready` or `ctx || fallback` does not
+  suppress a later dereference. A NULL condition suppresses later reports only
+  when its consequence directly returns or jumps; a branch that merely logs is
+  not a guard. Reversed `NULL == ctx` checks are recognized. Measured
   34 hits across `modules/nginx/*/src` and 1 in first-party code, against 274
   total fetch sites — the check is selective, not a census. All 34 third-party
   hits were confirmed to have no guard within 25 lines. It cannot prove the
@@ -426,13 +443,12 @@ first-party code before shipping;
   and a bare re-raise. It requires the raised expression to be a call, so
   `raise SomeError` (a class, no call) is a false negative; `raise SomeError()`
   and `raise mod.SomeError("x")` both match, so the gap is narrow. A raise
-  inside a function or lambda defined within the handler is excluded — that
-  code runs later, with no active exception, where `from e` would be wrong and
-  the `as e` binding is already deleted. A class body defined in the handler
-  runs immediately, while the exception is still active; it is excluded only
-  as a matcher boundary, not because it is deferred. A raise inside a
-  `with` block in the handler still runs under the active exception and does
-  match.
+  inside a function or lambda defined within the handler is excluded because
+  the matcher cannot determine whether that callable is invoked while the
+  exception is still active. A class body defined in the handler runs
+  immediately, while the exception is still active; it is excluded only as a
+  matcher boundary. A raise inside a `with` block in the handler still runs
+  under the active exception and does match.
 - `py-zip-without-strict` covers ruff B905/PEP 618. Measured 9 first-party
   hits; three are alignment invariants where truncation would corrupt output
   rather than crash — `eilandert/mailstrix-yara-gen/src/schedule.py:156` pairs

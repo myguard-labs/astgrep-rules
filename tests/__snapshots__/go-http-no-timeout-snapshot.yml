@@ -1,5 +1,35 @@
 id: go-http-no-timeout
 snapshots:
+  'package m; func f() { c := &http.Client{Timeout: 0} }':
+    labels:
+    - source: 'http.Client{Timeout: 0}'
+      style: primary
+      start: 28
+      end: 51
+    - source: http.Client
+      style: secondary
+      start: 28
+      end: 39
+    - source: '{Timeout: 0}'
+      style: secondary
+      start: 39
+      end: 51
+    - source: Timeout
+      style: secondary
+      start: 40
+      end: 47
+    - source: '0'
+      style: secondary
+      start: 49
+      end: 50
+    - source: 'Timeout: 0'
+      style: secondary
+      start: 40
+      end: 50
+    - source: '{Timeout: 0}'
+      style: secondary
+      start: 39
+      end: 51
   'package m; func f() { c := &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: time.Second}} }':
     labels:
     - source: 'http.Client{Transport: &http.Transport{ResponseHeaderTimeout: time.Second}}'
@@ -56,3 +86,33 @@ snapshots:
       style: secondary
       start: 39
       end: 68
+  'package m; func f() { s := &http.Server{ReadHeaderTimeout: 0, WriteTimeout: time.Second} }':
+    labels:
+    - source: 'http.Server{ReadHeaderTimeout: 0, WriteTimeout: time.Second}'
+      style: primary
+      start: 28
+      end: 88
+    - source: http.Server
+      style: secondary
+      start: 28
+      end: 39
+    - source: '{ReadHeaderTimeout: 0, WriteTimeout: time.Second}'
+      style: secondary
+      start: 39
+      end: 88
+    - source: ReadHeaderTimeout
+      style: secondary
+      start: 40
+      end: 57
+    - source: '0'
+      style: secondary
+      start: 59
+      end: 60
+    - source: 'ReadHeaderTimeout: 0'
+      style: secondary
+      start: 40
+      end: 60
+    - source: '{ReadHeaderTimeout: 0, WriteTimeout: time.Second}'
+      style: secondary
+      start: 39
+      end: 88

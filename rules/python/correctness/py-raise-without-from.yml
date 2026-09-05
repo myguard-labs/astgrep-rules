@@ -13,10 +13,10 @@ note: >-
   and does not match. A bare `re-raise` does not match either. The rule does
   not check whether the caught exception is referenced in the message: a raise
   that interpolates the caught value but drops the chain is exactly the shape
-  this catches. A `raise` inside a function defined within the handler is
-  excluded because that code runs later, after the `as e` binding is deleted.
-  A class body runs immediately, but is excluded to mirror ruff B904's scope
-  boundary.
+  this catches. A `raise` inside a function or lambda defined within the handler
+  is excluded because the matcher cannot determine whether that callable is
+  invoked while the exception is still active. A class body runs immediately,
+  but is excluded to mirror ruff B904's scope boundary.
 rule:
   all:
     - kind: raise_statement

@@ -8,11 +8,23 @@ message: >-
   Set Timeout on a client; set ReadHeaderTimeout/ReadTimeout and WriteTimeout on
   a server.
 note: >-
-  Fires on an http.Client or http.Server literal with no timeout field
-  named; the package qualifier is required, so an unrelated Client or Server
-  type does not match. A client whose Transport
-  carries its own timeouts, or a server wrapped by one that does, still needs
-  review; the field name is the only signal available here.
+  Fires on an http.Client or http.Server literal with no timeout field named,
+  or with a direct timeout field set to the literal zero; the package qualifier
+  is required, so an unrelated Client or Server type does not match. A client
+  whose Transport carries its own timeouts, or a server wrapped by one that
+  does, still needs review. Computed expressions that evaluate to zero are not
+  resolved.
+utils:
+  timeout-field:
+    kind: keyed_element
+    has:
+      field: key
+      regex: 'Timeout$'
+  zero-timeout-field:
+    matches: timeout-field
+    has:
+      field: value
+      regex: '^0$'
 rule:
   kind: composite_literal
   all:
@@ -22,12 +34,15 @@ rule:
     - has:
         field: body
         kind: literal_value
-    - not:
-        has:
-          field: body
-          kind: literal_value
-          has:
-            kind: keyed_element
+    - any:
+        - not:
             has:
-              field: key
-              regex: 'Timeout$'
+              field: body
+              kind: literal_value
+              has:
+                matches: timeout-field
+        - has:
+            field: body
+            kind: literal_value
+            has:
+              matches: zero-timeout-field
