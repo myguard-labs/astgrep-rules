@@ -230,3 +230,36 @@ generic catalog.
   exactly the peer-closes case a prober exists to exercise. `write()` to a
   socket carries the same hazard and is deliberately out of scope: it is not
   distinguishable from ordinary file I/O at the AST level.
+
+## Seventh batch
+
+Derived from the nginx development guide's documented return conventions
+(2026-09-05), then filtered by measured hit rate on `modules/nginx/*` and
+`labs/nginx-*` (18010 C files). Shapes with no measured defects were dropped
+rather than shipped: `ngx_cpymem`/`ngx_movemem` with a discarded return matched
+0 sites, and the `ngx_sprintf` family's "return value used as a length" defect
+is not separable at the AST level from the documented `p = ngx_sprintf(p, ...)`
+chaining idiom, which accounts for all 394 assignment sites sampled.
+
+- `nginx-atoi-unchecked` matches an ngx_atoi-family assignment with no binary
+  comparison of the assigned name anywhere in the enclosing function. The
+  function-wide guard search is deliberate: an earlier draft that demanded a
+  literal `NGX_ERROR` comparison, or that searched only sibling statements,
+  produced 55 hits with 13 first-party matches that were all false positives —
+  code correctly validating by range (`if (first < 100)`) or guarding after an
+  enclosing if/else. The shipped shape measures 9 hits across 260 call sites
+  with zero first-party matches. Two were confirmed real:
+  `http-let/ngx_http_let_module.c:179` adds an unvalidated offset to a pointer,
+  so `NGX_ERROR` underflows `ret->data` on attacker-shaped substring arguments,
+  and `nchan/.../redis_nodeset_parser.c:61` stores `NGX_ERROR` directly into
+  `r->min`/`r->max`. The trade is false negatives: a comparison on an unrelated
+  path still suppresses the match, and the rule cannot see validation performed
+  in a callee.
+- `nginx-send-header-return-ignored` matches the call as a bare expression
+  statement. It does not model whether a body follows, so a handler that sends
+  only headers and finalizes is harmless and still matches. Measured 17 hits,
+  all third-party, zero first-party — the first-party modules already use the
+  `rc == NGX_ERROR || rc > NGX_OK || r->header_only` idiom.
+  `http-js-challenge/ngx_http_js_challenge.c:239` was confirmed: it calls
+  `ngx_http_output_filter` unconditionally afterwards, which emits a body for a
+  HEAD request and writes after a filter has already finalized the request.

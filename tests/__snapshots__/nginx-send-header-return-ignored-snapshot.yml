@@ -1,0 +1,51 @@
+id: nginx-send-header-return-ignored
+snapshots:
+  ? |
+    static ngx_int_t
+    branch(ngx_http_request_t *r, ngx_chain_t *out)
+    {
+        if (r->method == NGX_HTTP_GET) {
+            ngx_http_send_header(r);
+        }
+
+        return ngx_http_output_filter(r, out);
+    }
+  : labels:
+    - source: ngx_http_send_header(r);
+      style: primary
+      start: 112
+      end: 136
+    - source: ngx_http_send_header
+      style: secondary
+      start: 112
+      end: 132
+    - source: ngx_http_send_header(r)
+      style: secondary
+      start: 112
+      end: 135
+  ? |
+    static ngx_int_t
+    discarded(ngx_http_request_t *r, ngx_chain_t *out)
+    {
+        r->headers_out.status = NGX_HTTP_SERVICE_UNAVAILABLE;
+
+        ngx_http_send_header(r);
+
+        ngx_http_output_filter(r, out);
+        ngx_http_finalize_request(r, 0);
+
+        return NGX_DONE;
+    }
+  : labels:
+    - source: ngx_http_send_header(r);
+      style: primary
+      start: 133
+      end: 157
+    - source: ngx_http_send_header
+      style: secondary
+      start: 133
+      end: 153
+    - source: ngx_http_send_header(r)
+      style: secondary
+      start: 133
+      end: 156
