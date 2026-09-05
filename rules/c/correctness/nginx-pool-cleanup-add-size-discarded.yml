@@ -12,19 +12,16 @@ note: >-
   only when the runtime size is non-zero (core/ngx_palloc.c), and this rule
   cannot evaluate the expression, so a macro or variable that happens to be
   zero still matches. The allocating statement may be a plain assignment, a
-  declaration with an initialiser, or an assignment inside an if condition.
+  declaration with an initialiser, or an assignment in an if condition or its
+  body.
   The overwrite must follow it in source order, but no path analysis is done,
-  so the two may sit on branches that never both execute. Neither side may
-  cross into a nested function definition.
+  so the two may sit on branches that never both execute. Both statements must
+  be siblings in the same function body, so an allocation in one function and
+  a write in another do not pair. A GNU nested function definition is not
+  parsed as a nested function by tree-sitter, so an allocation written inside
+  one is treated as belonging to the enclosing body; nginx does not use that
+  extension.
 utils:
-  not-nested:
-    not:
-      inside:
-        kind: function_definition
-        stopBy: end
-        inside:
-          kind: function_definition
-          stopBy: end
   alloc-stmt:
     any:
       - kind: expression_statement
@@ -32,16 +29,11 @@ utils:
           pattern: $C = ngx_pool_cleanup_add($P, $N)
           kind: assignment_expression
           stopBy: end
-          matches: not-nested
       - kind: if_statement
         has:
-          field: condition
+          pattern: $C = ngx_pool_cleanup_add($P, $N)
+          kind: assignment_expression
           stopBy: end
-          has:
-            pattern: $C = ngx_pool_cleanup_add($P, $N)
-            kind: assignment_expression
-            stopBy: end
-            matches: not-nested
       - kind: declaration
         has:
           kind: init_declarator
@@ -55,7 +47,6 @@ utils:
             - has:
                 field: value
                 pattern: ngx_pool_cleanup_add($P, $N)
-                matches: not-nested
 rule:
   matches: alloc-stmt
   precedes:
@@ -63,6 +54,5 @@ rule:
     has:
       pattern: $C->data = $V
       stopBy: end
-      matches: not-nested
 constraints:
   N: {not: {regex: '^0$'}}

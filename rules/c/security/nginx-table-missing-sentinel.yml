@@ -26,15 +26,19 @@ rule:
         - has:
             field: declarator
             kind: init_declarator
-            has:
-              field: value
-              kind: initializer_list
-              not:
-                has:
+            all:
+              - has:
+                  field: declarator
+                  kind: array_declarator
+              - has:
+                  field: value
                   kind: initializer_list
-                  has:
-                    kind: identifier
-                    regex: ^ngx_null_string$
+                  not:
+                    has:
+                      kind: initializer_list
+                      has:
+                        kind: identifier
+                        regex: ^ngx_null_string$
     - all:
         - has:
             field: type
@@ -42,13 +46,17 @@ rule:
         - has:
             field: declarator
             kind: init_declarator
-            has:
-              field: value
-              kind: initializer_list
-              not:
-                has:
-                  kind: identifier
-                  regex: ^ngx_null_command$
+            all:
+              - has:
+                  field: declarator
+                  kind: array_declarator
+              - has:
+                  field: value
+                  kind: initializer_list
+                  not:
+                    has:
+                      kind: identifier
+                      regex: ^ngx_null_command$
     - all:
         - has:
             field: type
@@ -56,10 +64,14 @@ rule:
         - has:
             field: declarator
             kind: init_declarator
-            has:
-              field: value
-              kind: initializer_list
-              not:
-                has:
-                  kind: identifier
-                  regex: ^ngx_(http|stream)_null_variable$
+            all:
+              - has:
+                  field: declarator
+                  kind: array_declarator
+              - has:
+                  field: value
+                  kind: initializer_list
+                  not:
+                    has:
+                      kind: identifier
+                      regex: ^ngx_(http|stream)_null_variable$

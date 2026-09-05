@@ -15,6 +15,18 @@ snapshots:
       style: secondary
       start: 0
       end: 4
+    - source: ngx_conf_t
+      style: secondary
+      start: 15
+      end: 25
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 15
+      end: 29
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 15
+      end: 29
     - source: handler(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
       style: secondary
       start: 7
@@ -49,6 +61,26 @@ snapshots:
       style: secondary
       start: 0
       end: 4
+    - source: ngx_cycle_t
+      style: secondary
+      start: 17
+      end: 28
+    - source: ngx_cycle_t *cycle
+      style: secondary
+      start: 17
+      end: 35
+    - source: void
+      style: secondary
+      start: 37
+      end: 41
+    - source: void *conf
+      style: secondary
+      start: 37
+      end: 47
+    - source: (ngx_cycle_t *cycle, void *conf)
+      style: secondary
+      start: 16
+      end: 48
     - source: init_conf(ngx_cycle_t *cycle, void *conf)
       style: secondary
       start: 7
@@ -112,6 +144,18 @@ snapshots:
       style: secondary
       start: 7
       end: 11
+    - source: ngx_conf_t
+      style: secondary
+      start: 20
+      end: 30
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 20
+      end: 34
+    - source: ngx_conf_t *cf
+      style: secondary
+      start: 20
+      end: 34
     - source: merge(ngx_conf_t *cf, void *parent, void *child)
       style: secondary
       start: 14

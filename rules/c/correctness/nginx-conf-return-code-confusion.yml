@@ -9,10 +9,13 @@ message: >-
   result against the other family.
 note: >-
   Real: nginx-zstd-module 1b52f42, merge_loc_conf returned NGX_OK from a
-  char * function. The char * side requires either an ngx_conf_t * parameter
-  (a directive handler) or the ngx_cycle_t * plus void * pair of the core
-  module init_conf callback (core/ngx_module.h), so an unrelated char * helper
-  that merely takes a cycle is not flagged. A return nested inside an inner
+  char * function. The char * side requires either ngx_conf_t * as the first
+  parameter (a directive handler) or exactly the two parameters of the core
+  module init_conf callback, ngx_cycle_t * then void * (core/ngx_module.h).
+  Parameters are matched structurally by position, so a comment between them
+  does not shift the count and an unrelated three-parameter helper taking a
+  cycle is not flagged. A callback whose parameters are written through a
+  typedef alias is not recognised. A return nested inside an inner
   function is attributed to that function, not the enclosing handler. Only return
   statements are matched; a value stored in a local first needs the local's
   type, and u_char * / char ** functions are out of scope.
@@ -20,10 +23,41 @@ utils:
   conf-callback:
     kind: function_declarator
     any:
-      - regex: \bngx_conf_t\s*\*
-      - all:
-          - regex: \bngx_cycle_t\s*\*
-          - regex: \bvoid\s*\*
+      - has:
+          field: parameters
+          has:
+            kind: parameter_declaration
+            nthChild:
+              position: 1
+              ofRule: {kind: parameter_declaration}
+            has:
+              field: type
+              regex: ^ngx_conf_t$
+      - has:
+          field: parameters
+          all:
+            - has:
+                kind: parameter_declaration
+                nthChild:
+                  position: 1
+                  ofRule: {kind: parameter_declaration}
+                has:
+                  field: type
+                  regex: ^ngx_cycle_t$
+            - has:
+                kind: parameter_declaration
+                nthChild:
+                  position: 2
+                  ofRule: {kind: parameter_declaration}
+                has:
+                  field: type
+                  regex: ^void$
+            - not:
+                has:
+                  kind: parameter_declaration
+                  nthChild:
+                    position: 3
+                    ofRule: {kind: parameter_declaration}
 rule:
   any:
     - kind: return_statement

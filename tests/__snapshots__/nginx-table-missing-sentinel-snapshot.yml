@@ -18,6 +18,10 @@ snapshots:
       style: secondary
       start: 7
       end: 20
+    - source: ngx_http_x_commands[]
+      style: secondary
+      start: 22
+      end: 43
     - source: |-
         {
             { ngx_string("x"), NGX_HTTP_LOC_CONF|NGX_CONF_FLAG, ngx_conf_set_flag_slot,
@@ -52,6 +56,10 @@ snapshots:
       style: secondary
       start: 7
       end: 25
+    - source: ngx_http_x_mask[]
+      style: secondary
+      start: 27
+      end: 44
     - source: |-
         {
             { ngx_string("a"), 1 },
@@ -86,6 +94,10 @@ snapshots:
       style: secondary
       start: 7
       end: 22
+    - source: ngx_http_x_spoof2[]
+      style: secondary
+      start: 24
+      end: 43
     - source: |-
         {
             { ngx_string("on"), 1 /* ngx_null_string */ },
@@ -120,6 +132,10 @@ snapshots:
       style: secondary
       start: 7
       end: 22
+    - source: ngx_http_x_spoof[]
+      style: secondary
+      start: 24
+      end: 42
     - source: |-
         {
             { ngx_string("ngx_null_string"), 1 },
@@ -190,6 +206,10 @@ snapshots:
       style: secondary
       start: 7
       end: 22
+    - source: ngx_http_x_static[]
+      style: secondary
+      start: 24
+      end: 43
     - source: |-
         {
             { ngx_string("off"), 0 },
@@ -224,6 +244,10 @@ snapshots:
       style: secondary
       start: 7
       end: 26
+    - source: ngx_http_x_vars[]
+      style: secondary
+      start: 28
+      end: 45
     - source: |-
         {
             { ngx_string("x_ratio"), NULL, ngx_http_x_ratio_variable, 0, NGX_HTTP_VAR_NOCACHEABLE, 0 },
@@ -254,6 +278,10 @@ snapshots:
       style: secondary
       start: 7
       end: 28
+    - source: ngx_stream_x_vars[]
+      style: secondary
+      start: 30
+      end: 49
     - source: |-
         {
             { ngx_string("x"), NULL, ngx_stream_x_variable, 0, 0, 0 }

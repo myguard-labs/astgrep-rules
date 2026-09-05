@@ -125,9 +125,13 @@ Each rule's `note` names the commit that motivated it.
   condition on the first branch, do not match.
 - `nginx-pool-cleanup-add-size-discarded` recognises the allocation as a plain
   assignment, a declaration with an initialiser, or an assignment inside an
-  `if` condition, and requires the `->data` assignment to follow it in source
-  order. Neither side may cross into a nested function. It does no path
-  analysis, so the two may sit on branches that never both execute.
+  `if` condition or body, and requires the `->data` assignment to follow it in
+  source
+  order, as siblings in the same function body, so an allocation in one
+  function does not pair with a write in another. It does no path analysis, so
+  the two may sit on branches that never both execute. A GNU nested function
+  is not parsed as one by tree-sitter, so an allocation inside it counts as
+  the enclosing body's; nginx does not use that extension.
   `ngx_pool_cleanup_add` allocates only when the size is non-zero at runtime
   (`core/ngx_palloc.c`), and
   the rule cannot evaluate the expression, so a macro or variable that

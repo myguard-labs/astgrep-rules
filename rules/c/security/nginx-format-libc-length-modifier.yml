@@ -16,7 +16,8 @@ note: >-
   The format argument is matched by position per function, so a %lu inside a
   data argument is not flagged.
   Field positions skip comment nodes, so an inline comment before the format
-  does not hide it. Wrappers and macros with their own format position need
+  does not hide it. An escaped %% is not a conversion, so "100%%lu" is left
+  alone. Wrappers and macros with their own format position need
   their own entry,
   and a format string held in a variable is not seen. Snapshots show the
   format literal twice as a secondary label: the argument-list traversal and
@@ -24,7 +25,7 @@ note: >-
   per call; the repeat is a label artefact, not a double match.
 utils:
   bad-format:
-    regex: '%[-+ 0#]*\d*(?:\.\d+)?(?:(?:hh?|ll?|j|t|q)[diouxX]|z[diouxX])|%[-+ 0#]*\d*[umxX]*u[^A-Za-z.*%]'
+    regex: '(?:^|[^%])(?:%%)*%[-+ 0#]*\d*(?:\.\d+)?(?:(?:hh?|ll?|j|t|q)[diouxX]|z[diouxX])|(?:^|[^%])(?:%%)*%[-+ 0#]*\d*[umxX]*u[^A-Za-z.*%]'
   format-literal:
     any:
       - kind: string_literal
