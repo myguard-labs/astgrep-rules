@@ -20,6 +20,26 @@ snapshots:
       start: 15
       end: 22
   ? |
+    for a, b in zip(names, values, key=f):
+        emit(a, b)
+  : labels:
+    - source: zip(names, values, key=f)
+      style: primary
+      start: 12
+      end: 37
+    - source: zip
+      style: secondary
+      start: 12
+      end: 15
+    - source: values
+      style: secondary
+      start: 23
+      end: 29
+    - source: (names, values, key=f)
+      style: secondary
+      start: 15
+      end: 37
+  ? |
     for a, b, c in zip(docs, embeddings, metadata):
         store(a, b, c)
   : labels:

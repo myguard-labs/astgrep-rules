@@ -13,7 +13,9 @@ note: >-
   and does not match. A bare `re-raise` does not match either. The rule does
   not check whether the caught exception is referenced in the message: a raise
   that interpolates the caught value but drops the chain is exactly the shape
-  this catches.
+  this catches. A `raise` inside a function or class body defined within the
+  handler is excluded: that code runs later, with no active exception, where
+  `from e` would be wrong and the `as e` binding is already deleted.
 rule:
   all:
     - kind: raise_statement
@@ -24,3 +26,11 @@ rule:
     - inside:
         kind: except_clause
         stopBy: end
+    - not:
+        inside:
+          any:
+            - kind: function_definition
+            - kind: lambda
+            - kind: class_definition
+          stopBy:
+            kind: except_clause

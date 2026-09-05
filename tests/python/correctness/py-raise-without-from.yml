@@ -23,6 +23,13 @@ valid:
       connect()
   except OSError as e:
       log.warning("connect failed: %s", e)
+- |
+  try:
+      connect()
+  except OSError as e:
+      def retry():
+          raise RuntimeError("retried later")
+      schedule(retry)
 invalid:
 - |
   try:
@@ -34,3 +41,9 @@ invalid:
       load()
   except ImportError:
       raise RuntimeError("dependency missing")
+- |
+  try:
+      connect()
+  except OSError:
+      with lock:
+          raise RuntimeError("connect failed")

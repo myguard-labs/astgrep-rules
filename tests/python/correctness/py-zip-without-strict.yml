@@ -27,3 +27,6 @@ invalid:
       store(a, b, c)
 - |
   cols = list(zip(*rows))
+- |
+  for a, b in zip(names, values, key=f):
+      emit(a, b)

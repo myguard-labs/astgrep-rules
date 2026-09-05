@@ -341,9 +341,10 @@ Previous passes mined CVE, CWE Top 25, OWASP, the nginx development guide and
 this codebase's own fix history — all security-shaped. This pass (2026-09-05)
 mined the correctness/nit catalogs instead: staticcheck's SA/S checks and
 ruff's flake8-bugbear (B) rules, on the theory that the pack's `correctness`
-category was thin (8 of 69 rules) and that the two vendored packs under
-`.ast-grep/vendor` are security-only, so a quality defect has no lens here at
-all. Every candidate was measured against first-party code before shipping;
+category was thin — 11 of 69 rules, and every one of the third-party packs the
+superrepo consumer vendors alongside this one is security-only, so a plain
+quality defect has no lens at all. Every candidate was measured against
+first-party code before shipping;
 `labs/build_psol/src` is upstream pagespeed and was excluded from the counts.
 
 - `py-raise-without-from` covers ruff B904/CWE-390. Measured 16 hits across 347
@@ -352,16 +353,26 @@ all. Every candidate was measured against first-party code before shipping;
   interpolates the caught exception into the message while dropping the
   explicit chain. It excludes `from None`, the documented suppression idiom,
   and a bare re-raise. It requires the raised expression to be a call, so
-  `raise SomeError` (a class, no call) is a false negative.
+  `raise SomeError` (a class, no call) is a false negative; `raise SomeError()`
+  and `raise mod.SomeError("x")` both match, so the gap is narrow. A raise
+  inside a function, lambda or class body defined within the handler is
+  excluded — that code runs later, with no active exception, where `from e`
+  would be wrong and the `as e` binding is already deleted. A raise inside a
+  `with` block in the handler still runs under the active exception and does
+  match.
 - `py-zip-without-strict` covers ruff B905/PEP 618. Measured 9 first-party
   hits; three are alignment invariants where truncation would corrupt output
-  rather than crash — `mailstrix-yara-gen/src/schedule.py:155` pairs cron
-  fields with their ranges, `src/classifier.py:215` pairs feature names with
-  importances, and `tools/mariadb-mcp/src/server.py:828` zips three parallel
+  rather than crash — `eilandert/mailstrix-yara-gen/src/schedule.py:156` pairs
+  cron fields with their ranges, `eilandert/mailstrix-yara-gen/src/classifier.py:216`
+  pairs feature names with importances, and
+  `tools/mariadb-mcp/src/server.py:829` zips three parallel
   lists. It is `info` because shortest-wins is sometimes deliberate. The
   `nthChild: 2` clause on the argument list is what excludes single-argument
-  `zip()`, which cannot mismatch; the identifier `kind` on the function field
-  is what excludes a `.zip()` method call. Snapshots show the second argument
+  `zip()`, which cannot mismatch. A `.zip()` method call is excluded by the
+  anchored `^zip$` regex, which sees the attribute node's full text `obj.zip`;
+  the `kind: identifier` beside it is redundant and kept only as a guard
+  against a future loosening of that anchor. A locally shadowed `zip` still
+  matches — the rule resolves no bindings. Snapshots show the second argument
   as a duplicated secondary label, the same nested-`has` artifact recorded for
   `c-strncat-size-misuse`.
 

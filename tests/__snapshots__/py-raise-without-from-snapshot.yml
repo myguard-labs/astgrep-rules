@@ -22,6 +22,28 @@ snapshots:
       end: 86
   ? |
     try:
+        connect()
+    except OSError:
+        with lock:
+            raise RuntimeError("connect failed")
+  : labels:
+    - source: raise RuntimeError("connect failed")
+      style: primary
+      start: 58
+      end: 94
+    - source: RuntimeError("connect failed")
+      style: secondary
+      start: 64
+      end: 94
+    - source: |-
+        except OSError:
+            with lock:
+                raise RuntimeError("connect failed")
+      style: secondary
+      start: 19
+      end: 94
+  ? |
+    try:
         load()
     except ImportError:
         raise RuntimeError("dependency missing")
