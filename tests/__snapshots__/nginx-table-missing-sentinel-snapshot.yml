@@ -267,6 +267,82 @@ snapshots:
       start: 24
       end: 141
   ? |
+    static ngx_http_variable_t  ngx_http_x_spoof3[] = {
+        { ngx_string("x"), NULL, ngx_http_x_variable, 0, 0, 0 },
+        ngx_http_null_variable_extra
+    };
+  : labels:
+    - source: |-
+        static ngx_http_variable_t  ngx_http_x_spoof3[] = {
+            { ngx_string("x"), NULL, ngx_http_x_variable, 0, 0, 0 },
+            ngx_http_null_variable_extra
+        };
+      style: primary
+      start: 0
+      end: 148
+    - source: ngx_http_variable_t
+      style: secondary
+      start: 7
+      end: 26
+    - source: ngx_http_x_spoof3[]
+      style: secondary
+      start: 28
+      end: 47
+    - source: |-
+        {
+            { ngx_string("x"), NULL, ngx_http_x_variable, 0, 0, 0 },
+            ngx_http_null_variable_extra
+        }
+      style: secondary
+      start: 50
+      end: 147
+    - source: |-
+        ngx_http_x_spoof3[] = {
+            { ngx_string("x"), NULL, ngx_http_x_variable, 0, 0, 0 },
+            ngx_http_null_variable_extra
+        }
+      style: secondary
+      start: 28
+      end: 147
+  ? |
+    static ngx_http_variable_t  ngx_http_x_spoof4[] = {
+        { ngx_string("x"), NULL, ngx_http_x_variable, 0, 0, 0 },
+        { custom_ngx_null_string, NULL, NULL, 0, 0, 0 }
+    };
+  : labels:
+    - source: |-
+        static ngx_http_variable_t  ngx_http_x_spoof4[] = {
+            { ngx_string("x"), NULL, ngx_http_x_variable, 0, 0, 0 },
+            { custom_ngx_null_string, NULL, NULL, 0, 0, 0 }
+        };
+      style: primary
+      start: 0
+      end: 167
+    - source: ngx_http_variable_t
+      style: secondary
+      start: 7
+      end: 26
+    - source: ngx_http_x_spoof4[]
+      style: secondary
+      start: 28
+      end: 47
+    - source: |-
+        {
+            { ngx_string("x"), NULL, ngx_http_x_variable, 0, 0, 0 },
+            { custom_ngx_null_string, NULL, NULL, 0, 0, 0 }
+        }
+      style: secondary
+      start: 50
+      end: 166
+    - source: |-
+        ngx_http_x_spoof4[] = {
+            { ngx_string("x"), NULL, ngx_http_x_variable, 0, 0, 0 },
+            { custom_ngx_null_string, NULL, NULL, 0, 0, 0 }
+        }
+      style: secondary
+      start: 28
+      end: 166
+  ? |
     static ngx_http_variable_t  ngx_http_x_vars[] = {
         { ngx_string("x_ratio"), NULL, ngx_http_x_ratio_variable, 0, NGX_HTTP_VAR_NOCACHEABLE, 0 },
     };

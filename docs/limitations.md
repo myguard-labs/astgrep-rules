@@ -89,13 +89,15 @@ Each rule's `note` names the commit that motivated it.
   (Angie's `status_zone` stores a main-conf field under the srv offset) and
   is skipped; a struct that does not follow the convention is skipped too.
 - `nginx-format-libc-length-modifier` checks the format argument at its known
-  position per function: second for `ngx_sprintf` and `ngx_log_stderr`, third
-  for `ngx_snprintf`/`ngx_slprintf`/`ngx_vslprintf`, fourth for the log and
-  conf-log family, plus `ngx_log_abort`. Positions skip comment nodes, so an
+  position per function: second for `ngx_sprintf`, `ngx_log_stderr` and
+  `ngx_log_abort`, third for `ngx_snprintf`/`ngx_slprintf`/`ngx_vslprintf`,
+  fourth for the log and conf-log family. Positions skip comment nodes, so an
   inline comment before the format does not hide it. A `%lu` sitting in a data
   argument is therefore not flagged. `%l` and `%ul` are legal nginx
   conversions and stay quiet; `%lu`, `%ld`, `%zu`, `%zi`, `%zo`, `%zX`, `%hu`,
-  `%lld` and a bare `%u` without a conversion letter fire. Note what nginx
+  `%lld` and a bare `%u` without a conversion letter fire, as do `%*hu` and
+  `%*zu`: nginx's `*` is a string-length prefix that consumes a `size_t`, not a
+  width, so the libc modifier after it is still copied literally. Note what nginx
   actually does with these: `%l` consumes a long and then prints the trailing
   `u` literally, so the argument list is not shifted; a bare `%u` consumes
   nothing. An escaped `%%` is not a conversion and is left alone.
@@ -117,12 +119,13 @@ Each rule's `note` names the commit that motivated it.
   continued `#if` line recovers into an ERROR subtree and matched wrongly.
 - `nginx-strstrn-length-off-by-one` matches only `sizeof(lit) - 1` with the
   same literal as the needle. A hand-counted length or a named needle is left
-  to review. The defect is a missed match, not an over-read: `strncasecmp`
-  stops at the needle's NUL.
+  to review. The defect is a missed match, not an over-read: the `ngx_strncmp` /
+  `ngx_strncasecmp` compare behind each function stops at the needle's NUL.
 - `zstd-ifdef-on-enum-constant` flags every `#ifdef`, `#ifndef` and
   `defined()` on a `ZSTD_c_`, `ZSTD_d_` or `ZSTD_e_` name, but the right fix
   depends on which kind the name is. A stable parameter is a plain enumerator,
-  so the guard is always false and a `ZSTD_VERSION_NUMBER` gate replaces it.
+  so `#ifdef` and `defined()` are always false and `#ifndef` is always true;
+  a `ZSTD_VERSION_NUMBER` gate replaces the guard either way.
   An experimental parameter is a macro alias visible only under
   `ZSTD_STATIC_LINKING_ONLY` (`zstd.h`), where the guard is meaningful and a
   version-only replacement would reference an undeclared identifier. The rule
@@ -152,7 +155,7 @@ Each rule's `note` names the commit that motivated it.
   that reason. A GNU nested function
   is not parsed as one by tree-sitter, so an allocation inside it counts as
   the enclosing body's; nginx does not use that extension.
-  `ngx_pool_cleanup_add` allocates only when the size is non-zero at runtime
-  (`core/ngx_palloc.c`), and
-  the rule cannot evaluate the expression, so a macro or variable that
-  happens to be zero still matches.
+  `ngx_pool_cleanup_add` always allocates the cleanup record and allocates the
+  `data` block only when the size is non-zero at runtime
+  (`core/ngx_palloc.c`); the rule cannot evaluate the expression, so a macro
+  or variable that happens to be zero still matches.

@@ -74,6 +74,18 @@ invalid:
       { ngx_string("on"), 1 /* ngx_null_string */ },
       { ngx_string("off"), 0 }
   };
+# The sentinel name must match whole: a longer identifier that merely starts
+# or ends with it is not the terminator.
+- |
+  static ngx_http_variable_t  ngx_http_x_spoof3[] = {
+      { ngx_string("x"), NULL, ngx_http_x_variable, 0, 0, 0 },
+      ngx_http_null_variable_extra
+  };
+- |
+  static ngx_http_variable_t  ngx_http_x_spoof4[] = {
+      { ngx_string("x"), NULL, ngx_http_x_variable, 0, 0, 0 },
+      { custom_ngx_null_string, NULL, NULL, 0, 0, 0 }
+  };
 - |
   static ngx_conf_enum_t  ngx_http_x_static[] = {
       { ngx_string("off"), 0 },

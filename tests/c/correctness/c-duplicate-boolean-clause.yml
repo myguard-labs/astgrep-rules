@@ -28,6 +28,8 @@ valid:
   int a;
   #endif
 - |
+  #if NGX_Z
+  int b;
   #elif NGX_Y || NGX_Y
   int a;
   #endif

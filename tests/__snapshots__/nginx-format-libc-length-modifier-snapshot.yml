@@ -18,6 +18,42 @@ snapshots:
       style: secondary
       start: 56
       end: 79
+  void f(void) { ngx_log_abort(0, "%*hu", n, v); }:
+    labels:
+    - source: ngx_log_abort(0, "%*hu", n, v)
+      style: primary
+      start: 15
+      end: 45
+    - source: ngx_log_abort
+      style: secondary
+      start: 15
+      end: 28
+    - source: '"%*hu"'
+      style: secondary
+      start: 32
+      end: 38
+    - source: '"%*hu"'
+      style: secondary
+      start: 32
+      end: 38
+  void f(void) { ngx_log_abort(0, "%*zu", n, v); }:
+    labels:
+    - source: ngx_log_abort(0, "%*zu", n, v)
+      style: primary
+      start: 15
+      end: 45
+    - source: ngx_log_abort
+      style: secondary
+      start: 15
+      end: 28
+    - source: '"%*zu"'
+      style: secondary
+      start: 32
+      end: 38
+    - source: '"%*zu"'
+      style: secondary
+      start: 32
+      end: 38
   void f(void) { ngx_log_abort(0, "%lu", n); }:
     labels:
     - source: ngx_log_abort(0, "%lu", n)

@@ -51,4 +51,6 @@ invalid:
 - void f(void) { p = ngx_slprintf(buf, last, "%lu", n); }
 - void f(void) { ngx_log_stderr(0, "%llu", n); }
 - void f(void) { ngx_log_abort(0, "%lu", n); }
+- void f(void) { ngx_log_abort(0, "%*hu", n, v); }
+- void f(void) { ngx_log_abort(0, "%*zu", n, v); }
 - void f(void) { ngx_log_error(NGX_LOG_ERR, log, /* errno */ 0, "%lu", n); }

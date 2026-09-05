@@ -77,4 +77,4 @@ rule:
                     has:
                       stopBy: end
                       kind: identifier
-                      regex: ^ngx_(http|stream)_null_variable|ngx_null_string$
+                      regex: ^(ngx_(http|stream)_null_variable|ngx_null_string)$
