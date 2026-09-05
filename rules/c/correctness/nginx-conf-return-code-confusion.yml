@@ -12,9 +12,10 @@ note: >-
   char * function. The char * side requires either ngx_conf_t * as the first
   parameter (a directive handler) or exactly the two parameters of the core
   module init_conf callback, ngx_cycle_t * then void * (core/ngx_module.h).
-  Parameters are matched structurally by position, so a comment between them
-  does not shift the count and an unrelated three-parameter helper taking a
-  cycle is not flagged. A callback whose parameters are written through a
+  Parameters are matched structurally by position, each required to be a
+  pointer, so a comment between them does not shift the count and neither an
+  unrelated three-parameter helper, a variadic one, nor a by-value signature
+  is flagged. A callback whose parameters are written through a
   typedef alias is not recognised. A return nested inside an inner
   function is attributed to that function, not the enclosing handler. Only return
   statements are matched; a value stored in a local first needs the local's
@@ -30,9 +31,13 @@ utils:
             nthChild:
               position: 1
               ofRule: {kind: parameter_declaration}
-            has:
-              field: type
-              regex: ^ngx_conf_t$
+            all:
+              - has:
+                  field: type
+                  regex: ^ngx_conf_t$
+              - has:
+                  field: declarator
+                  kind: pointer_declarator
       - has:
           field: parameters
           all:
@@ -41,23 +46,34 @@ utils:
                 nthChild:
                   position: 1
                   ofRule: {kind: parameter_declaration}
-                has:
-                  field: type
-                  regex: ^ngx_cycle_t$
+                all:
+                  - has:
+                      field: type
+                      regex: ^ngx_cycle_t$
+                  - has:
+                      field: declarator
+                      kind: pointer_declarator
             - has:
                 kind: parameter_declaration
                 nthChild:
                   position: 2
                   ofRule: {kind: parameter_declaration}
-                has:
-                  field: type
-                  regex: ^void$
+                all:
+                  - has:
+                      field: type
+                      regex: ^void$
+                  - has:
+                      field: declarator
+                      kind: pointer_declarator
             - not:
                 has:
                   kind: parameter_declaration
                   nthChild:
                     position: 3
                     ofRule: {kind: parameter_declaration}
+            - not:
+                has:
+                  kind: variadic_parameter
 rule:
   any:
     - kind: return_statement

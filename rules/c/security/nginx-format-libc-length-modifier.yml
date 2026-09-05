@@ -17,7 +17,10 @@ note: >-
   data argument is not flagged.
   Field positions skip comment nodes, so an inline comment before the format
   does not hide it. An escaped %% is not a conversion, so "100%%lu" is left
-  alone. Wrappers and macros with their own format position need
+  alone. A format built from two or more adjacent literals is skipped: the
+  compiler joins them before nginx parses, so neither the joined syntax (whose
+  quote characters break the percent parity) nor the individual pieces
+  ("%" "%lu" is an escape, "%u" "i" is a legal %ui) can be judged safely. Wrappers and macros with their own format position need
   their own entry,
   and a format string held in a variable is not seen. Snapshots show the
   format literal twice as a secondary label: the argument-list traversal and
@@ -31,7 +34,16 @@ utils:
       - kind: string_literal
         matches: bad-format
       - kind: concatenated_string
-        matches: bad-format
+        all:
+          - has:
+              kind: string_literal
+              matches: bad-format
+          - not:
+              has:
+                kind: string_literal
+                nthChild:
+                  position: 2
+                  ofRule: {kind: string_literal}
 rule:
   kind: call_expression
   any:

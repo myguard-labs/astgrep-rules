@@ -72,6 +72,18 @@ valid:
   {
       return NGX_OK;
   }
+- |
+  char *
+  va(ngx_cycle_t *cycle, void *conf, ...)
+  {
+      return NGX_OK;
+  }
+- |
+  char *
+  byval(ngx_cycle_t cycle, void conf)
+  {
+      return NGX_OK;
+  }
 invalid:
 - |
   char *

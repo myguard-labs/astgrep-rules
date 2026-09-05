@@ -17,7 +17,19 @@ valid:
   {
       cln->data = ctx;
   }
+- |
+  void outer(void)
+  {
+      cln = ngx_pool_cleanup_add(pool, sizeof(x));
+
+      void inner(void)
+      {
+          cln->data = ctx;
+      }
+  }
 invalid:
+- void f(void) { for (i = 0; i < n; i++) { cln = ngx_pool_cleanup_add(pool, sizeof(x)); } cln->data = ctx; }
+- 'void f(void) { switch (k) { case 1: cln = ngx_pool_cleanup_add(pool, sizeof(x)); break; } cln->data = ctx; }'
 - void f(void) { if (ready) { cln = ngx_pool_cleanup_add(pool, sizeof(x)); } cln->data = ctx; }
 - void f(void) { ngx_pool_cleanup_t *cln = ngx_pool_cleanup_add(pool, sizeof(x)); cln->data = ctx; }
 - void f(void) { if ((cln = ngx_pool_cleanup_add(pool, sizeof(x))) == NULL) { return; } cln->data = ctx; }

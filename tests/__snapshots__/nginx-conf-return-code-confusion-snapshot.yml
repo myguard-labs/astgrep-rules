@@ -19,6 +19,10 @@ snapshots:
       style: secondary
       start: 15
       end: 25
+    - source: '*cf'
+      style: secondary
+      start: 26
+      end: 29
     - source: ngx_conf_t *cf
       style: secondary
       start: 15
@@ -65,6 +69,10 @@ snapshots:
       style: secondary
       start: 17
       end: 28
+    - source: '*cycle'
+      style: secondary
+      start: 29
+      end: 35
     - source: ngx_cycle_t *cycle
       style: secondary
       start: 17
@@ -73,6 +81,10 @@ snapshots:
       style: secondary
       start: 37
       end: 41
+    - source: '*conf'
+      style: secondary
+      start: 42
+      end: 47
     - source: void *conf
       style: secondary
       start: 37
@@ -148,6 +160,10 @@ snapshots:
       style: secondary
       start: 20
       end: 30
+    - source: '*cf'
+      style: secondary
+      start: 31
+      end: 34
     - source: ngx_conf_t *cf
       style: secondary
       start: 20

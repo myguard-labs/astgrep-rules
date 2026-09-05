@@ -36,6 +36,24 @@ snapshots:
       style: secondary
       start: 97
       end: 112
+  void f(void) { for (i = 0; i < n; i++) { cln = ngx_pool_cleanup_add(pool, sizeof(x)); } cln->data = ctx; }:
+    labels:
+    - source: for (i = 0; i < n; i++) { cln = ngx_pool_cleanup_add(pool, sizeof(x)); }
+      style: primary
+      start: 15
+      end: 87
+    - source: cln = ngx_pool_cleanup_add(pool, sizeof(x))
+      style: secondary
+      start: 41
+      end: 84
+    - source: cln->data = ctx
+      style: secondary
+      start: 88
+      end: 103
+    - source: cln->data = ctx
+      style: secondary
+      start: 88
+      end: 103
   void f(void) { if ((cln = ngx_pool_cleanup_add(pool, sizeof(x))) == NULL) { return; } cln->data = ctx; }:
     labels:
     - source: if ((cln = ngx_pool_cleanup_add(pool, sizeof(x))) == NULL) { return; }
@@ -102,3 +120,21 @@ snapshots:
       style: secondary
       start: 80
       end: 95
+  'void f(void) { switch (k) { case 1: cln = ngx_pool_cleanup_add(pool, sizeof(x)); break; } cln->data = ctx; }':
+    labels:
+    - source: 'switch (k) { case 1: cln = ngx_pool_cleanup_add(pool, sizeof(x)); break; }'
+      style: primary
+      start: 15
+      end: 89
+    - source: cln = ngx_pool_cleanup_add(pool, sizeof(x))
+      style: secondary
+      start: 36
+      end: 79
+    - source: cln->data = ctx
+      style: secondary
+      start: 90
+      end: 105
+    - source: cln->data = ctx
+      style: secondary
+      start: 90
+      end: 105

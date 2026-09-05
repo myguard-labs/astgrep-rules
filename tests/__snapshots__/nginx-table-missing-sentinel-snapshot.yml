@@ -1,6 +1,44 @@
 id: nginx-table-missing-sentinel
 snapshots:
   ? |
+    ngx_command_t  ngx_http_x_commands[] = {
+        { ngx_string("x"), NGX_HTTP_LOC_CONF|NGX_CONF_FLAG, ngx_conf_set_flag_slot,
+          NGX_HTTP_LOC_CONF_OFFSET, offsetof(ngx_http_x_loc_conf_t, enable), NULL }
+    };
+  : labels:
+    - source: |-
+        ngx_command_t  ngx_http_x_commands[] = {
+            { ngx_string("x"), NGX_HTTP_LOC_CONF|NGX_CONF_FLAG, ngx_conf_set_flag_slot,
+              NGX_HTTP_LOC_CONF_OFFSET, offsetof(ngx_http_x_loc_conf_t, enable), NULL }
+        };
+      style: primary
+      start: 0
+      end: 203
+    - source: ngx_command_t
+      style: secondary
+      start: 0
+      end: 13
+    - source: ngx_http_x_commands[]
+      style: secondary
+      start: 15
+      end: 36
+    - source: |-
+        {
+            { ngx_string("x"), NGX_HTTP_LOC_CONF|NGX_CONF_FLAG, ngx_conf_set_flag_slot,
+              NGX_HTTP_LOC_CONF_OFFSET, offsetof(ngx_http_x_loc_conf_t, enable), NULL }
+        }
+      style: secondary
+      start: 39
+      end: 202
+    - source: |-
+        ngx_http_x_commands[] = {
+            { ngx_string("x"), NGX_HTTP_LOC_CONF|NGX_CONF_FLAG, ngx_conf_set_flag_slot,
+              NGX_HTTP_LOC_CONF_OFFSET, offsetof(ngx_http_x_loc_conf_t, enable), NULL }
+        }
+      style: secondary
+      start: 15
+      end: 202
+  ? |
     static ngx_command_t  ngx_http_x_commands[] = {
         { ngx_string("x"), NGX_HTTP_LOC_CONF|NGX_CONF_FLAG, ngx_conf_set_flag_slot,
           NGX_HTTP_LOC_CONF_OFFSET, offsetof(ngx_http_x_loc_conf_t, enable), NULL },

@@ -89,7 +89,10 @@ Each rule's `note` names the commit that motivated it.
   `%lld` and a bare `%u` without a conversion letter fire. Note what nginx
   actually does with these: `%l` consumes a long and then prints the trailing
   `u` literally, so the argument list is not shifted; a bare `%u` consumes
-  nothing. Wrappers, macros and
+  nothing. An escaped `%%` is not a conversion and is left alone. A
+  format built from two or more adjacent literals is skipped entirely: the
+  compiler joins them before nginx parses, and neither the joined syntax nor
+  the separate pieces can be judged safely. Wrappers, macros and
   format strings held in variables are not seen. Measured zero hits on the
   Angie tree.
 - `c-duplicate-boolean-clause` compares operand text, so two clauses that
@@ -115,11 +118,13 @@ Each rule's `note` names the commit that motivated it.
 - `nginx-conf-return-code-confusion` sees return statements only. A code
   stored in a local and returned later needs the local's type. `u_char *` and
   `char **` functions are excluded, and the `char *` side requires an
-  `ngx_conf_t *` parameter, or the `ngx_cycle_t *` plus `void *` pair of the
-  core module `init_conf` callback (`core/ngx_module.h`), so
+  `ngx_conf_t *` first parameter, or exactly the `ngx_cycle_t *` plus `void *`
+  pointer pair of the core module `init_conf` callback (`core/ngx_module.h`), so
   an unrelated `char *` helper returning a sentinel is not flagged. A return
   inside a nested function is attributed to that function, not the enclosing
-  handler.
+  handler. Parameters are matched structurally, so a variadic or by-value
+  signature is rejected, but a callback written through a typedef alias, or in
+  K&R style, is not recognised.
 - `nginx-buf-flush-before-last-buf` matches the direct `else if` shape on the
   same buffer expression. Two independent `if` statements, or a compound
   condition on the first branch, do not match.

@@ -12,47 +12,56 @@ note: >-
   only when the runtime size is non-zero (core/ngx_palloc.c), and this rule
   cannot evaluate the expression, so a macro or variable that happens to be
   zero still matches. The allocating statement may be a plain assignment, a
-  declaration with an initialiser, or an assignment in an if condition or its
-  body.
+  declaration with an initialiser, or an assignment anywhere inside a
+  preceding statement, including an if, loop or switch body.
   The overwrite must follow it in source order, but no path analysis is done,
   so the two may sit on branches that never both execute. Both statements must
   be siblings in the same function body, so an allocation in one function and
-  a write in another do not pair. A GNU nested function definition is not
-  parsed as a nested function by tree-sitter, so an allocation written inside
-  one is treated as belonging to the enclosing body; nginx does not use that
-  extension.
+  a write in another do not pair, and neither side may sit inside a GNU
+  nested function definition.
 utils:
-  alloc-stmt:
+  not-nested:
+    not:
+      inside:
+        kind: function_definition
+        stopBy: end
+        inside:
+          kind: function_definition
+          stopBy: end
+  alloc-anywhere:
     any:
-      - kind: expression_statement
-        has:
+      - has:
           pattern: $C = ngx_pool_cleanup_add($P, $N)
           kind: assignment_expression
           stopBy: end
-      - kind: if_statement
-        has:
-          pattern: $C = ngx_pool_cleanup_add($P, $N)
-          kind: assignment_expression
-          stopBy: end
-      - kind: declaration
-        has:
+          matches: not-nested
+      - has:
           kind: init_declarator
+          stopBy: end
           all:
             - has:
                 field: declarator
-                has:
-                  kind: identifier
-                  pattern: $C
-                  stopBy: end
+                has: {kind: identifier, pattern: $C, stopBy: end}
             - has:
                 field: value
                 pattern: ngx_pool_cleanup_add($P, $N)
+                matches: not-nested
 rule:
-  matches: alloc-stmt
+  any:
+    - kind: expression_statement
+    - kind: if_statement
+    - kind: declaration
+    - kind: for_statement
+    - kind: while_statement
+    - kind: switch_statement
+    - kind: compound_statement
+    - kind: do_statement
+  matches: alloc-anywhere
   precedes:
     stopBy: end
     has:
       pattern: $C->data = $V
       stopBy: end
+      matches: not-nested
 constraints:
   N: {not: {regex: '^0$'}}
