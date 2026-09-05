@@ -1,0 +1,36 @@
+id: c-send-without-nosignal
+language: c
+severity: warning
+message: >-
+  send()/sendto()/sendmsg() called with no MSG_NOSIGNAL in the flags. The default
+  SIGPIPE action terminates the process, so a peer that closes the connection
+  first kills the writer instead of returning EPIPE. Pass MSG_NOSIGNAL, set
+  SO_NOSIGPIPE on the socket, or install a process-wide SIG_IGN at startup —
+  and check which one this program actually has rather than assuming a library
+  did it.
+note: >-
+  Advisory: the rule reads the flags argument textually and accepts any
+  expression mentioning MSG_NOSIGNAL, so a program that installs
+  signal(SIGPIPE, SIG_IGN) at startup or sets SO_NOSIGPIPE on the socket is safe
+  and still matches. Worst in code whose purpose is provoking the peer into
+  closing — active health probes, test probers, fuzz drivers, protocol scanners
+  — where the crash lands exactly on the case the tool exists to exercise, and
+  reads as a missing test rather than a bug. Portability note: MSG_NOSIGNAL is
+  POSIX-2008 and Linux; macOS uses the SO_NOSIGPIPE sockopt instead.
+rule:
+  kind: call_expression
+  any:
+    - all:
+        - has: {field: function, regex: '^(send|sendto)$'}
+        - has:
+            field: arguments
+            has:
+              nthChild: 4
+              not: {regex: 'MSG_NOSIGNAL'}
+    - all:
+        - has: {field: function, regex: '^sendmsg$'}
+        - has:
+            field: arguments
+            has:
+              nthChild: 3
+              not: {regex: 'MSG_NOSIGNAL'}

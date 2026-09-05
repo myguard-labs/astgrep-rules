@@ -1,0 +1,166 @@
+id: nginx-unchecked-module-ctx
+snapshots:
+  ? |
+    static ngx_int_t
+    late_guard(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+        ngx_uint_t            n;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        n = ctx->count;
+
+        if (ctx == NULL) {
+            return NGX_DECLINED;
+        }
+
+        return (ngx_int_t) n;
+    }
+  : labels:
+    - source: ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+      style: primary
+      start: 118
+      end: 173
+    - source: ctx
+      style: secondary
+      start: 118
+      end: 121
+    - source: ngx_http_get_module_ctx
+      style: secondary
+      start: 124
+      end: 147
+    - source: ngx_http_get_module_ctx(r, ngx_http_demo_module)
+      style: secondary
+      start: 124
+      end: 172
+    - source: ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module)
+      style: secondary
+      start: 118
+      end: 172
+    - source: ctx->count
+      style: secondary
+      start: 183
+      end: 193
+    - source: n = ctx->count;
+      style: secondary
+      start: 179
+      end: 194
+  ? |
+    static ngx_int_t
+    stream_unguarded(ngx_stream_session_t *s)
+    {
+        ngx_stream_demo_ctx_t  *ctx;
+
+        ctx = ngx_stream_get_module_ctx(s, ngx_stream_demo_module);
+
+        return ctx->status;
+    }
+  : labels:
+    - source: ctx = ngx_stream_get_module_ctx(s, ngx_stream_demo_module);
+      style: primary
+      start: 99
+      end: 158
+    - source: ctx
+      style: secondary
+      start: 99
+      end: 102
+    - source: ngx_stream_get_module_ctx
+      style: secondary
+      start: 105
+      end: 130
+    - source: ngx_stream_get_module_ctx(s, ngx_stream_demo_module)
+      style: secondary
+      start: 105
+      end: 157
+    - source: ctx = ngx_stream_get_module_ctx(s, ngx_stream_demo_module)
+      style: secondary
+      start: 99
+      end: 157
+    - source: ctx->status
+      style: secondary
+      start: 171
+      end: 182
+    - source: return ctx->status;
+      style: secondary
+      start: 164
+      end: 183
+  ? |
+    static ngx_int_t
+    unguarded(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        return ctx->status;
+    }
+  : labels:
+    - source: ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+      style: primary
+      start: 88
+      end: 143
+    - source: ctx
+      style: secondary
+      start: 88
+      end: 91
+    - source: ngx_http_get_module_ctx
+      style: secondary
+      start: 94
+      end: 117
+    - source: ngx_http_get_module_ctx(r, ngx_http_demo_module)
+      style: secondary
+      start: 94
+      end: 142
+    - source: ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module)
+      style: secondary
+      start: 88
+      end: 142
+    - source: ctx->status
+      style: secondary
+      start: 156
+      end: 167
+    - source: return ctx->status;
+      style: secondary
+      start: 149
+      end: 168
+  ? |
+    static void
+    resume(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        ctx->resume_handler = ngx_http_demo_wev_handler;
+        ctx->waiting = 0;
+    }
+  : labels:
+    - source: ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+      style: primary
+      start: 80
+      end: 135
+    - source: ctx
+      style: secondary
+      start: 80
+      end: 83
+    - source: ngx_http_get_module_ctx
+      style: secondary
+      start: 86
+      end: 109
+    - source: ngx_http_get_module_ctx(r, ngx_http_demo_module)
+      style: secondary
+      start: 86
+      end: 134
+    - source: ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module)
+      style: secondary
+      start: 80
+      end: 134
+    - source: ctx->resume_handler
+      style: secondary
+      start: 141
+      end: 160
+    - source: ctx->resume_handler = ngx_http_demo_wev_handler;
+      style: secondary
+      start: 141
+      end: 189

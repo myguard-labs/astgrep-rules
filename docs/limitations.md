@@ -202,3 +202,31 @@ two rules cover only its code-level slice.
 - `c-scanf-unbounded-string` matches a `%s` or `%[` conversion with no field
   width in the scanf family. It reads the format literal, so a format passed
   through a variable is not seen.
+
+## Sixth batch
+
+Mined from the git and memory history of the owned submodules (2026-09-05),
+selecting shapes with a measured hit rate on this codebase rather than from a
+generic catalog.
+
+- `nginx-unchecked-module-ctx` checks for the guard rather than inventorying
+  call sites: a match means no NULL comparison or truthiness test of the
+  assigned name precedes the first member access in the same block. Measured
+  34 hits across `modules/nginx/*/src` and 1 in first-party code, against 274
+  total fetch sites — the check is selective, not a census. All 34 third-party
+  hits were confirmed to have no guard within 25 lines. It cannot prove the
+  site is reachable with a NULL context: the single first-party hit
+  (`ngx_stream_label_autoconf_module.c`, the `nla_stream_remember_pick`
+  post-condition) is safe and carries a comment stating the invariant, which is
+  the documented way to dismiss a match. A handler installed only after the
+  context exists is the common benign shape.
+- `c-send-without-nosignal` reads only the flags argument, so a program that
+  installs `signal(SIGPIPE, SIG_IGN)` at startup or sets `SO_NOSIGPIPE` on the
+  socket is safe and still matches. It does not model which of the three
+  defences is present. Measured 3 first-party hits, all in
+  `labs/nginx-label-autoconf-module` active health probes, where that module
+  has no `SIGPIPE`, `MSG_NOSIGNAL` or `SO_NOSIGPIPE` reference anywhere — the
+  shape the recurring-findings catalog flags as worst, since the crash lands on
+  exactly the peer-closes case a prober exists to exercise. `write()` to a
+  socket carries the same hazard and is deliberately out of scope: it is not
+  distinguishable from ordinary file I/O at the AST level.

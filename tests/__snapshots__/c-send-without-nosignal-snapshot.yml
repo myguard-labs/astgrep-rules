@@ -1,0 +1,129 @@
+id: c-send-without-nosignal
+snapshots:
+  ? |
+    static int
+    corked(int fd, const char *buf, size_t len)
+    {
+        return (int) send(fd, buf, len, MSG_MORE | MSG_DONTWAIT);
+    }
+  : labels:
+    - source: send(fd, buf, len, MSG_MORE | MSG_DONTWAIT)
+      style: primary
+      start: 74
+      end: 117
+    - source: send
+      style: secondary
+      start: 74
+      end: 78
+    - source: MSG_MORE | MSG_DONTWAIT
+      style: secondary
+      start: 93
+      end: 116
+    - source: MSG_MORE | MSG_DONTWAIT
+      style: secondary
+      start: 93
+      end: 116
+  ? |
+    static int
+    dgram(int fd, const char *buf, size_t len, const struct sockaddr *to,
+        socklen_t tolen)
+    {
+        return (int) sendto(fd, buf, len, 0, to, tolen);
+    }
+  : labels:
+    - source: sendto(fd, buf, len, 0, to, tolen)
+      style: primary
+      start: 121
+      end: 155
+    - source: sendto
+      style: secondary
+      start: 121
+      end: 127
+    - source: '0'
+      style: secondary
+      start: 142
+      end: 143
+    - source: '0'
+      style: secondary
+      start: 142
+      end: 143
+  ? |
+    static int
+    nonblocking(int fd, const char *buf, size_t len)
+    {
+        return (int) send(fd, buf, len, MSG_DONTWAIT);
+    }
+  : labels:
+    - source: send(fd, buf, len, MSG_DONTWAIT)
+      style: primary
+      start: 79
+      end: 111
+    - source: send
+      style: secondary
+      start: 79
+      end: 83
+    - source: MSG_DONTWAIT
+      style: secondary
+      start: 98
+      end: 110
+    - source: MSG_DONTWAIT
+      style: secondary
+      start: 98
+      end: 110
+  ? |
+    static int
+    scattered(int fd, const struct msghdr *msg)
+    {
+        return (int) sendmsg(fd, msg, 0);
+    }
+  : labels:
+    - source: sendmsg(fd, msg, 0)
+      style: primary
+      start: 74
+      end: 93
+    - source: sendmsg
+      style: secondary
+      start: 74
+      end: 81
+    - source: '0'
+      style: secondary
+      start: 91
+      end: 92
+    - source: '0'
+      style: secondary
+      start: 91
+      end: 92
+  ? |
+    static int
+    write_all(int fd, const char *buf, size_t len)
+    {
+        size_t off = 0;
+
+        while (off < len) {
+            ssize_t n = send(fd, buf + off, len - off, 0);
+
+            if (n <= 0) {
+                return -1;
+            }
+            off += (size_t) n;
+        }
+
+        return 0;
+    }
+  : labels:
+    - source: send(fd, buf + off, len - off, 0)
+      style: primary
+      start: 125
+      end: 158
+    - source: send
+      style: secondary
+      start: 125
+      end: 129
+    - source: '0'
+      style: secondary
+      start: 156
+      end: 157
+    - source: '0'
+      style: secondary
+      start: 156
+      end: 157

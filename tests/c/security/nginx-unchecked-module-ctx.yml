@@ -1,0 +1,148 @@
+id: nginx-unchecked-module-ctx
+valid:
+  # Guarded with an explicit NULL comparison before any member access.
+  - |
+    static ngx_int_t
+    handler(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx == NULL) {
+            return NGX_DECLINED;
+        }
+
+        return ctx->status;
+    }
+  # The house idiom: NULL check folded into a compound condition.
+  - |
+    static ngx_int_t
+    filter(ngx_http_request_t *r, ngx_chain_t *in)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx == NULL || ctx->done) {
+            return ngx_http_next_body_filter(r, in);
+        }
+
+        ctx->done = 1;
+        return NGX_OK;
+    }
+  # Truthiness test rather than an explicit comparison.
+  - |
+    static ngx_int_t
+    probe(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx && ctx->active) {
+            return NGX_OK;
+        }
+
+        return NGX_DECLINED;
+    }
+  # Negated truthiness guard.
+  - |
+    static ngx_int_t
+    negated(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (!ctx) {
+            return NGX_DECLINED;
+        }
+
+        return ctx->status;
+    }
+  # Fetched and stored, never dereferenced here — nothing to guard.
+  - |
+    static void
+    store(ngx_http_request_t *r, ngx_http_demo_ctx_t **out)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        *out = ctx;
+    }
+  # Lexical control: the call name appears in a comment and a string only.
+  - |
+    static ngx_int_t
+    lexical(ngx_http_request_t *r)
+    {
+        /* ngx_http_get_module_ctx(r, m) would return NULL here */
+        static const char *msg = "ngx_http_get_module_ctx";
+
+        return NGX_OK;
+    }
+  # Near miss: a different accessor whose result cannot be NULL this way.
+  - |
+    static ngx_int_t
+    conf(ngx_http_request_t *r)
+    {
+        ngx_http_demo_loc_conf_t  *dlcf;
+
+        dlcf = ngx_http_get_module_loc_conf(r, ngx_http_demo_module);
+
+        return dlcf->enable;
+    }
+invalid:
+  # Immediate member access with no guard at all.
+  - |
+    static ngx_int_t
+    unguarded(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        return ctx->status;
+    }
+  # Written through rather than read — same dereference.
+  - |
+    static void
+    resume(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        ctx->resume_handler = ngx_http_demo_wev_handler;
+        ctx->waiting = 0;
+    }
+  # Stream flavour of the same macro.
+  - |
+    static ngx_int_t
+    stream_unguarded(ngx_stream_session_t *s)
+    {
+        ngx_stream_demo_ctx_t  *ctx;
+
+        ctx = ngx_stream_get_module_ctx(s, ngx_stream_demo_module);
+
+        return ctx->status;
+    }
+  # A guard exists but only AFTER the first dereference.
+  - |
+    static ngx_int_t
+    late_guard(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+        ngx_uint_t            n;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        n = ctx->count;
+
+        if (ctx == NULL) {
+            return NGX_DECLINED;
+        }
+
+        return (ngx_int_t) n;
+    }

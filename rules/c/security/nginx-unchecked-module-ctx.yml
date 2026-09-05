@@ -1,0 +1,56 @@
+id: nginx-unchecked-module-ctx
+language: c
+severity: warning
+message: >-
+  ngx_http_get_module_ctx result dereferenced without a NULL check. The macro is
+  a plain array read of r->ctx[module.ctx_index] and returns NULL whenever the
+  context was never installed for this request — an internal redirect, an error
+  page, a subrequest, or any phase reached before the handler that creates it.
+  Dereferencing it is a NULL dereference (CWE-476) on exactly the paths testing
+  covers least. Guard with `if (ctx == NULL) { ... }` before the first member
+  access.
+note: >-
+  A match means no comparison or truthiness test of the assigned name follows in
+  the same block before a member access. It does not prove the site is
+  reachable with a NULL context: a handler that is only ever installed after
+  the context exists is safe, and such a site should state that invariant in a
+  comment rather than rely on the reader re-deriving it. Also covers
+  ngx_stream_get_module_ctx and ngx_http_get_module_ctx assigned through a
+  declaration initializer.
+rule:
+  kind: expression_statement
+  all:
+    - has:
+        kind: assignment_expression
+        all:
+          - has:
+              field: left
+              kind: identifier
+              pattern: $C
+          - has:
+              field: right
+              kind: call_expression
+              has:
+                field: function
+                regex: '^(ngx_http_get_module_ctx|ngx_stream_get_module_ctx)$'
+    - precedes:
+        all:
+          - has:
+              stopBy: end
+              pattern: $C->$F
+          - not:
+              has:
+                stopBy: end
+                any:
+                  - pattern: $C == NULL
+                  - pattern: $C != NULL
+                  - pattern: '!$C'
+                  - pattern: $C && $X
+                  - pattern: $X && $C
+                  - pattern: $C || $X
+                  - pattern: $X || $C
+          - not:
+              kind: if_statement
+              has:
+                field: condition
+                pattern: ($C)
