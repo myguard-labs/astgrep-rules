@@ -301,3 +301,36 @@ a guard expressed as a truthiness test, a range check, or a struct copy rather
 than the literal comparison the first draft of a matcher expects. Measure every
 candidate against the corpus and read the hits before shipping; a raw count is
 not a defect count.
+
+## Ninth batch: ngx_log_debugN arity is not expressible in ast-grep
+
+Mined from 305 C-touching `fix` commits across the owned `labs/nginx-*` modules
+(2026-09-05), on the theory that bugs already fixed here recur. Commit
+`e09f571`, "fix: correct ngx_log_debug macro argument count", suggested a rule:
+`ngx_log_debugN` encodes its vararg count in the macro name, so a call whose
+argument count disagrees with `N` passes an argument the varargs machinery never
+reads, and the format directive prints an adjacent stack slot.
+
+The class is real and it recurred: a string-aware argument counter over the
+2522 `ngx_log_debugN` calls in `modules/nginx/*` and `labs/nginx-*` finds
+exactly one mismatch, `labs/nginx-skeleton-module/src/ngx_http_skel_module.c:271`,
+where an `ngx_log_debug2` passes three varargs.
+
+It is nonetheless not expressible as an ast-grep rule. The check is arithmetic
+over a capture — "the argument count must equal the digit in the callee name" —
+so the only encoding is nine explicit alternatives keyed on `nthChild`. That
+encoding does not work, and the reason is worth recording: `nthChild` over an
+`argument_list` does not index arguments. A correct five-argument
+`ngx_log_debug2` reports a child at `nthChild: 6`, and so does the genuinely
+defective six-argument call, so true and false positives are indistinguishable
+by count. Adjacent-macro concatenation (`FOO_BASENAME FOO_EXT`) is one source of
+the extra child while still matching a five-metavariable pattern, and a
+preprocessor conditional inside the argument list is another. An intermediate
+draft that excluded `concatenated_string` outright also suppressed the one true
+positive, whose format string is split across adjacent literals.
+
+Use a script for this check, not a rule. Shift-width truncation
+(`1u << s` assigned to an `ngx_uint_t`, from commit `d1488a8`) was rejected
+separately: 297 sites, nearly all constant shifts such as `1u << 20` that are
+correct, and the defective form is only defective when the destination is
+64-bit, which is a type question ast-grep cannot answer.
