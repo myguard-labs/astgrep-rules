@@ -25,5 +25,10 @@ rule:
       any:
         - kind: variable_name
         - kind: subscript_expression
-        - kind: function_call_expression
         - kind: member_call_expression
+        # A call other than the dirname(__FILE__) base idiom.
+        - kind: function_call_expression
+          not:
+            all:
+              - has: {field: function, regex: '^dirname$'}
+              - has: {field: arguments, regex: '^\(__FILE__\)$'}

@@ -1,14 +1,20 @@
 id: php-insecure-cookie-flags
 valid:
 - '<?php setcookie("sid", $v, ["httponly" => true, "secure" => true, "samesite" => "Lax"]);'
+- '<?php setcookie("sid", $v, ["HttpOnly" => true, "Secure" => true]);'
 - '<?php setcookie("sid", $v, time()+3600, "/", "", true, true);'
 - '<?php setrawcookie("t", $v, ["secure" => true, "httponly" => true]);'
 - '<?php $_COOKIE["sid"];'
 - '<?php // setcookie("sid", $v);'
-# Known gap, not an endorsement: the positional form carries its flags as
-# unnamed booleans in later arguments, so a syntactic matcher cannot tell a
-# flagged call from an unflagged one. Documented in docs/limitations.md.
-- '<?php setcookie("sid", $v, time()+3600, "/");'
 invalid:
 - '<?php setcookie("sid", $v);'
 - '<?php setrawcookie("token", $v);'
+- '<?php setcookie("sid", $v, ["secure" => true]);'
+- '<?php setcookie("sid", $v, ["httponly" => true, "samesite" => "Lax"]);'
+- '<?php setcookie("sid", $v, ["secure" => false, "httponly" => true]);'
+- '<?php setcookie("sid", $v, ["secure" => true, "httponly" => false]);'
+- '<?php setcookie("sid", $v, ["meta" => ["secure" => true, "httponly" => true]]);'
+- '<?php setcookie("sid", $v, time()+3600, "/");'
+- '<?php setcookie("sid", $v, time()+3600, "/", "example.com", true);'
+- '<?php setcookie("sid", $v, time()+3600, "/", "example.com", false, true);'
+- '<?php setcookie("sid", $v, time()+3600, "/", "example.com", true, false);'

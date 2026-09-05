@@ -1,11 +1,37 @@
 id: php-strcmp-loose-compare
 snapshots:
+  <?php if ((strcmp($a, $b)) == 0) { ok(); }:
+    labels:
+    - source: (strcmp($a, $b)) == 0
+      style: primary
+      start: 10
+      end: 31
+    - source: ==
+      style: secondary
+      start: 27
+      end: 29
+    - source: strcmp
+      style: secondary
+      start: 11
+      end: 17
+    - source: strcmp($a, $b)
+      style: secondary
+      start: 11
+      end: 25
+    - source: (strcmp($a, $b))
+      style: secondary
+      start: 10
+      end: 26
   <?php if (strcasecmp($u, $name) == 0) { ok(); }:
     labels:
     - source: strcasecmp($u, $name) == 0
       style: primary
       start: 10
       end: 36
+    - source: ==
+      style: secondary
+      start: 32
+      end: 34
     - source: strcasecmp
       style: secondary
       start: 10
@@ -14,12 +40,34 @@ snapshots:
       style: secondary
       start: 10
       end: 31
+  <?php if (strcmp($a, $b) <> 0) { no(); }:
+    labels:
+    - source: strcmp($a, $b) <> 0
+      style: primary
+      start: 10
+      end: 29
+    - source: <>
+      style: secondary
+      start: 25
+      end: 27
+    - source: strcmp
+      style: secondary
+      start: 10
+      end: 16
+    - source: strcmp($a, $b)
+      style: secondary
+      start: 10
+      end: 24
   <?php if (strcmp($a, $b) == 0) { ok(); }:
     labels:
     - source: strcmp($a, $b) == 0
       style: primary
       start: 10
       end: 29
+    - source: ==
+      style: secondary
+      start: 25
+      end: 27
     - source: strcmp
       style: secondary
       start: 10
@@ -34,6 +82,10 @@ snapshots:
       style: primary
       start: 10
       end: 37
+    - source: '!='
+      style: secondary
+      start: 33
+      end: 35
     - source: strcmp
       style: secondary
       start: 10

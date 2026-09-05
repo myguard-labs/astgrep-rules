@@ -15,15 +15,23 @@ note: >-
 rule:
   kind: type_assertion_expression
   not:
-    inside:
-      kind: expression_list
-      inside:
-        any:
-          - kind: assignment_statement
-          - kind: short_var_declaration
-        has:
-          field: left
+    any:
+      - inside:
           kind: expression_list
-          has:
-            kind: identifier
-            nthChild: 2
+          inside:
+            any:
+              - kind: assignment_statement
+              - kind: short_var_declaration
+            has:
+              field: left
+              kind: expression_list
+              has:
+                kind: identifier
+                nthChild: 2
+      - inside:
+          kind: expression_list
+          inside:
+            kind: var_spec
+            has:
+              kind: identifier
+              nthChild: 2

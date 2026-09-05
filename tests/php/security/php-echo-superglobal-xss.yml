@@ -7,9 +7,14 @@ valid:
 - '<?php echo "static text";'
 - '<?php $x = $_GET["q"];'
 - '<?php // echo $_GET["q"];'
+- '<?php echo htmlentities($_POST["name"]);'
 invalid:
 - '<?php echo $_GET["q"];'
 - '<?php echo $_POST["name"];'
 - '<?php print $_REQUEST["msg"];'
 - '<?php echo "Hello " . $_GET["name"];'
 - '<?php echo "<p>{$_COOKIE["last"]}</p>";'
+# The encoder wraps a different operand; the request value is still raw.
+- '<?php echo htmlspecialchars($safe) . $_GET["q"];'
+# json_encode is not an HTML encoder.
+- '<?php echo json_encode($_GET["q"]);'

@@ -19,24 +19,41 @@ note: >-
   suppresses the match; this trades false negatives for a low false-positive
   rate. Covers ngx_atoi, ngx_atosz, ngx_atoof, ngx_atotm, ngx_atofp and
   ngx_hextoi, all of which share the NGX_ERROR convention.
+utils:
+  converter-call:
+    kind: call_expression
+    has:
+      field: function
+      regex: '^(ngx_atoi|ngx_atosz|ngx_atoof|ngx_atotm|ngx_atofp|ngx_hextoi)$'
 rule:
-  kind: expression_statement
-  all:
-    - has:
-        kind: assignment_expression
-        all:
-          - has: {field: left, kind: identifier, pattern: $V}
-          - has:
-              field: right
-              kind: call_expression
+  any:
+    - kind: expression_statement
+      all:
+        - has:
+            kind: assignment_expression
+            all:
+              - has: {field: left, kind: identifier, pattern: $V}
+              - has: {field: right, matches: converter-call}
+        - not:
+            inside:
+              stopBy: end
+              kind: function_definition
               has:
-                field: function
-                regex: '^(ngx_atoi|ngx_atosz|ngx_atoof|ngx_atotm|ngx_atofp|ngx_hextoi)$'
-    - not:
-        inside:
-          stopBy: end
-          kind: function_definition
-          has:
-            stopBy: end
-            kind: binary_expression
-            has: {kind: identifier, pattern: $V}
+                stopBy: end
+                kind: binary_expression
+                has: {kind: identifier, pattern: $V}
+    - kind: declaration
+      all:
+        - has:
+            kind: init_declarator
+            all:
+              - has: {field: declarator, kind: identifier, pattern: $V}
+              - has: {field: value, matches: converter-call}
+        - not:
+            inside:
+              stopBy: end
+              kind: function_definition
+              has:
+                stopBy: end
+                kind: binary_expression
+                has: {kind: identifier, pattern: $V}

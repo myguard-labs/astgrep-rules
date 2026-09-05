@@ -6,7 +6,12 @@ valid:
 - 'requests.get(BASE, params={"id": user_id})'
 - urlopen(SAFE_URL)
 - '# requests.get(f"https://{host}/a")'
+- cache.get(f"user:{uid}")
+- d.get("k:" + key)
+- self.client.post(f"{base}/submit", json=p)
+- self.session.get(f"{base}/status")
 invalid:
+- session.get(f"https://{host}/api")
 - requests.get(f"https://{host}/api")
 - requests.get("https://" + host + "/api")
 - httpx.get(f"{base}/users/{uid}")

@@ -8,21 +8,30 @@ message: >-
   htmlspecialchars($v, ENT_QUOTES, "UTF-8"), or a templating layer that escapes
   by default.
 note: >-
-  Fires on echo/print of a superglobal, directly or interpolated. A value echoed
+  Fires on echo/print of a superglobal, directly or interpolated, unless
+  that value is wrapped in htmlspecialchars, htmlentities, urlencode,
+  rawurlencode or intval; an encoder around a different operand of the same
+  statement does not count. json_encode is not an HTML encoder (it leaves <
+  alone without JSON_HEX_TAG), so it does not suppress the match. A value echoed
   into a non-HTML response (JSON with the right Content-Type) is the routine
   dismissal; escaping is still the safer default.
+utils:
+  encoder:
+    kind: function_call_expression
+    has:
+      field: function
+      regex: '^(htmlspecialchars|htmlentities|urlencode|rawurlencode|intval)$'
 rule:
   any:
     - kind: echo_statement
     - kind: print_intrinsic
+  # The request value itself must sit outside any approved encoder; an
+  # encoder elsewhere in the statement does not cover it.
   has:
     stopBy: end
     kind: variable_name
     regex: '^\$_(GET|POST|REQUEST|COOKIE|SERVER)$'
-  not:
-    has:
-      stopBy: end
-      kind: function_call_expression
-      has:
-        field: function
-        regex: '^(htmlspecialchars|htmlentities|urlencode|rawurlencode|intval|json_encode)$'
+    not:
+      inside:
+        stopBy: end
+        matches: encoder

@@ -8,11 +8,14 @@ message: >-
   os.OpenRoot so the kernel enforces containment; otherwise filepath.Clean the
   result and reject any path that does not stay under the destination prefix.
 note: >-
-  Fires on filepath.Join whose argument reads a .Name field, the archive-entry
-  shape. A .Name() method call (os.DirEntry over a local directory) does not
-  match. A join already guarded by a Clean-and-prefix check in the same
-  expression does not match; a guard placed on a later line still matches and is
-  the routine dismissal to confirm by reading the surrounding block.
+  Fires on filepath.Join whose argument reads a .Name field, a common
+  archive-entry shape. It does not resolve the receiver type, so a trusted
+  non-archive struct with a Name field is a legitimate dismissal. A .Name()
+  method call (os.DirEntry over a local directory) does not match.
+  filepath.Clean on the entry name is not containment (it normalises
+  ../ but does not confine the result to the destination), so a join wrapping
+  it still matches; the containment check is necessarily a later statement,
+  and confirming it by reading the surrounding block is the routine dismissal.
 rule:
   kind: call_expression
   all:
@@ -32,10 +35,3 @@ rule:
                 inside:
                   kind: call_expression
                   field: function
-    - not:
-        has:
-          stopBy: end
-          kind: selector_expression
-          has:
-            field: field
-            regex: '^Clean$'

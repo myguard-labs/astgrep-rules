@@ -2,10 +2,29 @@ id: nginx-unchecked-array-push
 valid:
 - void f(void) { h = ngx_array_push(a); if (h == NULL) { return NGX_ERROR; } h->x = 1; }
 - void f(void) { h = ngx_list_push(&r->headers_out.headers); if (h == NULL) { return NGX_ERROR; } h->hash = 1; }
-- void f(void) { p = ngx_array_push(a); other(); if (p == NULL) { return NGX_ERROR; } }
 - void f(void) { p = ngx_palloc(pool, n); if (p == NULL) { return NGX_ERROR; } }
+- void f(void) { p = ngx_array_push(a); if (p == NULL || n == 0) { return NGX_ERROR; } }
+- void f(void) { p = ngx_array_push(a); if (!p) { return NGX_ERROR; } }
+- void f(void) { p = ngx_array_push(a); if (p) { p->x = 1; } }
+- void f(void) { p = ngx_array_push(a); if (NULL == p) { return NGX_ERROR; } p->x = 1; }
 - /* void f(void) { h = ngx_array_push(a); h->x = 1; } */
 invalid:
 - void f(void) { h = ngx_array_push(a); h->x = 1; }
 - void f(void) { h = ngx_list_push(&r->headers_out.headers); h->hash = 1; }
 - void f(void) { p = ngx_array_push_n(a, 2); p[0] = v; }
+# Late guard: something else runs before the check.
+- void f(void) { p = ngx_array_push(a); other(); if (p == NULL) { return NGX_ERROR; } }
+# Guard after the first dereference.
+- void f(void) { p = ngx_array_push(a); p->x = 1; if (p == NULL) { return NGX_ERROR; } }
+# An unrelated expression on the name is not a guard.
+- void f(void) { p = ngx_array_push(a); q = p + 1; p->x = 1; }
+# A test of a member is not a test of the pointer.
+- void f(void) { p = ngx_array_push(a); if (p->x) { return NGX_ERROR; } }
+# A comparison unrelated to NULL is not a guard.
+- void f(void) { p = ngx_array_push(a); if (p == other) { log(); } p->x = 1; }
+# Merely observing NULL without leaving the path does not protect the use.
+- void f(void) { p = ngx_array_push(a); if (p == NULL) { log(); } p->x = 1; }
+# A truthy branch does not protect an unconditional use after that branch.
+- void f(void) { p = ngx_array_push(a); if (p) { log(); } p->x = 1; }
+# Declaration initializers have the same allocation contract.
+- void f(void) { item_t *p = ngx_array_push(a); p->x = 1; }

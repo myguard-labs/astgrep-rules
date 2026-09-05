@@ -8,9 +8,10 @@ message: >-
   explicit width one smaller than the buffer, as in %31s for char buf[32], or
   read a line and parse it.
 note: >-
-  Fires on a format string containing %s or %[ with no width, in the scanf
-  family. A width-limited conversion does not match. %c and numeric conversions
-  are unaffected.
+  Fires on a format string containing %s, %ls, %[ or %l[ with no width, in the scanf
+  family. A width-limited conversion does not match, nor does an
+  assignment-suppressed %*s or an escaped %%s, since neither writes to a
+  buffer. %c and numeric conversions are unaffected.
 rule:
   kind: call_expression
   all:
@@ -22,4 +23,6 @@ rule:
         has:
           stopBy: end
           kind: string_literal
-          regex: '%[*]?(s|\[)'
+          # A %s or %[ conversion with no width. An escaped %% is not a
+          # conversion and %*s suppresses assignment, so neither writes.
+          regex: '(?:^|[^%])(?:%%)*%l?(s|\[)'

@@ -2,34 +2,83 @@ id: php-insecure-cookie-flags
 language: php
 severity: error
 message: >-
-  Cookie set without the httponly and secure flags — script on the page can read
-  it via document.cookie, and the browser will send it over plaintext HTTP where
-  it can be captured (CWE-1004, CWE-614). For a session or auth cookie that is
-  account takeover. Pass an options array with httponly, secure and samesite
-  set.
+  Cookie set without both httponly and secure enabled — script on the page can
+  read it via document.cookie, or the browser can send it over plaintext HTTP
+  where it can be captured (CWE-1004, CWE-614). For a session or auth cookie
+  that is account takeover. Enable both flags and set samesite as appropriate.
 note: >-
-  Fires on setcookie/setrawcookie called with at most three arguments, the shape
-  that cannot carry the flags, and on an options array naming neither flag. The
-  seven-argument positional form is not checked: its booleans are unnamed, so
-  their meaning is not visible to a syntactic matcher. A deliberately readable,
+  Fires on setcookie/setrawcookie called with two arguments or fewer, the
+  shape that cannot carry the flags, and on an options array in which either
+  httponly or secure is absent or not literally true. The legacy positional
+  form is also checked at arguments six and seven. A deliberately readable,
   non-sensitive preference cookie is the routine dismissal.
+utils:
+  options-array:
+    kind: argument
+    nthChild: 3
+    has:
+      kind: array_creation_expression
+  flag-true:
+    kind: array_element_initializer
+    regex: '(?i)^["\x27](httponly|secure)["\x27]\s*=>\s*true$'
 rule:
   kind: function_call_expression
   all:
     - has:
         field: function
         regex: '^(setcookie|setrawcookie)$'
-    - not:
-        has:
-          stopBy: end
-          regex: '(?i)httponly'
-    - not:
-        has:
-          stopBy: end
-          regex: '(?i)secure'
-    - not:
-        has:
-          field: arguments
-          has:
-            kind: argument
-            nthChild: 4
+    - any:
+        # Two arguments or fewer: nothing can carry a flag.
+        - not:
+            has:
+              field: arguments
+              has:
+                kind: argument
+                nthChild: 3
+        # Options array missing httponly => true.
+        - has:
+            field: arguments
+            has:
+              matches: options-array
+              not:
+                has:
+                  kind: array_creation_expression
+                  has:
+                    matches: flag-true
+                    regex: '(?i)httponly'
+        # Options array missing secure => true.
+        - has:
+            field: arguments
+            has:
+              matches: options-array
+              not:
+                has:
+                  kind: array_creation_expression
+                  has:
+                    matches: flag-true
+                    regex: '(?i)secure'
+        # Legacy positional form missing or disabling either fixed-position flag.
+        - all:
+            - has:
+                field: arguments
+                has:
+                  kind: argument
+                  nthChild: 3
+                  not:
+                    has:
+                      kind: array_creation_expression
+            - any:
+                - not:
+                    has:
+                      field: arguments
+                      has:
+                        kind: argument
+                        nthChild: 6
+                        regex: '(?i)^true$'
+                - not:
+                    has:
+                      field: arguments
+                      has:
+                        kind: argument
+                        nthChild: 7
+                        regex: '(?i)^true$'

@@ -3,6 +3,7 @@ valid:
 - 'package m; func f() { s, ok := i.(string); if !ok { return } }'
 - 'package m; func f() { v, ok := m["k"].(int); use(v, ok) }'
 - 'package m; func f() { switch v := i.(type) { case string: use(v) } }'
+- 'package m; func f() { var s, ok = i.(string); use(s, ok) }'
 - 'package m; func f() { var s string = "x" }'
 - 'package m; // s := i.(string)'
 invalid:

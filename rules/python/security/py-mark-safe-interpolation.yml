@@ -7,8 +7,9 @@ message: >-
   is switched off for the whole result (CWE-79). Use format_html, which escapes
   each argument while leaving the template literal alone.
 note: >-
-  Fires on mark_safe given an f-string, a concatenation or .format(). mark_safe
-  over a constant literal is safe and does not match.
+  Fires on mark_safe given an f-string, a concatenation with a non-literal
+  operand, or .format(). mark_safe over a constant literal, including a
+  concatenation of literals, is safe and does not match.
 rule:
   kind: call
   all:
@@ -22,7 +23,16 @@ rule:
             - kind: string
               has:
                 kind: interpolation
+            # A concatenation with at least one non-literal operand.
             - kind: binary_operator
+              has:
+                stopBy: end
+                any:
+                  - kind: identifier
+                  - kind: call
+                  - kind: attribute
+                  - kind: subscript
+                  - kind: interpolation
             - kind: call
               has:
                 field: function

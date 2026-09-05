@@ -2,6 +2,86 @@ id: nginx-unchecked-module-ctx
 snapshots:
   ? |
     static ngx_int_t
+    decl(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+        return ctx->status;
+    }
+  : labels:
+    - source: ngx_http_demo_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+      style: primary
+      start: 51
+      end: 128
+    - source: ctx
+      style: secondary
+      start: 73
+      end: 76
+    - source: '*ctx'
+      style: secondary
+      start: 72
+      end: 76
+    - source: ngx_http_get_module_ctx
+      style: secondary
+      start: 79
+      end: 102
+    - source: ngx_http_get_module_ctx(r, ngx_http_demo_module)
+      style: secondary
+      start: 79
+      end: 127
+    - source: '*ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module)'
+      style: secondary
+      start: 72
+      end: 127
+    - source: ctx->status
+      style: secondary
+      start: 140
+      end: 151
+    - source: return ctx->status;
+      style: secondary
+      start: 133
+      end: 152
+  ? |
+    static ngx_int_t
+    intervening(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        trace_request(r);
+        return ctx->status;
+    }
+  : labels:
+    - source: ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+      style: primary
+      start: 90
+      end: 145
+    - source: ctx
+      style: secondary
+      start: 90
+      end: 93
+    - source: ngx_http_get_module_ctx
+      style: secondary
+      start: 96
+      end: 119
+    - source: ngx_http_get_module_ctx(r, ngx_http_demo_module)
+      style: secondary
+      start: 96
+      end: 144
+    - source: ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module)
+      style: secondary
+      start: 90
+      end: 144
+    - source: ctx->status
+      style: secondary
+      start: 180
+      end: 191
+    - source: return ctx->status;
+      style: secondary
+      start: 173
+      end: 192
+  ? |
+    static ngx_int_t
     late_guard(ngx_http_request_t *r)
     {
         ngx_http_demo_ctx_t  *ctx;

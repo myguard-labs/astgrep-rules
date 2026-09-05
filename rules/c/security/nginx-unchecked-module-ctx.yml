@@ -17,40 +17,76 @@ note: >-
   comment rather than rely on the reader re-deriving it. Also covers
   ngx_stream_get_module_ctx and ngx_http_get_module_ctx assigned through a
   declaration initializer.
-rule:
-  kind: expression_statement
-  all:
-    - has:
-        kind: assignment_expression
-        all:
-          - has:
-              field: left
-              kind: identifier
-              pattern: $C
-          - has:
-              field: right
-              kind: call_expression
-              has:
-                field: function
-                regex: '^(ngx_http_get_module_ctx|ngx_stream_get_module_ctx)$'
-    - precedes:
-        all:
-          - has:
+utils:
+  ctx-call:
+    kind: call_expression
+    has:
+      field: function
+      regex: '^(ngx_http_get_module_ctx|ngx_stream_get_module_ctx)$'
+  # Walk following statements until a guard; report the first dereference
+  # reached before that guard.
+  unguarded-deref:
+    precedes:
+      stopBy:
+        kind: if_statement
+        has:
+          stopBy: end
+          any:
+            - pattern: $C == NULL
+            - pattern: $C != NULL
+            - pattern: '!$C'
+            - pattern: $C && $X
+            - pattern: $X && $C
+            - pattern: $C || $X
+            - pattern: $X || $C
+            - pattern: ($C)
+      all:
+        - has:
+            stopBy: end
+            pattern: $C->$F
+        # A short-circuit condition can safely contain the first member
+        # access; do not report the guard statement itself.
+        - not:
+            kind: if_statement
+            has:
               stopBy: end
-              pattern: $C->$F
-          - not:
-              has:
-                stopBy: end
-                any:
-                  - pattern: $C == NULL
-                  - pattern: $C != NULL
-                  - pattern: '!$C'
-                  - pattern: $C && $X
-                  - pattern: $X && $C
-                  - pattern: $C || $X
-                  - pattern: $X || $C
-          - not:
-              kind: if_statement
-              has:
-                field: condition
-                pattern: ($C)
+              any:
+                - pattern: $C == NULL
+                - pattern: $C != NULL
+                - pattern: '!$C'
+                - pattern: $C && $X
+                - pattern: $X && $C
+                - pattern: $C || $X
+                - pattern: $X || $C
+                - pattern: ($C)
+rule:
+  any:
+    - kind: expression_statement
+      all:
+        - has:
+            kind: assignment_expression
+            all:
+              - has:
+                  field: left
+                  kind: identifier
+                  pattern: $C
+              - has:
+                  field: right
+                  matches: ctx-call
+        - matches: unguarded-deref
+    - kind: declaration
+      all:
+        - has:
+            kind: init_declarator
+            all:
+              - has:
+                  field: declarator
+                  kind: pointer_declarator
+                  has:
+                    field: declarator
+                    kind: identifier
+                    pattern: $C
+              - has:
+                  field: value
+                  matches: ctx-call
+        - matches: unguarded-deref

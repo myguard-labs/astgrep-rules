@@ -28,6 +28,20 @@ snapshots:
       style: secondary
       start: 5
       end: 7
+  curl -sSk https://example.com/f -o f:
+    labels:
+    - source: curl -sSk https://example.com/f -o f
+      style: primary
+      start: 0
+      end: 36
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: -sSk
+      style: secondary
+      start: 5
+      end: 9
   pip install --trusted-host pypi.org requests:
     labels:
     - source: pip install --trusted-host pypi.org requests
@@ -42,6 +56,20 @@ snapshots:
       style: secondary
       start: 12
       end: 26
+  pip install --trusted-host=pypi.org requests:
+    labels:
+    - source: pip install --trusted-host=pypi.org requests
+      style: primary
+      start: 0
+      end: 44
+    - source: pip
+      style: secondary
+      start: 0
+      end: 3
+    - source: --trusted-host=pypi.org
+      style: secondary
+      start: 12
+      end: 35
   wget --no-check-certificate https://example.com/f:
     labels:
     - source: wget --no-check-certificate https://example.com/f

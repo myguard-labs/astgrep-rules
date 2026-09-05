@@ -8,15 +8,20 @@ message: >-
   ports and internal hosts a client cannot. Resolve the target against an
   allowlist of scheme and host before requesting it.
 note: >-
-  Fires on requests/httpx/urlopen given an f-string or concatenated URL. An
-  interpolated path segment under a fixed, trusted host is the routine
-  dismissal; an interpolated host is not.
+  Fires on requests/httpx/urllib3/aiohttp, a lexically named local session or
+  client receiver, or urlopen given an f-string or concatenated URL. Object
+  attributes and aliases under other names are not resolved, and a dict or cache
+  .get() with an interpolated key is deliberately not matched. An interpolated
+  path segment under a fixed, trusted host is the routine dismissal; an
+  interpolated host is not.
 rule:
   kind: call
   all:
     - has:
         field: function
-        regex: '(^|\.)(get|post|put|patch|delete|head|request|urlopen)$'
+        # Lexical: the receiver must read as an HTTP client. A dict or cache
+        # .get() with an interpolated key is not a request.
+        regex: '^(requests|httpx|urllib3|aiohttp|http|session|sess|client)\.(get|post|put|patch|delete|head|request)$|(^|\.)urlopen$'
     - has:
         field: arguments
         has:

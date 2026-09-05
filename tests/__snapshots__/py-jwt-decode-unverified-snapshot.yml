@@ -1,5 +1,43 @@
 id: py-jwt-decode-unverified
 snapshots:
+  ? |
+    from jwt import decode
+    decode(token, verify=False)
+  : labels:
+    - source: decode(token, verify=False)
+      style: primary
+      start: 23
+      end: 50
+    - source: decode
+      style: secondary
+      start: 23
+      end: 29
+    - source: from jwt import decode
+      style: secondary
+      start: 0
+      end: 22
+    - source: |
+        from jwt import decode
+        decode(token, verify=False)
+      style: secondary
+      start: 0
+      end: 51
+    - source: verify
+      style: secondary
+      start: 37
+      end: 43
+    - source: 'False'
+      style: secondary
+      start: 44
+      end: 49
+    - source: verify=False
+      style: secondary
+      start: 37
+      end: 49
+    - source: (token, verify=False)
+      style: secondary
+      start: 29
+      end: 50
   jwt.decode(token, key, algorithms=["HS256"], verify=False):
     labels:
     - source: jwt.decode(token, key, algorithms=["HS256"], verify=False)

@@ -7,8 +7,10 @@ message: >-
   a routine error (OWASP A10:2025, CWE-396). Catch `Exception` when you mean
   ordinary failures, or name the specific errors you can handle.
 note: >-
-  Fires on a clause with no exception type. A bare clause that re-raises is the
-  documented cleanup idiom and does not match. PEP 760 proposed removing this
+  Fires on a clause with no exception type. A bare clause that re-raises with
+  a bare `raise` is the documented cleanup idiom and does not match; one that
+  raises a different exception replaces KeyboardInterrupt or SystemExit and
+  does match. PEP 760 proposed removing this
   form from the language.
 rule:
   all:
@@ -17,7 +19,13 @@ rule:
         has:
           field: value
           regex: '.'
+    # Only a bare re-raise is the cleanup idiom; raising something else
+    # replaces the original exception.
     - not:
         has:
-          stopBy: end
+          # A raise in a nested function executes later and is not a re-raise
+          # from this handler.
+          stopBy:
+            kind: function_definition
           kind: raise_statement
+          regex: '^raise$'

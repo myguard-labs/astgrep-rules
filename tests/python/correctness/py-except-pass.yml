@@ -21,7 +21,25 @@ valid:
   except OSError:
       cleanup()
       raise
+- |
+  try:
+      f()
+  except ValueError:
+      pass
+      recover()
+- |
+  try:
+      f()
+  except ValueError:
+      for x in items:
+          pass
 invalid:
+- |
+  try:
+      f()
+  except ValueError:
+      # deliberate: optional dependency
+      pass
 - |
   try:
       f()

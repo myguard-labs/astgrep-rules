@@ -8,7 +8,9 @@ message: >-
   Generate the stored name yourself, validate against an extension allowlist and
   the file's magic bytes, and store outside the document root.
 note: >-
-  Fires on move_uploaded_file whose destination references the client name.
+  Fires on move_uploaded_file whose destination references
+  $_FILES[...]["name"], the client-chosen field; tmp_name, size, type and
+  error are not client-chosen names and do not match.
   A destination built from a generated identifier does not match. The client's
   Content-Type is attacker-controlled and is not validation.
 rule:
@@ -25,7 +27,12 @@ rule:
           has:
             stopBy: end
             kind: subscript_expression
-            has:
-              stopBy: end
-              kind: variable_name
-              regex: '^\$_FILES$'
+            all:
+              - has:
+                  kind: subscript_expression
+                  has:
+                    kind: variable_name
+                    regex: '^\$_FILES$'
+              - has:
+                  kind: encapsed_string
+                  regex: '^["\x27]name["\x27]$'

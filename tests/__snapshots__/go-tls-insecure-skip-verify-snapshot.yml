@@ -14,6 +14,14 @@ snapshots:
       style: secondary
       start: 59
       end: 63
+    - source: tls.Config
+      style: secondary
+      start: 28
+      end: 38
+    - source: 'tls.Config{InsecureSkipVerify: true}'
+      style: secondary
+      start: 28
+      end: 64
   'package m; func f() { c := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true} }':
     labels:
     - source: 'InsecureSkipVerify: true'
@@ -28,6 +36,36 @@ snapshots:
       style: secondary
       start: 89
       end: 93
+    - source: tls.Config
+      style: secondary
+      start: 28
+      end: 38
+    - source: 'tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true}'
+      style: secondary
+      start: 28
+      end: 94
+  'package m; func f() { c := tls.Config{InsecureSkipVerify: true} }':
+    labels:
+    - source: 'InsecureSkipVerify: true'
+      style: primary
+      start: 38
+      end: 62
+    - source: InsecureSkipVerify
+      style: secondary
+      start: 38
+      end: 56
+    - source: 'true'
+      style: secondary
+      start: 58
+      end: 62
+    - source: tls.Config
+      style: secondary
+      start: 27
+      end: 37
+    - source: 'tls.Config{InsecureSkipVerify: true}'
+      style: secondary
+      start: 27
+      end: 63
   'package m; func f() { t := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} }':
     labels:
     - source: 'InsecureSkipVerify: true'
@@ -42,3 +80,11 @@ snapshots:
       style: secondary
       start: 92
       end: 96
+    - source: tls.Config
+      style: secondary
+      start: 61
+      end: 71
+    - source: 'tls.Config{InsecureSkipVerify: true}'
+      style: secondary
+      start: 61
+      end: 97

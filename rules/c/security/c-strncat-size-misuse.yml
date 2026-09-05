@@ -13,15 +13,16 @@ note: >-
   A correct remaining-space computation subtracts from that and does not match.
 rule:
   kind: call_expression
-  all:
-    - has:
-        field: function
-        regex: ^(strncat|strncpy)$
-    - has:
-        field: arguments
-        has:
-          any:
-            - kind: sizeof_expression
-            - all:
-                - kind: call_expression
-                - has: { field: function, regex: ^strlen$ }
+  any:
+    - pattern:
+        context: void f(void) { strncat($DST, $SRC, sizeof($DST)); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { strncat($DST, $SRC, strlen($DST)); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { strncpy($DST, $SRC, sizeof($DST)); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { strncpy($DST, $SRC, strlen($DST)); }
+        selector: call_expression

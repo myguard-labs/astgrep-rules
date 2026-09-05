@@ -62,10 +62,10 @@ snapshots:
       style: primary
       start: 6
       end: 50
-    - source: dirname(__FILE__)
+    - source: $mod
       style: secondary
-      start: 19
-      end: 36
+      start: 45
+      end: 49
     - source: require_once dirname(__FILE__) . "/" . $mod
       style: secondary
       start: 6

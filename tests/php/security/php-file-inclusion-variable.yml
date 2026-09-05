@@ -6,6 +6,7 @@ valid:
 - '<?php include ROOT . "/a.php";'
 - '<?php // include $_GET["page"];'
 - '<?php $s = "include $page;";'
+- '<?php require_once dirname(__FILE__) . "/lib.php";'
 invalid:
 - '<?php include $page;'
 - '<?php include $_GET["page"];'

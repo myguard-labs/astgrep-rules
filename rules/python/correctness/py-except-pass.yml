@@ -8,11 +8,12 @@ message: >-
   Log the exception with context, or narrow the clause to the one error that is
   genuinely expected and act on it.
 note: >-
-  Fires on an except body whose only statement is `pass` or `...`. A clause that
-  re-raises does not match. A narrow clause with a comment explaining the
+  Fires on an except body whose only statement is `pass` or `...`; a body
+  that does anything else, including a `pass` followed by real work or a
+  `pass` nested in a loop, does not match. A narrow clause with a comment explaining the
   deliberate ignore is the routine dismissal; keep it narrow. Info severity
   because that dismissal is common: measured across labs/nginx-cache-turbo-module
-  and labs/nginx-http-shield-module, all 34 first-party hits were narrow typed
+  and labs/nginx-http-shield-module, all 34 first-party hits were narrowly typed
   clauses (BrokenPipeError, SystemExit, OSError), mostly in CI tooling. The bare
   form is the dangerous one and lives in py-bare-except at warning.
 rule:
@@ -20,12 +21,18 @@ rule:
     - kind: except_clause
     - has:
         kind: block
-        has:
-          stopBy: end
-          any:
-            - kind: pass_statement
-            - kind: ellipsis
-    - not:
-        has:
-          stopBy: end
-          kind: raise_statement
+        all:
+          # Exactly one statement, ignoring comments, and it is pass or ...
+          - has:
+              nthChild:
+                position: 1
+                ofRule: {not: {kind: comment}}
+              any:
+                - kind: pass_statement
+                - kind: expression_statement
+                  has: {kind: ellipsis}
+          - not:
+              has:
+                nthChild:
+                  position: 2
+                  ofRule: {not: {kind: comment}}

@@ -1,5 +1,19 @@
 id: go-http-no-timeout
 snapshots:
+  'package m; func f() { c := &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: time.Second}} }':
+    labels:
+    - source: 'http.Client{Transport: &http.Transport{ResponseHeaderTimeout: time.Second}}'
+      style: primary
+      start: 28
+      end: 103
+    - source: http.Client
+      style: secondary
+      start: 28
+      end: 39
+    - source: '{Transport: &http.Transport{ResponseHeaderTimeout: time.Second}}'
+      style: secondary
+      start: 39
+      end: 103
   package m; func f() { c := &http.Client{} }:
     labels:
     - source: http.Client{}

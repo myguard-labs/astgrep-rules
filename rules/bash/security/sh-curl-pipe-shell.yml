@@ -9,25 +9,64 @@ message: >-
   half a script. Fetch to a file, verify a published checksum or signature, then
   run it.
 note: >-
-  Fires on curl or wget piped into sh/bash/zsh/python, including via sudo.
+  Fires when curl writes its response to stdout, or wget explicitly selects
+  stdout, and that stream reaches a bare sh/bash/zsh/python interpreter.
+  Also covers sudo with no options or the common no-argument -E/-H/-n/-S
+  options. Commands that select an output file, interpreters given a script
+  path, and sudo tee/install do not match.
   Vendor install instructions use this shape; that is the reason to pin and
   verify locally rather than a reason to dismiss it. An interpreter given an
   inline script (python3 -c, perl -e) does not match: stdin is data there, not
   the code being run.
+utils:
+  interpreter:
+    regex: '^(sh|bash|zsh|ksh|dash|python|python3|perl|ruby)$'
+  stdout-fetch:
+    kind: command
+    any:
+      - all:
+          - has: {field: name, regex: '^curl$'}
+          - not:
+              has:
+                field: argument
+                # curl short -o/-O forms and their common no-argument prefixes,
+                # plus the equivalent long output-file options.
+                regex: '^(?:-o.*|-O.*|-[sSfLvikN]*[oO].*|--output(?:=.*)?|--remote-name|--remote-name-all|--remote-header-name)$'
+      - all:
+          - has: {field: name, regex: '^wget$'}
+          - any:
+              - has:
+                  field: argument
+                  regex: '^(?:-[A-Za-z]*O-|--output-document=-)$'
+              - all:
+                  - has: {field: argument, regex: '^(-O|--output-document)$'}
+                  - has: {field: argument, regex: '^-$'}
+  stdin-interpreter:
+    kind: command
+    any:
+      # A direct, bare interpreter reads the pipe as program text.
+      - all:
+          - has: {field: name, matches: interpreter}
+          - not:
+              has: {field: argument, regex: '.+'}
+      # With no sudo options, the command word is its first argument.
+      - all:
+          - has: {field: name, regex: '^sudo$'}
+          - has: {nthChild: 2, matches: interpreter}
+          - not:
+              has: {nthChild: 3, regex: '.+'}
+      # These common sudo options take no argument, so the next word is the
+      # command rather than an option value.
+      - all:
+          - has: {field: name, regex: '^sudo$'}
+          - has: {nthChild: 2, regex: '^-[EHnS]+$'}
+          - has: {nthChild: 3, matches: interpreter}
+          - not:
+              has: {nthChild: 4, regex: '.+'}
 rule:
   kind: pipeline
   all:
     - has:
-        kind: command
-        has:
-          field: name
-          regex: '^(curl|wget)$'
+        matches: stdout-fetch
     - has:
-        kind: command
-        all:
-          - has:
-              field: name
-              regex: '^(sh|bash|zsh|ksh|dash|python|python3|perl|ruby|sudo)$'
-          - not:
-              has:
-                regex: '^-(c|e)$'
+        matches: stdin-interpreter

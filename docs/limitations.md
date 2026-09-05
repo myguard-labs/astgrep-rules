@@ -63,8 +63,14 @@ resolution and remain outside this matcher.
 ## Added rules
 
 - `go-tls-insecure-skip-verify` and `py-requests-verify-false` match a literal
-  `true`/`False`. A value supplied through a variable, config field or build flag
-  is not detected; that path needs configuration review.
+  `true`/`False`. The Go rule requires the field to sit in the nearest
+  enclosing `tls.Config` composite literal; another struct carrying the same
+  field name does not match. Post-construction assignments are not matched
+  because the receiver type is unavailable syntactically. The Python rule
+  matches `requests`, `requests.Session()`, and lexically named local
+  session/client receivers; object attributes and aliases under other names are
+  missed. A value supplied through a variable, config field or build flag is
+  not detected; that path needs configuration review.
 - `go-defer-in-loop` uses the nearest enclosing function as the boundary, so a
   defer inside a closure or goroutine within the loop is correctly excluded. It
   does not model whether the loop is bounded or the resource cheap, and it does
@@ -74,40 +80,44 @@ resolution and remain outside this matcher.
   cannot see `TMPDIR` overrides or a path already produced by `mkdtemp`.
 - `php-file-inclusion-variable` fires when a variable, subscript, call or
   interpolated string reaches the included path. A path built only from
-  literals, constants and `__DIR__` does not match. It does not model taint, so
+  literals, constants, `__DIR__` or `dirname(__FILE__)` does not match; any
+  other call in the path still does. It does not model taint, so
   an internal, non-request variable still matches and needs review.
-- `c-strncat-size-misuse` keys on `sizeof`/`strlen` appearing as the length
-  argument itself; the correct remaining-space forms subtract and do not match.
-  It cannot confirm the sizeof operand is the same object as the destination,
-  and an array passed as a pointer parameter makes `sizeof` wrong for reasons
-  this rule does not diagnose.
-
-`c-strncat-size-misuse` snapshots show `sizeof(dst)` as a secondary label twice:
-the nested `has` annotates the same range at the argument-list and operand
-levels. Scan output reports a single finding per call; the duplicate is a label
-artifact, not a double match.
+- `c-strncat-size-misuse` binds the `sizeof`/`strlen` operand to the destination
+  argument and matches only when that expression is the complete length
+  argument. Correct remaining-space forms subtract and do not match. An array
+  passed as a pointer parameter still makes `sizeof` wrong for a different
+  reason this rule does not diagnose.
 
 ## Second batch
 
-- `go-http-no-timeout` keys on field names in the literal. A client configured
-  after construction, or one whose Transport carries its own deadlines, is not
-  detected; a literal naming any `*Timeout` field is treated as handled even if
-  the value is zero.
+- `go-http-no-timeout` keys on field names in an `http.Client` or
+  `http.Server` literal; the package qualifier is required, so an unrelated
+  `Client` type does not match and a dot-imported one is missed. Only direct
+  `*Timeout` fields count; a nested `Transport` timeout does not satisfy the
+  outer client. A client configured after construction, or one whose transport
+  carries its own deadlines, is not detected; a literal naming any direct
+  `*Timeout` field is treated as handled even if the value is zero.
 - `go-error-swallowed` cannot tell an error from any other discarded return, so
   it approximates: an assignment binding `err*`, `e` or `ok*` is excluded, as
-  are discards of the common cleanup calls (Close/Flush/Sync/Kill/Wait/Remove/
-  Set*Deadline). Measured on labs/gozer, labs/gyzor and labs/mailstrix, most
-  raw matches came from vendored dependencies; scope scans to first-party
+  is an assignment whose right-hand expressions are all common cleanup calls
+  (Close/Flush/Sync/Kill/Wait/Remove/Set*Deadline). A mixed right-hand side
+  still matches. Measured on labs/gozer, labs/gyzor and labs/mailstrix, most raw
+  matches came from vendored dependencies; scope scans to first-party
   directories. Test files legitimately discard results and dominate the rest.
-- `py-jwt-decode-unverified` matches any `.decode` call carrying the disabling
-  argument, so a non-JWT `decode` with a `verify` keyword would also match. It
-  does not detect verification disabled through a variable or a prebuilt options
-  dict.
+- `py-jwt-decode-unverified` matches `jwt.decode` and bare `decode` when the
+  module has a top-level exact `from jwt import decode`. Function-local imports,
+  aliases and shadowing are not resolved. Verification disabled through a
+  variable or a prebuilt options dict is also not detected.
 - `py-mutable-default-arg` flags the literal default. It cannot tell whether the
   parameter is ever mutated, so a read-only default still matches; the fix is
   cheap either way.
 - `php-weak-crypto` is a call inventory. md5/sha1 over non-secret data is a
   legitimate use and matches; the rule cannot see what the argument holds.
+  `crypt()` also matches because the rule cannot inspect the salt-selected
+  algorithm and cost. A suitable salt can select a strong password algorithm,
+  but `password_hash()` is preferred for new code because it selects the
+  algorithm, salt and cost safely.
 - `c-return-stack-address` binds the returned identifier to a same-function
   declaration without a storage class, so a `static` local does not match. It
   does not resolve shadowing, so a name also declared in an inner scope, or one
@@ -120,27 +130,38 @@ scored over 39,080 CVE records) after mapping the existing pack for gaps.
 See <https://cwe.mitre.org/data/definitions/1435.html>.
 
 - `php-echo-superglobal-xss` covers CWE-79, rank 1. It matches a superglobal
-  reaching echo/print and clears the match when a recognised escaper wraps the
-  value in the same statement. An escaper applied earlier and stored in a
-  variable is not visible to it, and a value echoed into a non-HTML response is
+  reaching echo/print and clears the match only when a recognised HTML or URL
+  escaper wraps that value itself; an escaper around another operand of the
+  same statement does not count, and `json_encode` is not treated as an
+  escaper because it leaves `<` alone without `JSON_HEX_TAG`. An escaper
+  applied earlier and stored in a variable is not visible to it, and a value
+  echoed into a non-HTML response is
   a legitimate dismissal.
 - `php-upload-unvalidated-name` covers CWE-434. `nthChild: 2` restricts the
-  match to the destination argument, so the legitimate
-  `$_FILES[...]["tmp_name"]` source does not fire. It cannot see validation
+  match to the destination argument and the nested key must be `"name"`, so
+  the legitimate `$_FILES[...]["tmp_name"]` source, and a destination built
+  from `size`, `type` or `error`, do not fire. It cannot see validation
   performed earlier in the function.
 - `go-zip-slip` covers CWE-22. It matches a `.Name` field read inside
   filepath.Join, the archive-entry shape, and excludes a `.Name()` method call
   because `os.DirEntry` over a local directory cannot carry traversal — that
   distinction came from a false positive on
-  labs/mailstrix/internal/mailstrix/scanner.go. A containment check on a later
-  line is not seen; Go 1.24+ `os.OpenRoot` is the recommended fix and all
+  labs/mailstrix/internal/mailstrix/scanner.go. `filepath.Clean` on the entry
+  name is not containment and does not suppress the match. The `.Name`
+  receiver type is unresolved, so a trusted non-archive struct can
+  false-positive. A containment check on a later line is not seen; Go 1.24+
+  `os.OpenRoot` is the recommended fix and all
   first-party Go modules here are 1.24 or newer.
 - `py-ssrf-request-fstring` covers CWE-918 and flags an interpolated URL, not a
-  proven SSRF. An interpolated path under a fixed host is the common benign
-  shape.
+  proven SSRF. The receiver is matched lexically (`requests`, `httpx`,
+  `urllib3`, `aiohttp`, a local `session`/`client` name, or bare `urlopen`), so
+  a dict or cache `.get()` with an interpolated key does not match. Object
+  attributes and clients held under other names are missed. An interpolated
+  path under a fixed host is the common benign shape.
 - `py-mark-safe-interpolation` covers CWE-79 in Django: interpolation happens
   before `mark_safe` marks the result, so the payload is already embedded.
-  `format_html` is the fix. `mark_safe` over a constant does not match.
+  `format_html` is the fix. `mark_safe` over a constant, including a
+  concatenation of literals only, does not match.
 - `c-free-without-null` is hygiene for CWE-416/CWE-415, not a use-after-free
   finding: ast-grep models no dataflow, so it cannot prove a later use. It is
   `info` severity because short-lived scopes legitimately free without
@@ -155,27 +176,40 @@ A03 Software Supply Chain Failures and A10 Mishandling of Exceptional
 Conditions. SSRF was absorbed into A01 Broken Access Control in this edition.
 See <https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/>.
 
-- `py-bare-except` and `py-except-pass` cover A10/CWE-396/CWE-390. Both exclude
-  a clause that re-raises, the documented cleanup idiom; ruff E722 and flake8
+- `py-bare-except` and `py-except-pass` cover A10/CWE-396/CWE-390.
+  `py-bare-except` excludes only a bare `raise`, the documented cleanup idiom;
+  `raise Other()` replaces KeyboardInterrupt or SystemExit and matches.
+  `py-except-pass` matches only a body whose single statement is `pass` or
+  `...`, comments aside, so `pass` followed by real work or nested in a loop
+  does not match; ruff E722 and flake8
   differ on that case, and PEP 760 proposed removing the bare form outright.
-  `py-except-pass` is `info` because narrow typed clauses that deliberately
+  `py-except-pass` is `info` because narrowly typed clauses that deliberately
   ignore an error are common and legitimate: all 34 first-party hits measured
   were typed (BrokenPipeError, SystemExit, OSError), mostly CI tooling.
   `py-bare-except` stays `warning` — it catches KeyboardInterrupt and
   SystemExit, so it is the form that actually fails open.
 - `go-unchecked-type-assertion` covers CWE-476. It distinguishes `v := x.(T)`
   from `v, ok := x.(T)` by the arity of the left expression list, so comma-ok
-  and type switches do not match. It cannot tell whether the dynamic type is
-  already guaranteed, so an assertion immediately after a type switch still
-  matches. Measured 6 first-party hits, all genuine single-value assertions.
+  and type switches do not match. A parenthesized assertion in a `var`
+  comma-ok declaration, such as `var s, ok = (i.(string))`, can still report.
+  The rule cannot tell whether the dynamic type is already guaranteed, so an
+  assertion immediately after a type switch still matches. Measured 6
+  first-party hits, all genuine single-value assertions.
 - `nginx-unchecked-array-push` checks for the guard rather than inventorying
-  call sites as `nginx-unchecked-palloc` does: it matches only when no
-  comparison of the assigned name follows in the same block. It does not
-  confirm the comparison is against NULL, and a guard in a called helper is
-  invisible. Measured zero hits across the nginx modules here, which check
+  call sites as `nginx-unchecked-palloc` does and covers both assignment and
+  declaration-initializer forms. Suppression requires the immediately
+  following `if` either to test non-NULL and scope the use, or to detect NULL
+  and directly return or `goto`. Unrelated comparisons and NULL checks that
+  merely log still match. Later guards remain advisory matches, and a guard in
+  a called helper is invisible. Measured zero hits across the nginx modules
+  here, which check
   every push; upstream nginx tracks the same omission in nginx/nginx#526.
 - `php-strcmp-loose-compare` and `php-hash-loose-compare` cover CWE-697 type
-  juggling. The first is an authentication bypass before PHP 8, where an array
+  juggling. They match `==`, `!=` and `<>` only when the relevant call is a
+  direct, optionally parenthesized operand, so a call nested in another
+  expression does not count. Only one optional parenthesis layer is supported;
+  redundantly nested parentheses can be missed. The first is an authentication
+  bypass before PHP 8, where an array
   argument makes strcmp return NULL and NULL == 0 holds; PHP 8 raises a
   TypeError instead, but the comparison stays wrong on any pre-8 deployment.
   The second covers magic hashes, where two 0e-prefixed digit strings compare
@@ -190,28 +224,48 @@ registry, SBOM and provenance territory that no AST matcher can reach; these
 two rules cover only its code-level slice.
 
 - `sh-curl-pipe-shell` matches a fetch piped into an interpreter. An interpreter
-  given an inline script (`python3 -c`, `perl -e`) is excluded: stdin there is
-  data, not the code being run. That exclusion came from a false positive on
-  tools/ollama-ask.sh, which pipes JSON into `python3 -c`. It cannot see whether
-  a checksum is verified elsewhere in the script.
-- `sh-tls-verify-disabled` matches the flag, not the intent. `--cacert`/`--cert`
-  pointing at a private CA is the correct alternative and does not match.
+  must be bare: script-path and inline-script forms do not match. Curl must not
+  select an output file, while wget must explicitly select stdout. `sudo`
+  supports no options or the common no-argument `-E`, `-H`, `-n` and `-S`;
+  `sudo tee` and `sudo install` do not match. The rule cannot see whether a
+  checksum is verified elsewhere in the script.
+- `sh-tls-verify-disabled` matches the flag, not the intent, and binds each
+  flag to the command that defines it: curl `-k`/`--insecure` (inside a short
+  cluster of common no-argument flags such as `-sSk` too; argument-taking forms
+  such as `-ok` and `-Hk` are not treated as `-k`, and `-K` is the config file),
+  wget `--no-check-certificate`, and pip `--trusted-host` with or without
+  `=host`. wget `-k` is `--convert-links` and does not match. `curl --cacert`
+  or `--capath`
+  and `pip --cert` pointing at a private CA bundle are the correct alternative
+  and do not match; `curl --cert` is a client certificate, not a trust option.
 - `go-context-cancel-leak` fires only when cancel is assigned to the blank
   identifier. A bound cancel that is never deferred is the more common defect
   and is invisible to this matcher; `go vet` does catch the lostcancel case.
-- `php-insecure-cookie-flags` checks the options-array form and calls too short
-  to carry flags. The seven-argument positional form is deliberately NOT
-  checked: its flags are unnamed booleans, so a syntactic matcher cannot tell a
-  flagged call from an unflagged one. The fixture carries that case under
-  `valid` with a comment marking it a known gap rather than an endorsement.
-- `py-tarfile-extractall` covers CWE-22. Per PEP 706, Python 3.12-3.13 emit a
+- `php-insecure-cookie-flags` checks the options-array form, reporting when
+  either `httponly` or `secure` is absent or not literally `true`, and the
+  legacy positional form. Positional arguments six and seven must both be the
+  literal `true`; calls too short to carry those flags also match.
+- `py-tarfile-extractall` covers CWE-22. The receiver must be bound from
+  `tarfile.open`, `tarfile.TarFile` or `tarfile.TarFile.open` by a preceding
+  assignment in the same statement list, the statement list containing an
+  enclosing `if`, or the nearest enclosing `with`; alternatively, the call may
+  be chained directly on that open. A simple intervening assignment in the
+  relevant statement list stops the match. Other control-flow bindings and
+  reassignments, and bindings in another file, are not modelled, so the rule is
+  a warning rather than an error. `zipfile.ZipFile.extractall` has no `filter`
+  parameter and is outside this tar-specific rule; Python only attempts to
+  prevent path traversal there and still requires prior inspection for
+  untrusted ZIP archives. The `filter` keyword must be on the extract call
+  itself, not on a nested call.
+  Per PEP 706, Python 3.12-3.13 emit a
   DeprecationWarning but still extract with the `fully_trusted` filter, so a
   match on those versions is exploitable; 3.14+ defaults to `data` and a match
   there is already safe. Check the interpreter floor before dismissing. Found
   one true positive outside this repo, at tools/patch-management.py:36.
-- `c-scanf-unbounded-string` matches a `%s` or `%[` conversion with no field
-  width in the scanf family. It reads the format literal, so a format passed
-  through a variable is not seen.
+- `c-scanf-unbounded-string` matches a `%s`, `%[`, `%ls` or `%l[` conversion
+  with no field width in the scanf family. An assignment-suppressed `%*s` and
+  an escaped `%%s` write nothing and do not match. It reads the format literal,
+  so a format passed through a variable is not seen.
 
 ## Sixth batch
 
@@ -221,7 +275,8 @@ generic catalog.
 
 - `nginx-unchecked-module-ctx` checks for the guard rather than inventorying
   call sites: a match means no NULL comparison or truthiness test of the
-  assigned name precedes the first member access in the same block. Measured
+  assigned name precedes the first member access in the same block. Both the
+  assignment form and the declaration-initializer form are covered. Measured
   34 hits across `modules/nginx/*/src` and 1 in first-party code, against 274
   total fetch sites — the check is selective, not a census. All 34 third-party
   hits were confirmed to have no guard within 25 lines. It cannot prove the
@@ -230,10 +285,15 @@ generic catalog.
   post-condition) is safe and carries a comment stating the invariant, which is
   the documented way to dismiss a match. A handler installed only after the
   context exists is the common benign shape.
-- `c-send-without-nosignal` reads only the flags argument, so a program that
-  installs `signal(SIGPIPE, SIG_IGN)` at startup or sets `SO_NOSIGPIPE` on the
-  socket is safe and still matches. It does not model which of the three
-  defences is present. Measured 3 first-party hits, all in
+- `c-send-without-nosignal` covers `send()` and `sendmsg()`; `sendto()` is
+  the datagram call in practice and SIGPIPE is a stream-socket concern, so a
+  stream socket written through `sendto()` with a NULL address is not seen. It
+  considers the flags protected only when `MSG_NOSIGNAL` is used alone or in an
+  OR-only identifier/macro mask; clearing, masking, toggling, arithmetic and
+  conditional expressions still match. It reads only that argument, so a
+  program that installs `signal(SIGPIPE, SIG_IGN)` at startup or sets
+  `SO_NOSIGPIPE` on the socket is safe and still matches. It does not model
+  which of the three defences is present. Measured 3 first-party hits, all in
   `labs/nginx-label-autoconf-module` active health probes, where that module
   has no `SIGPIPE`, `MSG_NOSIGNAL` or `SO_NOSIGPIPE` reference anywhere — the
   shape the recurring-findings catalog flags as worst, since the crash lands on
@@ -251,8 +311,9 @@ rather than shipped: `ngx_cpymem`/`ngx_movemem` with a discarded return matched
 is not separable at the AST level from the documented `p = ngx_sprintf(p, ...)`
 chaining idiom, which accounts for all 394 assignment sites sampled.
 
-- `nginx-atoi-unchecked` matches an ngx_atoi-family assignment with no binary
-  comparison of the assigned name anywhere in the enclosing function. The
+- `nginx-atoi-unchecked` matches an ngx_atoi-family assignment or declaration
+  initializer with no binary comparison of the assigned name anywhere in the
+  enclosing function. The
   function-wide guard search is deliberate: an earlier draft that demanded a
   literal `NGX_ERROR` comparison, or that searched only sibling statements,
   produced 55 hits with 13 first-party matches that were all false positives —
@@ -365,9 +426,11 @@ first-party code before shipping;
   and a bare re-raise. It requires the raised expression to be a call, so
   `raise SomeError` (a class, no call) is a false negative; `raise SomeError()`
   and `raise mod.SomeError("x")` both match, so the gap is narrow. A raise
-  inside a function, lambda or class body defined within the handler is
-  excluded — that code runs later, with no active exception, where `from e`
-  would be wrong and the `as e` binding is already deleted. A raise inside a
+  inside a function or lambda defined within the handler is excluded — that
+  code runs later, with no active exception, where `from e` would be wrong and
+  the `as e` binding is already deleted. A class body defined in the handler
+  runs immediately, while the exception is still active; it is excluded only
+  as a matcher boundary, not because it is deferred. A raise inside a
   `with` block in the handler still runs under the active exception and does
   match.
 - `py-zip-without-strict` covers ruff B905/PEP 618. Measured 9 first-party
@@ -383,8 +446,7 @@ first-party code before shipping;
   the `kind: identifier` beside it is redundant and kept only as a guard
   against a future loosening of that anchor. A locally shadowed `zip` still
   matches — the rule resolves no bindings. Snapshots show the second argument
-  as a duplicated secondary label, the same nested-`has` artifact recorded for
-  `c-strncat-size-misuse`.
+  as a duplicated secondary label.
 
 Measured rejections, recorded so the seams are not re-mined:
 

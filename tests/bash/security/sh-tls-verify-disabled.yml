@@ -5,8 +5,14 @@ valid:
 - wget https://example.com/f
 - pip install --cert /etc/ssl/ca.pem requests
 - pip install requests
+- wget -k https://example.com/page.html
+- curl -K /etc/curlrc https://example.com/f
+- curl -ok https://example.com/f
+- curl -Hk https://example.com/f
 invalid:
 - curl -k https://example.com/f -o f
 - curl --insecure https://example.com/i.sh -o i.sh
 - wget --no-check-certificate https://example.com/f
 - pip install --trusted-host pypi.org requests
+- pip install --trusted-host=pypi.org requests
+- curl -sSk https://example.com/f -o f

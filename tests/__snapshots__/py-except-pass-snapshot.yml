@@ -44,6 +44,28 @@ snapshots:
     try:
         f()
     except ValueError:
+        # deliberate: optional dependency
+        pass
+  : labels:
+    - source: |-
+        except ValueError:
+            # deliberate: optional dependency
+            pass
+      style: primary
+      start: 13
+      end: 78
+    - source: pass
+      style: secondary
+      start: 74
+      end: 78
+    - source: pass
+      style: secondary
+      start: 74
+      end: 78
+  ? |
+    try:
+        f()
+    except ValueError:
         ...
   : labels:
     - source: |-
@@ -51,6 +73,10 @@ snapshots:
             ...
       style: primary
       start: 13
+      end: 39
+    - source: '...'
+      style: secondary
+      start: 36
       end: 39
     - source: '...'
       style: secondary

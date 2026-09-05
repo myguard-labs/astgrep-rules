@@ -8,7 +8,9 @@ message: >-
   Set Timeout on a client; set ReadHeaderTimeout/ReadTimeout and WriteTimeout on
   a server.
 note: >-
-  Fires on a literal with no timeout field named. A client whose Transport
+  Fires on an http.Client or http.Server literal with no timeout field
+  named; the package qualifier is required, so an unrelated Client or Server
+  type does not match. A client whose Transport
   carries its own timeouts, or a server wrapped by one that does, still needs
   review; the field name is the only signal available here.
 rule:
@@ -16,14 +18,16 @@ rule:
   all:
     - has:
         field: type
-        regex: '^(http\.)?(Client|Server)$'
+        regex: '^http\.(Client|Server)$'
     - has:
         field: body
         kind: literal_value
     - not:
         has:
-          stopBy: end
-          kind: keyed_element
+          field: body
+          kind: literal_value
           has:
-            field: key
-            regex: 'Timeout$'
+            kind: keyed_element
+            has:
+              field: key
+              regex: 'Timeout$'

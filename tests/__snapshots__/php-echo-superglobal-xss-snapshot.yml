@@ -40,6 +40,26 @@ snapshots:
       style: secondary
       start: 11
       end: 17
+  <?php echo htmlspecialchars($safe) . $_GET["q"];:
+    labels:
+    - source: echo htmlspecialchars($safe) . $_GET["q"];
+      style: primary
+      start: 6
+      end: 48
+    - source: $_GET
+      style: secondary
+      start: 37
+      end: 42
+  <?php echo json_encode($_GET["q"]);:
+    labels:
+    - source: echo json_encode($_GET["q"]);
+      style: primary
+      start: 6
+      end: 35
+    - source: $_GET
+      style: secondary
+      start: 23
+      end: 28
   <?php print $_REQUEST["msg"];:
     labels:
     - source: print $_REQUEST["msg"]

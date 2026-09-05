@@ -5,7 +5,9 @@ valid:
 - mark_safe(STATIC_HTML)
 - escape(value)
 - '# mark_safe(f"<b>{name}</b>")'
+- mark_safe("<b>" + "</b>")
 invalid:
+- mark_safe("<p>" + obj.body + "</p>")
 - mark_safe(f"<b>{name}</b>")
 - mark_safe("<b>" + name + "</b>")
 - 'mark_safe("<b>{}</b>".format(name))'

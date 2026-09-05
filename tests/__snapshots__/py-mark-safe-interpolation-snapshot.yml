@@ -10,6 +10,10 @@ snapshots:
       style: secondary
       start: 0
       end: 9
+    - source: name
+      style: secondary
+      start: 18
+      end: 22
     - source: '"<b>" + name + "</b>"'
       style: secondary
       start: 10
@@ -40,6 +44,28 @@ snapshots:
       style: secondary
       start: 10
       end: 34
+  mark_safe("<p>" + obj.body + "</p>"):
+    labels:
+    - source: mark_safe("<p>" + obj.body + "</p>")
+      style: primary
+      start: 0
+      end: 36
+    - source: mark_safe
+      style: secondary
+      start: 0
+      end: 9
+    - source: obj.body
+      style: secondary
+      start: 18
+      end: 26
+    - source: '"<p>" + obj.body + "</p>"'
+      style: secondary
+      start: 10
+      end: 35
+    - source: '"<p>" + obj.body + "</p>"'
+      style: secondary
+      start: 10
+      end: 35
   mark_safe(f"<b>{name}</b>"):
     labels:
     - source: mark_safe(f"<b>{name}</b>")

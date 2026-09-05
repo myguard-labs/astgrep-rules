@@ -4,9 +4,18 @@ valid:
 - 'jwt.decode(token, key, options={"verify_signature": True})'
 - jwt.decode(token, key, algorithms=["HS256"], verify=True)
 - base64.decode(data)
+- codec.decode(data, verify=False)
+- decode(token, verify=False)
+- |
+  def configure_decoder():
+      from jwt import decode
+  decode(token, verify=False)
 - '# jwt.decode(token, verify=False)'
 - s = 'jwt.decode(token, verify=False)'
 invalid:
 - jwt.decode(token, verify=False)
+- |
+  from jwt import decode
+  decode(token, verify=False)
 - 'jwt.decode(token, key, options={"verify_signature": False})'
 - jwt.decode(token, key, algorithms=["HS256"], verify=False)

@@ -2,15 +2,19 @@ id: c-send-without-nosignal
 language: c
 severity: warning
 message: >-
-  send()/sendto()/sendmsg() called with no MSG_NOSIGNAL in the flags. The default
+  send()/sendmsg() called with no MSG_NOSIGNAL in the flags. The default
   SIGPIPE action terminates the process, so a peer that closes the connection
   first kills the writer instead of returning EPIPE. Pass MSG_NOSIGNAL, set
   SO_NOSIGPIPE on the socket, or install a process-wide SIG_IGN at startup —
   and check which one this program actually has rather than assuming a library
   did it.
 note: >-
-  Advisory: the rule reads the flags argument textually and accepts any
-  expression mentioning MSG_NOSIGNAL, so a program that installs
+  Advisory: sendto() is not matched because it is the datagram call in
+  practice and SIGPIPE is a stream-socket concern; a stream socket written
+  through sendto() with a NULL address is left to review. The rule reads
+  the flags argument syntactically and accepts MSG_NOSIGNAL alone or an
+  OR-only mask containing it. Expressions that clear, mask, toggle or
+  conditionally add the bit still match. A program that installs
   signal(SIGPIPE, SIG_IGN) at startup or sets SO_NOSIGPIPE on the socket is safe
   and still matches. Worst in code whose purpose is provoking the peer into
   closing — active health probes, test probers, fuzz drivers, protocol scanners
@@ -18,19 +22,20 @@ note: >-
   reads as a missing test rather than a bug. Portability note: MSG_NOSIGNAL is
   POSIX-2008 and Linux; macOS uses the SO_NOSIGPIPE sockopt instead.
 rule:
-  kind: call_expression
   any:
-    - all:
-        - has: {field: function, regex: '^(send|sendto)$'}
-        - has:
-            field: arguments
-            has:
-              nthChild: 4
-              not: {regex: 'MSG_NOSIGNAL'}
-    - all:
-        - has: {field: function, regex: '^sendmsg$'}
-        - has:
-            field: arguments
-            has:
-              nthChild: 3
-              not: {regex: 'MSG_NOSIGNAL'}
+    - pattern:
+        context: void f(void) { send($FD, $BUF, $LEN, $FLAGS); }
+        selector: call_expression
+    - pattern:
+        context: void f(void) { sendmsg($FD, $MSG, $FLAGS); }
+        selector: call_expression
+constraints:
+  FLAGS:
+    not:
+      matches: nosignal-enabled
+utils:
+  nosignal-enabled:
+    all:
+      - regex: '(^|[^A-Za-z0-9_])MSG_NOSIGNAL([^A-Za-z0-9_]|$)'
+      # Only identifiers/constants ORed together are unconditionally safe.
+      - regex: '^\(*[A-Za-z_][A-Za-z0-9_]*(?:\s*\|\s*[A-Za-z_][A-Za-z0-9_]*)*\)*$'

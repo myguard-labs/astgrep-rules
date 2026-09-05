@@ -35,6 +35,35 @@ snapshots:
       end: 110
   ? |
     static ngx_int_t
+    initialized(ngx_str_t *v)
+    {
+        ngx_int_t  n = ngx_atoi(v->data, v->len);
+
+        return n;
+    }
+  : labels:
+    - source: ngx_int_t  n = ngx_atoi(v->data, v->len);
+      style: primary
+      start: 49
+      end: 90
+    - source: n
+      style: secondary
+      start: 60
+      end: 61
+    - source: ngx_atoi
+      style: secondary
+      start: 64
+      end: 72
+    - source: ngx_atoi(v->data, v->len)
+      style: secondary
+      start: 64
+      end: 89
+    - source: n = ngx_atoi(v->data, v->len)
+      style: secondary
+      start: 60
+      end: 89
+  ? |
+    static ngx_int_t
     offset(ngx_str_t *v, ngx_str_t *ret)
     {
         ngx_int_t  offs;

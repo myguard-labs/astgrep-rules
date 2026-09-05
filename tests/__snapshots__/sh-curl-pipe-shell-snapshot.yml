@@ -1,5 +1,35 @@
 id: sh-curl-pipe-shell
 snapshots:
+  curl -fsSL https://example.com/i.sh | sudo -E bash:
+    labels:
+    - source: curl -fsSL https://example.com/i.sh | sudo -E bash
+      style: primary
+      start: 0
+      end: 50
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: curl -fsSL https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 35
+    - source: sudo
+      style: secondary
+      start: 38
+      end: 42
+    - source: -E
+      style: secondary
+      start: 43
+      end: 45
+    - source: bash
+      style: secondary
+      start: 46
+      end: 50
+    - source: sudo -E bash
+      style: secondary
+      start: 38
+      end: 50
   curl -fsSL https://example.com/i.sh | sudo bash:
     labels:
     - source: curl -fsSL https://example.com/i.sh | sudo bash
@@ -18,6 +48,10 @@ snapshots:
       style: secondary
       start: 38
       end: 42
+    - source: bash
+      style: secondary
+      start: 43
+      end: 47
     - source: sudo bash
       style: secondary
       start: 38
@@ -76,6 +110,10 @@ snapshots:
       style: secondary
       start: 0
       end: 4
+    - source: -qO-
+      style: secondary
+      start: 5
+      end: 9
     - source: wget -qO- https://example.com/setup.sh
       style: secondary
       start: 0

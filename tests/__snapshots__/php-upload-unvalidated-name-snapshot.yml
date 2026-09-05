@@ -14,6 +14,14 @@ snapshots:
       style: secondary
       start: 67
       end: 74
+    - source: $_FILES["f"]
+      style: secondary
+      start: 67
+      end: 79
+    - source: '"name"'
+      style: secondary
+      start: 80
+      end: 86
     - source: $_FILES["f"]["name"]
       style: secondary
       start: 67
@@ -40,6 +48,14 @@ snapshots:
       style: secondary
       start: 48
       end: 55
+    - source: $_FILES["f"]
+      style: secondary
+      start: 48
+      end: 60
+    - source: '"name"'
+      style: secondary
+      start: 61
+      end: 67
     - source: $_FILES["f"]["name"]
       style: secondary
       start: 48

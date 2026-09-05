@@ -86,6 +86,15 @@ valid:
         return "ngx_atoi";
     }
 invalid:
+  # A declaration initializer must be checked just like a later assignment.
+  - |
+    static ngx_int_t
+    initialized(ngx_str_t *v)
+    {
+        ngx_int_t  n = ngx_atoi(v->data, v->len);
+
+        return n;
+    }
   # Result used as a length with no validation at all.
   - |
     static ngx_int_t

@@ -1,27 +1,150 @@
 id: py-tarfile-extractall
 language: python
-severity: error
+severity: warning
 message: >-
   Archive extracted without a filter — a member named ../../etc/cron.d/x, or an
-  absolute path, is written outside the destination (CWE-22). Python 3.12+ takes
-  filter="data", which rejects traversal, absolute paths, links and device
-  files; on 3.11 and older, validate every member path against the destination
-  before extracting.
+  absolute path, can be written outside the destination (CWE-22). Python 3.12 and 3.13
+  accept filter="data", which rejects traversal, absolute paths,
+  out-of-destination links and device files, and 3.14 defaults to it; on 3.11
+  and older, validate every member path against the destination before
+  extracting. No built-in filter makes untrusted archives safe without limits
+  and prior inspection.
 note: >-
-  Fires on extractall/extract with no filter argument. PEP 706 made
-  filter="data" the default in 3.14, so a match on a codebase pinned to 3.14+ is
-  already safe — check the floor in pyproject before dismissing, since the same
-  call on an older interpreter is exploitable.
+  Fires on extractall/extract with no filter argument on the call itself,
+  where the receiver has a preceding tarfile.open, tarfile.TarFile or
+  tarfile.TarFile.open assignment in the same statement list or the statement
+  list containing an enclosing if, is bound by the nearest enclosing with
+  statement, or the call is chained directly on that open. A simple intervening
+  assignment in the relevant statement list stops the match. Other control-flow
+  bindings and reassignments, or bindings in another file, are not modelled, so
+  confirm the receiver type.
+  zipfile.ZipFile.extractall has no filter parameter and is outside this
+  tar-specific rule; Python still requires prior inspection of untrusted ZIP
+  archives. Python 3.12 and 3.13 accept filter="data" but do not default to it;
+  PEP 706 made it the default in 3.14, so a match on a codebase pinned to 3.14+
+  is already safe from this rule's path-traversal concern — check the floor in
+  pyproject before dismissing, since the same call on an older interpreter is
+  exploitable.
+utils:
+  # The filter keyword must be on this call, not on a nested one.
+  has-filter:
+    has:
+      field: arguments
+      has:
+        kind: keyword_argument
+        has:
+          field: name
+          regex: '^filter$'
+  tar-bound:
+    any:
+      - pattern: $T = tarfile.open($$$A)
+      - pattern: $T = tarfile.TarFile($$$A)
+      - pattern: $T = tarfile.TarFile.open($$$A)
+  tar-with-binding:
+    any:
+      - kind: with_item
+        has:
+          kind: as_pattern
+          all:
+            - has:
+                kind: call
+                has:
+                  field: function
+                  regex: '^tarfile\.(open|TarFile|TarFile\.open)$'
+            - has:
+                kind: as_pattern_target
+                pattern: $T
+  tar-binding-statement:
+    kind: expression_statement
+    has:
+      matches: tar-bound
+  receiver-assignment-statement:
+    kind: expression_statement
+    has:
+      pattern: $T = $_
 rule:
   kind: call
-  all:
-    - has:
-        field: function
-        regex: '\.(extractall|extract)$'
-    - not:
-        has:
-          stopBy: end
-          kind: keyword_argument
-          has:
-            field: name
-            regex: '^filter$'
+  any:
+    # Chained directly on the open call.
+    - all:
+        - any:
+            - pattern: tarfile.open($$$A).$M($$$ARGS)
+            - pattern: tarfile.TarFile($$$A).$M($$$ARGS)
+            - pattern: tarfile.TarFile.open($$$A).$M($$$ARGS)
+        - not:
+            matches: has-filter
+    # Receiver bound by the nearest enclosing with statement.
+    - all:
+        - pattern: $T.$M($$$ARGS)
+        - has:
+            field: function
+            regex: '\.(extractall|extract)$'
+        - not:
+            matches: has-filter
+        - inside:
+            stopBy:
+              kind: with_statement
+            kind: with_statement
+            has:
+              stopBy: end
+              matches: tar-with-binding
+        # A nested function runs after the with statement has exited.
+        - not:
+            inside:
+              kind: function_definition
+              stopBy:
+                kind: with_statement
+        # A simple rebind in this statement list changes the receiver type.
+        - not:
+            inside:
+              kind: expression_statement
+              stopBy:
+                kind: expression_statement
+              follows:
+                matches: receiver-assignment-statement
+                stopBy: end
+    # Receiver assigned earlier in the same statement list. Stop at the nearest
+    # assignment to the name so an intervening rebind cannot inherit tar type.
+    - all:
+        - pattern: $T.$M($$$ARGS)
+        - has:
+            field: function
+            regex: '\.(extractall|extract)$'
+        - not:
+            matches: has-filter
+        - inside:
+            kind: expression_statement
+            stopBy:
+              kind: expression_statement
+            follows:
+              matches: tar-binding-statement
+              stopBy:
+                matches: receiver-assignment-statement
+    # Receiver assigned in the statement list containing an enclosing if.
+    - all:
+        - pattern: $T.$M($$$ARGS)
+        - has:
+            field: function
+            regex: '\.(extractall|extract)$'
+        - not:
+            matches: has-filter
+        - inside:
+            kind: if_statement
+            stopBy:
+              kind: function_definition
+            follows:
+              matches: tar-binding-statement
+              stopBy:
+                matches: receiver-assignment-statement
+        # A rebind inside the conditional changes the receiver type.
+        - not:
+            inside:
+              kind: expression_statement
+              stopBy:
+                kind: expression_statement
+              follows:
+                matches: receiver-assignment-statement
+                stopBy: end
+constraints:
+  M:
+    regex: '^(extractall|extract)$'

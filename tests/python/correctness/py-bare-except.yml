@@ -20,6 +20,18 @@ invalid:
   try:
       f()
   except:
+      def later():
+          raise
+      pass
+- |
+  try:
+      f()
+  except:
+      raise RuntimeError("failed")
+- |
+  try:
+      f()
+  except:
       log.info("ignored")
 - |
   try:

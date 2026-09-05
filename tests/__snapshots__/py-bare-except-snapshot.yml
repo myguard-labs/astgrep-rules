@@ -4,6 +4,22 @@ snapshots:
     try:
         f()
     except:
+        def later():
+            raise
+        pass
+  : labels:
+    - source: |-
+        except:
+            def later():
+                raise
+            pass
+      style: primary
+      start: 13
+      end: 60
+  ? |
+    try:
+        f()
+    except:
         log.info("ignored")
   : labels:
     - source: |-
@@ -24,3 +40,15 @@ snapshots:
       style: primary
       start: 13
       end: 29
+  ? |
+    try:
+        f()
+    except:
+        raise RuntimeError("failed")
+  : labels:
+    - source: |-
+        except:
+            raise RuntimeError("failed")
+      style: primary
+      start: 13
+      end: 53

@@ -8,15 +8,27 @@ message: >-
   and key. To read claims without trusting them, keep the value out of any
   authorization decision.
 note: >-
-  Fires on jwt.decode with verify=False or options disabling verify_signature.
-  Reading an unverified claim purely for logging or routing is the only routine
-  dismissal, and it must not gate access.
+  Fires on jwt.decode, or bare decode when the module has a top-level exact
+  `from jwt import decode`, with verify=False or options disabling
+  verify_signature. Aliases and shadowing are not resolved. Reading an
+  unverified claim purely for logging or routing is the only routine dismissal,
+  and it must not gate access.
 rule:
   kind: call
   all:
-    - has:
-        field: function
-        regex: '(^|\.)decode$'
+    - any:
+        - has:
+            field: function
+            regex: '^jwt\.decode$'
+        - all:
+            - has:
+                field: function
+                regex: '^decode$'
+            - inside:
+                kind: module
+                stopBy: end
+                has:
+                  pattern: from jwt import decode
     - has:
         kind: argument_list
         has:

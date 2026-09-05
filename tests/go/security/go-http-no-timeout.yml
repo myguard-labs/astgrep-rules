@@ -5,7 +5,10 @@ valid:
 - 'package m; func f() { s := &http.Server{Addr: a, WriteTimeout: d} }'
 - 'package m; func f() { t := &http.Transport{MaxIdleConns: 10} }'
 - 'package m; // c := &http.Client{}'
+- 'package m; func f() { c := Client{Name: "x"} }'
+- 'package m; func f() { s := &grpc.Server{} }'
 invalid:
 - 'package m; func f() { c := &http.Client{} }'
 - 'package m; func f() { s := &http.Server{Addr: ":8080", Handler: mux} }'
 - 'package m; func f() { c := http.Client{Transport: tr} }'
+- 'package m; func f() { c := &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: time.Second}} }'

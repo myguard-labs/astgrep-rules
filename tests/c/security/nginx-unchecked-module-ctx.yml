@@ -93,7 +93,27 @@ valid:
 
         return dlcf->enable;
     }
+  # Declaration initializer, guarded.
+  - |
+    static ngx_int_t
+    decl_guarded(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        if (ctx == NULL) {
+            return NGX_DECLINED;
+        }
+        return ctx->status;
+    }
 invalid:
+  # Declaration initializer dereferenced with no guard.
+  - |
+    static ngx_int_t
+    decl(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+        return ctx->status;
+    }
   # Immediate member access with no guard at all.
   - |
     static ngx_int_t
@@ -145,4 +165,16 @@ invalid:
         }
 
         return (ngx_int_t) n;
+    }
+  # An unrelated statement before the first dereference is not a guard.
+  - |
+    static ngx_int_t
+    intervening(ngx_http_request_t *r)
+    {
+        ngx_http_demo_ctx_t  *ctx;
+
+        ctx = ngx_http_get_module_ctx(r, ngx_http_demo_module);
+
+        trace_request(r);
+        return ctx->status;
     }

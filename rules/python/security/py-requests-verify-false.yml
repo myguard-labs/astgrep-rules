@@ -7,15 +7,17 @@ message: >-
   traffic, credentials and tokens included. Drop verify=False; to trust a private
   CA pass verify="/path/to/ca-bundle.pem" instead.
 note: >-
-  Fires on requests.* / session.* calls with a literal verify=False. A scan of a
-  host with a known-bad certificate is the only routine dismissal; it should not
-  reach production code.
+  Fires on requests.*, requests.Session().*, or a lexically named local
+  session/client receiver with a literal verify=False. Object attributes and
+  aliases under other names are not resolved. A scan of a host with a known-bad
+  certificate is the only routine dismissal; it should not reach production
+  code.
 rule:
   kind: call
   all:
     - has:
         field: function
-        regex: '(^|\.)(get|post|put|patch|delete|head|options|request)$'
+        regex: '^(requests|requests\.Session\(\)|session|sess|client)\.(get|post|put|patch|delete|head|options|request)$'
     - has:
         kind: argument_list
         has:
