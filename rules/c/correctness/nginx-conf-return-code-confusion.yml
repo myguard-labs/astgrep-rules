@@ -8,8 +8,10 @@ message: >-
   (NGX_OK is 0, NGX_ERROR is -1) and breaks any caller that compares the
   result against the other family.
 note: >-
-  Real: nginx-zstd-module 1b52f42, merge_loc_conf returned NGX_OK from a
-  char * function. The char * side requires either ngx_conf_t * as the first
+  Motivated by nginx-zstd-module 1b52f42, where merge_loc_conf used NGX_OK in
+  a char * function. That commit assigned it to a local rather than returning
+  it directly, so this rule does not detect that instance; it covers the
+  direct-return form of the same confusion. The char * side requires either ngx_conf_t * as the first
   parameter (a directive handler) or exactly the two parameters of the core
   module init_conf callback, ngx_cycle_t * then void * (core/ngx_module.h).
   Parameters are matched structurally by position, each required to be a

@@ -10,8 +10,10 @@ message: >-
   and a bare %u with no conversion after it consumes nothing at all.
   Use %ui, %uz, %uL, %ul or %O.
 note: >-
-  Real: nginx-zstd-module 6038ff2 (#207) reprinted the byte counters through
-  the unsigned %uL. The related 89199b0 (#290) left its specifier alone and
+  Motivated by nginx-zstd-module 6038ff2 (#207), which reprinted the byte
+  counters through the unsigned %uL. That specific bug, a signed %L holding an
+  unsigned value, needs the argument's type and this rule does not detect it;
+  the rule covers the neighbouring class of libc modifiers nginx cannot parse. The related 89199b0 (#290) left its specifier alone and
   narrowed four casts from ngx_uint_t to unsigned so the arguments match %xd.
   The format argument is matched by position per function, so a %lu inside a
   data argument is not flagged.

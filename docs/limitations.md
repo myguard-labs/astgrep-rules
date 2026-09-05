@@ -59,6 +59,12 @@ resolution and remain outside this matcher.
 
 ## nginx-zstd-module history batch
 
+Replayed against the code as it stood before each cited fix: seven of the nine
+rules flag the bug that motivated them. The two that do not are recorded in
+their own notes -- the format rule cannot see a signed `%L` holding an unsigned
+value, and the conf-return rule cannot see a code assigned to a local before
+being returned. Both need type information a syntactic matcher does not have.
+
 Rules mined from the nginx-zstd-module commit history (2018 to 2026-09).
 Each rule's `note` names the commit that motivated it.
 
