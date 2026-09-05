@@ -1,0 +1,28 @@
+id: py-bare-except
+valid:
+- |
+  try:
+      f()
+  except Exception:
+      log.exception("failed")
+- |
+  try:
+      f()
+  except:
+      raise
+- |
+  try:
+      f()
+  except ValueError:
+      pass
+invalid:
+- |
+  try:
+      f()
+  except:
+      log.info("ignored")
+- |
+  try:
+      f()
+  except:
+      pass

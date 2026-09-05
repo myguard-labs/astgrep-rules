@@ -136,3 +136,38 @@ See <https://cwe.mitre.org/data/definitions/1435.html>.
   `info` severity because short-lived scopes legitimately free without
   clearing — measured zero hits under labs/nginx-http-shield-module/src and 124
   across its ci/tests and ci/fuzz harnesses.
+
+## Fourth batch
+
+Selected against the OWASP Top 10:2025 (announced November 2025, final
+January 2026), which added two categories the pack had no coverage for:
+A03 Software Supply Chain Failures and A10 Mishandling of Exceptional
+Conditions. SSRF was absorbed into A01 Broken Access Control in this edition.
+See <https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/>.
+
+- `py-bare-except` and `py-except-pass` cover A10/CWE-396/CWE-390. Both exclude
+  a clause that re-raises, the documented cleanup idiom; ruff E722 and flake8
+  differ on that case, and PEP 760 proposed removing the bare form outright.
+  `py-except-pass` is `info` because narrow typed clauses that deliberately
+  ignore an error are common and legitimate: all 34 first-party hits measured
+  were typed (BrokenPipeError, SystemExit, OSError), mostly CI tooling.
+  `py-bare-except` stays `warning` — it catches KeyboardInterrupt and
+  SystemExit, so it is the form that actually fails open.
+- `go-unchecked-type-assertion` covers CWE-476. It distinguishes `v := x.(T)`
+  from `v, ok := x.(T)` by the arity of the left expression list, so comma-ok
+  and type switches do not match. It cannot tell whether the dynamic type is
+  already guaranteed, so an assertion immediately after a type switch still
+  matches. Measured 6 first-party hits, all genuine single-value assertions.
+- `nginx-unchecked-array-push` checks for the guard rather than inventorying
+  call sites as `nginx-unchecked-palloc` does: it matches only when no
+  comparison of the assigned name follows in the same block. It does not
+  confirm the comparison is against NULL, and a guard in a called helper is
+  invisible. Measured zero hits across the nginx modules here, which check
+  every push; upstream nginx tracks the same omission in nginx/nginx#526.
+- `php-strcmp-loose-compare` and `php-hash-loose-compare` cover CWE-697 type
+  juggling. The first is an authentication bypass before PHP 8, where an array
+  argument makes strcmp return NULL and NULL == 0 holds; PHP 8 raises a
+  TypeError instead, but the comparison stays wrong on any pre-8 deployment.
+  The second covers magic hashes, where two 0e-prefixed digit strings compare
+  equal. Neither rule can tell whether the compared value is a secret, so a
+  loose comparison of non-security hashes also matches.

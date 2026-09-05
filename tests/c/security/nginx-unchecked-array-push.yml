@@ -1,0 +1,11 @@
+id: nginx-unchecked-array-push
+valid:
+- void f(void) { h = ngx_array_push(a); if (h == NULL) { return NGX_ERROR; } h->x = 1; }
+- void f(void) { h = ngx_list_push(&r->headers_out.headers); if (h == NULL) { return NGX_ERROR; } h->hash = 1; }
+- void f(void) { p = ngx_array_push(a); other(); if (p == NULL) { return NGX_ERROR; } }
+- void f(void) { p = ngx_palloc(pool, n); if (p == NULL) { return NGX_ERROR; } }
+- /* void f(void) { h = ngx_array_push(a); h->x = 1; } */
+invalid:
+- void f(void) { h = ngx_array_push(a); h->x = 1; }
+- void f(void) { h = ngx_list_push(&r->headers_out.headers); h->hash = 1; }
+- void f(void) { p = ngx_array_push_n(a, 2); p[0] = v; }

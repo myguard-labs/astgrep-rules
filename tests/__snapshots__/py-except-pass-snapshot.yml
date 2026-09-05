@@ -1,0 +1,62 @@
+id: py-except-pass
+snapshots:
+  ? |
+    try:
+        f()
+    except (KeyError, IndexError):
+        pass
+  : labels:
+    - source: |-
+        except (KeyError, IndexError):
+            pass
+      style: primary
+      start: 13
+      end: 52
+    - source: pass
+      style: secondary
+      start: 48
+      end: 52
+    - source: pass
+      style: secondary
+      start: 48
+      end: 52
+  ? |
+    try:
+        f()
+    except Exception:
+        pass
+  : labels:
+    - source: |-
+        except Exception:
+            pass
+      style: primary
+      start: 13
+      end: 39
+    - source: pass
+      style: secondary
+      start: 35
+      end: 39
+    - source: pass
+      style: secondary
+      start: 35
+      end: 39
+  ? |
+    try:
+        f()
+    except ValueError:
+        ...
+  : labels:
+    - source: |-
+        except ValueError:
+            ...
+      style: primary
+      start: 13
+      end: 39
+    - source: '...'
+      style: secondary
+      start: 36
+      end: 39
+    - source: '...'
+      style: secondary
+      start: 36
+      end: 39

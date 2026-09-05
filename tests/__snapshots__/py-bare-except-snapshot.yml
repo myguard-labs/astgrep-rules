@@ -1,0 +1,26 @@
+id: py-bare-except
+snapshots:
+  ? |
+    try:
+        f()
+    except:
+        log.info("ignored")
+  : labels:
+    - source: |-
+        except:
+            log.info("ignored")
+      style: primary
+      start: 13
+      end: 44
+  ? |
+    try:
+        f()
+    except:
+        pass
+  : labels:
+    - source: |-
+        except:
+            pass
+      style: primary
+      start: 13
+      end: 29

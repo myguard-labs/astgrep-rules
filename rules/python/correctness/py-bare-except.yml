@@ -1,0 +1,23 @@
+id: py-bare-except
+language: python
+severity: warning
+message: >-
+  Bare `except:` catches everything, including KeyboardInterrupt, SystemExit and
+  MemoryError, so a shutdown signal or an out-of-memory condition is treated as
+  a routine error (OWASP A10:2025, CWE-396). Catch `Exception` when you mean
+  ordinary failures, or name the specific errors you can handle.
+note: >-
+  Fires on a clause with no exception type. A bare clause that re-raises is the
+  documented cleanup idiom and does not match. PEP 760 proposed removing this
+  form from the language.
+rule:
+  all:
+    - kind: except_clause
+    - not:
+        has:
+          field: value
+          regex: '.'
+    - not:
+        has:
+          stopBy: end
+          kind: raise_statement

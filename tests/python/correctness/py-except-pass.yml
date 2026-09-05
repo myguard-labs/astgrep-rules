@@ -1,0 +1,39 @@
+id: py-except-pass
+valid:
+- |
+  try:
+      f()
+  except ValueError as e:
+      log.warning("parse failed: %s", e)
+- |
+  try:
+      f()
+  except KeyError:
+      return default
+- |
+  try:
+      f()
+  except Exception:
+      raise
+- |
+  try:
+      f()
+  except OSError:
+      cleanup()
+      raise
+invalid:
+- |
+  try:
+      f()
+  except Exception:
+      pass
+- |
+  try:
+      f()
+  except ValueError:
+      ...
+- |
+  try:
+      f()
+  except (KeyError, IndexError):
+      pass

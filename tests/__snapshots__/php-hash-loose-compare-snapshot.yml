@@ -1,0 +1,44 @@
+id: php-hash-loose-compare
+snapshots:
+  <?php if ($stored != hash("sha256", $in)) { no(); }:
+    labels:
+    - source: $stored != hash("sha256", $in)
+      style: primary
+      start: 10
+      end: 40
+    - source: hash
+      style: secondary
+      start: 21
+      end: 25
+    - source: hash("sha256", $in)
+      style: secondary
+      start: 21
+      end: 40
+  <?php if (md5($p) == $stored) { ok(); }:
+    labels:
+    - source: md5($p) == $stored
+      style: primary
+      start: 10
+      end: 28
+    - source: md5
+      style: secondary
+      start: 10
+      end: 13
+    - source: md5($p)
+      style: secondary
+      start: 10
+      end: 17
+  <?php if (sha1($token) == $expected) { no(); }:
+    labels:
+    - source: sha1($token) == $expected
+      style: primary
+      start: 10
+      end: 35
+    - source: sha1
+      style: secondary
+      start: 10
+      end: 14
+    - source: sha1($token)
+      style: secondary
+      start: 10
+      end: 22

@@ -1,0 +1,44 @@
+id: php-strcmp-loose-compare
+snapshots:
+  <?php if (strcasecmp($u, $name) == 0) { ok(); }:
+    labels:
+    - source: strcasecmp($u, $name) == 0
+      style: primary
+      start: 10
+      end: 36
+    - source: strcasecmp
+      style: secondary
+      start: 10
+      end: 20
+    - source: strcasecmp($u, $name)
+      style: secondary
+      start: 10
+      end: 31
+  <?php if (strcmp($a, $b) == 0) { ok(); }:
+    labels:
+    - source: strcmp($a, $b) == 0
+      style: primary
+      start: 10
+      end: 29
+    - source: strcmp
+      style: secondary
+      start: 10
+      end: 16
+    - source: strcmp($a, $b)
+      style: secondary
+      start: 10
+      end: 24
+  <?php if (strcmp($pass, $stored) != 1) { no(); }:
+    labels:
+    - source: strcmp($pass, $stored) != 1
+      style: primary
+      start: 10
+      end: 37
+    - source: strcmp
+      style: secondary
+      start: 10
+      end: 16
+    - source: strcmp($pass, $stored)
+      style: secondary
+      start: 10
+      end: 32
