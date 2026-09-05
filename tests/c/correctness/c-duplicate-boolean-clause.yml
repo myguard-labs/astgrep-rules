@@ -6,6 +6,8 @@ valid:
 - void f(void) { if (a == 1 || a == 2) { x(); } }
 - void f(void) { if (a | a) { x(); } }
 - void f(void) { if (g(&rp, end) == NGX_OK && g(&rp, end) == NGX_OK) { x(); } }
+- void f(void) { if (*cp++ == '/' && *cp++ == '/') { x(); } }
+- void f(void) { if (n-- && n--) { x(); } }
 - void f(void) { if (a || (g() && b) || (g() && b)) { x(); } }
 - |
   #if defined(NGX_X) \

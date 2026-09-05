@@ -154,6 +154,44 @@ snapshots:
       end: 141
   ? |
     static ngx_command_t  ngx_http_x_commands[] = {
+        { ngx_string("x"), NGX_HTTP_SRV_CONF|NGX_CONF_TAKE1, /* c */ ngx_conf_set_str_slot,
+          /* c */ NGX_HTTP_SRV_CONF_OFFSET, /* c */ offsetof(ngx_http_x_loc_conf_t, n), NULL },
+        ngx_null_command
+    };
+  : labels:
+    - source: |-
+        { ngx_string("x"), NGX_HTTP_SRV_CONF|NGX_CONF_TAKE1, /* c */ ngx_conf_set_str_slot,
+              /* c */ NGX_HTTP_SRV_CONF_OFFSET, /* c */ offsetof(ngx_http_x_loc_conf_t, n), NULL }
+      style: primary
+      start: 52
+      end: 226
+    - source: NGX_HTTP_SRV_CONF_OFFSET
+      style: secondary
+      start: 150
+      end: 174
+    - source: offsetof(ngx_http_x_loc_conf_t, n)
+      style: secondary
+      start: 184
+      end: 218
+    - source: ngx_command_t
+      style: secondary
+      start: 7
+      end: 20
+    - source: |-
+        static ngx_command_t  ngx_http_x_commands[] = {
+            { ngx_string("x"), NGX_HTTP_SRV_CONF|NGX_CONF_TAKE1, /* c */ ngx_conf_set_str_slot,
+              /* c */ NGX_HTTP_SRV_CONF_OFFSET, /* c */ offsetof(ngx_http_x_loc_conf_t, n), NULL },
+            ngx_null_command
+        };
+      style: secondary
+      start: 0
+      end: 251
+    - source: ngx_conf_set_str_slot
+      style: secondary
+      start: 113
+      end: 134
+  ? |
+    static ngx_command_t  ngx_http_x_commands[] = {
         { ngx_string("x"), NGX_HTTP_SRV_CONF|NGX_CONF_TAKE1, ngx_conf_set_str_slot,
           NGX_HTTP_SRV_CONF_OFFSET, offsetof(ngx_http_x_main_conf_t, n), NULL },
         ngx_null_command

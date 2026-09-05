@@ -10,7 +10,8 @@ note: >-
   Real: nginx-zstd-module e9cf598, a three-line max_length clause duplicated
   verbatim in the header-filter eligibility test. Operands containing a call
   are skipped because a repeated side-effecting call (skip two DNS names) is
-  intentional. Preprocessor conditions and anything under a parse-error
+  intentional, and an operand containing ++ or -- is skipped for the same
+  reason: *cp++ == '/' && *cp++ == '/' advances the pointer twice on purpose. Preprocessor conditions and anything under a parse-error
   node are skipped: a continued #if line recovers into an ERROR subtree. That
   ERROR exclusion is verified against real code rather than a fixture --
   removing it produces a false positive on the multi-line directive at
@@ -25,8 +26,12 @@ utils:
     not:
       any:
         - kind: call_expression
+        - kind: update_expression
         - has:
             kind: call_expression
+            stopBy: end
+        - has:
+            kind: update_expression
             stopBy: end
 rule:
   kind: binary_expression

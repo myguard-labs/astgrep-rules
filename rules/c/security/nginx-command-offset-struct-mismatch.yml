@@ -11,7 +11,9 @@ note: >-
   with offsetof(ngx_http_zstd_main_conf_t, ...) and nginx reported the
   directive as duplicate. Custom handlers may interpret the offset themselves
   (Angie's status_zone does) and are not matched. The struct level is read
-  from the *_main_conf_t / *_srv_conf_t / *_loc_conf_t naming convention.
+  from the *_main_conf_t / *_srv_conf_t / *_loc_conf_t naming convention,
+  which a typedef can defeat: ngx_stream_lua aliases loc_conf_t to
+  srv_conf_t, so the stream and mail SRV-offset pairing is not checked.
   Field positions skip comment nodes, so an inline comment between fields
   does not hide a mismatch.
 utils:
@@ -47,7 +49,7 @@ rule:
             nthChild:
               position: 4
               ofRule: {not: {kind: comment}}
-            regex: ^NGX_(HTTP|STREAM|MAIL)_SRV_CONF_OFFSET$
+            regex: ^NGX_HTTP_SRV_CONF_OFFSET$
         - has:
             nthChild:
               position: 5

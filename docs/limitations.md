@@ -68,11 +68,14 @@ being returned. Both need type information a syntactic matcher does not have.
 Rules mined from the nginx-zstd-module commit history (2018 to 2026-09).
 Each rule's `note` names the commit that motivated it.
 
-- `nginx-table-missing-sentinel` asks whether a sentinel appears anywhere
-  among an initialised `ngx_conf_enum_t`, `ngx_conf_bitmask_t`,
-  `ngx_command_t`, `ngx_http_variable_t` or `ngx_stream_variable_t` array's
-  elements, not whether it is last, so a sentinel in the middle passes even
-  though the walker stops there. Position-based matching was tried first and
+- `nginx-table-missing-sentinel` asks whether a sentinel appears anywhere in
+  an initialised `ngx_conf_enum_t`, `ngx_conf_bitmask_t`,
+  `ngx_command_t`, `ngx_http_variable_t` or `ngx_stream_variable_t` array,
+  at any depth so a preprocessor block cannot displace it, and accepts the
+  expanded `{ ngx_null_string, NULL, NULL, 0, 0, 0 }` form as well as the
+  macro. It does not check whether the sentinel is last, so one in the middle
+  passes even though the walker stops there. Position-based matching was
+  tried first and
   rejected: a trailing comment is a named node, so it took the last slot and
   produced an error-level false positive on a correctly terminated table. The
   sentinel must appear as a real identifier child: a string or comment merely
@@ -95,10 +98,13 @@ Each rule's `note` names the commit that motivated it.
   `%lld` and a bare `%u` without a conversion letter fire. Note what nginx
   actually does with these: `%l` consumes a long and then prints the trailing
   `u` literally, so the argument list is not shifted; a bare `%u` consumes
-  nothing. An escaped `%%` is not a conversion and is left alone. A
-  format built from two or more adjacent literals is skipped entirely: the
-  compiler joins them before nginx parses, and neither the joined syntax nor
-  the separate pieces can be judged safely. Wrappers, macros and
+  nothing. An escaped `%%` is not a conversion and is left alone.
+  Adjacent literals are judged piece by piece, skipping any piece whose
+  specifier could continue across a join, so `"%lu" " bytes"` is flagged
+  while `"%l" "u"`, `"%" "%lu"` and `"%u" "i"` are passed over. A piece
+  ending in an escaped `%%` also suppresses the next one, so `"100%%" "%lu"`
+  is missed. `ngx_http_log_error` is not checked: despite the name it is
+  nginx's log handler, not a formatting call. Wrappers, macros and
   format strings held in variables are not seen. Measured zero hits on the
   Angie tree.
 - `c-duplicate-boolean-clause` compares operand text, so two clauses that
