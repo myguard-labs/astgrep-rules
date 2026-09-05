@@ -13,9 +13,9 @@ note: >-
   parameter (a directive handler) or exactly the two parameters of the core
   module init_conf callback, ngx_cycle_t * then void * (core/ngx_module.h).
   Parameters are matched structurally by position, each required to be a
-  pointer, so a comment between them does not shift the count and neither an
-  unrelated three-parameter helper, a variadic one, nor a by-value signature
-  is flagged. A callback whose parameters are written through a
+  pointer to a named value, so a comment between them does not shift the count
+  and none of an unrelated three-parameter helper, a variadic one, a by-value
+  signature, or a double pointer is flagged. A callback whose parameters are written through a
   typedef alias is not recognised. A return nested inside an inner
   function is attributed to that function, not the enclosing handler. Only return
   statements are matched; a value stored in a local first needs the local's
@@ -38,6 +38,9 @@ utils:
               - has:
                   field: declarator
                   kind: pointer_declarator
+                  has:
+                    field: declarator
+                    kind: identifier
       - has:
           field: parameters
           all:
@@ -53,6 +56,9 @@ utils:
                   - has:
                       field: declarator
                       kind: pointer_declarator
+                      has:
+                        field: declarator
+                        kind: identifier
             - has:
                 kind: parameter_declaration
                 nthChild:
@@ -65,6 +71,9 @@ utils:
                   - has:
                       field: declarator
                       kind: pointer_declarator
+                      has:
+                        field: declarator
+                        kind: identifier
             - not:
                 has:
                   kind: parameter_declaration

@@ -123,8 +123,9 @@ Each rule's `note` names the commit that motivated it.
   an unrelated `char *` helper returning a sentinel is not flagged. A return
   inside a nested function is attributed to that function, not the enclosing
   handler. Parameters are matched structurally, so a variadic or by-value
-  signature is rejected, but a callback written through a typedef alias, or in
-  K&R style, is not recognised.
+  signature, a double pointer, or a by-value parameter is rejected, but a
+  callback written through a typedef alias, or in K&R style, is not
+  recognised.
 - `nginx-buf-flush-before-last-buf` matches the direct `else if` shape on the
   same buffer expression. Two independent `if` statements, or a compound
   condition on the first branch, do not match.
@@ -134,7 +135,9 @@ Each rule's `note` names the commit that motivated it.
   source
   order, as siblings in the same function body, so an allocation in one
   function does not pair with a write in another. It does no path analysis, so
-  the two may sit on branches that never both execute. A GNU nested function
+  the two may sit on branches that never both execute, including an allocation
+  in an `if` arm and a write in its `else`; the rule is `info` severity for
+  that reason. A GNU nested function
   is not parsed as one by tree-sitter, so an allocation inside it counts as
   the enclosing body's; nginx does not use that extension.
   `ngx_pool_cleanup_add` allocates only when the size is non-zero at runtime

@@ -28,6 +28,9 @@ valid:
       }
   }
 invalid:
+# Advisory: mutually exclusive arms cannot both run, but the rule does no path
+# analysis and reports the site for review. Documented in the rule note.
+- void f(void) { if (a) { cln = ngx_pool_cleanup_add(pool, sizeof(x)); } else { cln->data = ctx; } }
 - void f(void) { for (i = 0; i < n; i++) { cln = ngx_pool_cleanup_add(pool, sizeof(x)); } cln->data = ctx; }
 - 'void f(void) { switch (k) { case 1: cln = ngx_pool_cleanup_add(pool, sizeof(x)); break; } cln->data = ctx; }'
 - void f(void) { if (ready) { cln = ngx_pool_cleanup_add(pool, sizeof(x)); } cln->data = ctx; }

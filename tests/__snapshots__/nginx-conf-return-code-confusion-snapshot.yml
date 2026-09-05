@@ -19,6 +19,10 @@ snapshots:
       style: secondary
       start: 15
       end: 25
+    - source: cf
+      style: secondary
+      start: 27
+      end: 29
     - source: '*cf'
       style: secondary
       start: 26
@@ -69,6 +73,10 @@ snapshots:
       style: secondary
       start: 17
       end: 28
+    - source: cycle
+      style: secondary
+      start: 30
+      end: 35
     - source: '*cycle'
       style: secondary
       start: 29
@@ -81,6 +89,10 @@ snapshots:
       style: secondary
       start: 37
       end: 41
+    - source: conf
+      style: secondary
+      start: 43
+      end: 47
     - source: '*conf'
       style: secondary
       start: 42
@@ -160,6 +172,10 @@ snapshots:
       style: secondary
       start: 20
       end: 30
+    - source: cf
+      style: secondary
+      start: 32
+      end: 34
     - source: '*cf'
       style: secondary
       start: 31

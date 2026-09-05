@@ -15,7 +15,9 @@ note: >-
   declaration with an initialiser, or an assignment anywhere inside a
   preceding statement, including an if, loop or switch body.
   The overwrite must follow it in source order, but no path analysis is done,
-  so the two may sit on branches that never both execute. Both statements must
+  so the two may sit on branches that never both execute: an allocation in an
+  if arm and a write in its else arm still match, which is why this rule is
+  info severity rather than a finding. Both statements must
   be siblings in the same function body, so an allocation in one function and
   a write in another do not pair, and neither side may sit inside a GNU
   nested function definition.

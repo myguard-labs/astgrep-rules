@@ -84,6 +84,12 @@ valid:
   {
       return NGX_OK;
   }
+- |
+  char *
+  dbl(ngx_cycle_t **cycle, void *conf)
+  {
+      return NGX_OK;
+  }
 invalid:
 - |
   char *
