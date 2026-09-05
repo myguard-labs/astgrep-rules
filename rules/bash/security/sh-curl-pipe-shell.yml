@@ -1,0 +1,33 @@
+id: sh-curl-pipe-shell
+language: bash
+severity: error
+message: >-
+  Remote script piped straight into a shell — the fetched bytes execute with no
+  chance to inspect or verify them (OWASP A03:2025 Software Supply Chain
+  Failures). A compromised host, a hijacked DNS answer or a MITM on the
+  connection gets arbitrary code execution, and a truncated download executes
+  half a script. Fetch to a file, verify a published checksum or signature, then
+  run it.
+note: >-
+  Fires on curl or wget piped into sh/bash/zsh/python, including via sudo.
+  Vendor install instructions use this shape; that is the reason to pin and
+  verify locally rather than a reason to dismiss it. An interpreter given an
+  inline script (python3 -c, perl -e) does not match: stdin is data there, not
+  the code being run.
+rule:
+  kind: pipeline
+  all:
+    - has:
+        kind: command
+        has:
+          field: name
+          regex: '^(curl|wget)$'
+    - has:
+        kind: command
+        all:
+          - has:
+              field: name
+              regex: '^(sh|bash|zsh|ksh|dash|python|python3|perl|ruby|sudo)$'
+          - not:
+              has:
+                regex: '^-(c|e)$'

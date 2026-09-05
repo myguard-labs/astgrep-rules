@@ -1,0 +1,23 @@
+id: sh-tls-verify-disabled
+language: bash
+severity: error
+message: >-
+  TLS certificate verification disabled on a download — curl -k, wget
+  --no-check-certificate or pip --trusted-host accept any certificate, so a
+  machine-in-the-middle serves whatever content it likes and the result is
+  usually then installed or executed (OWASP A03:2025). Fix the trust store or
+  pass the private CA bundle instead: curl --cacert, pip --cert.
+note: >-
+  Fires on the flag itself. A temporary local workaround is the stated excuse;
+  it should never reach a committed script, Dockerfile or CI job, which is
+  exactly where this rule looks.
+rule:
+  kind: command
+  any:
+    - all:
+        - has:
+            field: name
+            regex: '^(curl|wget|pip|pip3)$'
+        - has:
+            stopBy: end
+            regex: '^(-k|--insecure|--no-check-certificate|--trusted-host)$'

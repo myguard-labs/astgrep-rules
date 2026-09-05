@@ -1,0 +1,12 @@
+id: py-tarfile-extractall
+valid:
+- tar.extractall(path=dest, filter="data")
+- tar.extract(member, path=dest, filter="tar")
+- 'zf.extractall(dest, filter="data")'
+- shutil.unpack_archive(src, dest)
+- '# tar.extractall(dest)'
+invalid:
+- tar.extractall(dest)
+- tar.extractall(path=dest)
+- tar.extract(member, dest)
+- archive.extractall()

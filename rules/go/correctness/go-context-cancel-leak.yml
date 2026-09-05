@@ -1,0 +1,32 @@
+id: go-context-cancel-leak
+language: go
+severity: warning
+message: >-
+  Context cancel function discarded — assigning cancel to _ leaks the timer and
+  its goroutine until the deadline fires, and every call adds another. Bind the
+  function and `defer cancel()` immediately, even when the context reaches its
+  deadline on its own; calling cancel twice is safe.
+note: >-
+  Fires only when cancel is assigned to the blank identifier, which vet does not
+  reject. A bound cancel that is never deferred is a separate defect this
+  matcher cannot see.
+rule:
+  any:
+    - kind: assignment_statement
+    - kind: short_var_declaration
+  all:
+    - has:
+        field: right
+        kind: expression_list
+        has:
+          kind: call_expression
+          has:
+            field: function
+            regex: '^context\.With(Timeout|Cancel|Deadline|TimeoutCause|CancelCause|DeadlineCause)$'
+    - has:
+        field: left
+        kind: expression_list
+        has:
+          kind: identifier
+          regex: '^_$'
+          nthChild: 2

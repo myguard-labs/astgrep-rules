@@ -1,0 +1,42 @@
+id: py-tarfile-extractall
+snapshots:
+  archive.extractall():
+    labels:
+    - source: archive.extractall()
+      style: primary
+      start: 0
+      end: 20
+    - source: archive.extractall
+      style: secondary
+      start: 0
+      end: 18
+  tar.extract(member, dest):
+    labels:
+    - source: tar.extract(member, dest)
+      style: primary
+      start: 0
+      end: 25
+    - source: tar.extract
+      style: secondary
+      start: 0
+      end: 11
+  tar.extractall(dest):
+    labels:
+    - source: tar.extractall(dest)
+      style: primary
+      start: 0
+      end: 20
+    - source: tar.extractall
+      style: secondary
+      start: 0
+      end: 14
+  tar.extractall(path=dest):
+    labels:
+    - source: tar.extractall(path=dest)
+      style: primary
+      start: 0
+      end: 25
+    - source: tar.extractall
+      style: secondary
+      start: 0
+      end: 14

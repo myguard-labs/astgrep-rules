@@ -171,3 +171,34 @@ See <https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/>.
   The second covers magic hashes, where two 0e-prefixed digit strings compare
   equal. Neither rule can tell whether the compared value is a secret, so a
   loose comparison of non-security hashes also matches.
+
+## Fifth batch
+
+Adds `bash` as a fifth language, closing OWASP A03:2025 Software Supply Chain
+Failures — the remaining 2025 category with no coverage. Most of A03 is
+registry, SBOM and provenance territory that no AST matcher can reach; these
+two rules cover only its code-level slice.
+
+- `sh-curl-pipe-shell` matches a fetch piped into an interpreter. An interpreter
+  given an inline script (`python3 -c`, `perl -e`) is excluded: stdin there is
+  data, not the code being run. That exclusion came from a false positive on
+  tools/ollama-ask.sh, which pipes JSON into `python3 -c`. It cannot see whether
+  a checksum is verified elsewhere in the script.
+- `sh-tls-verify-disabled` matches the flag, not the intent. `--cacert`/`--cert`
+  pointing at a private CA is the correct alternative and does not match.
+- `go-context-cancel-leak` fires only when cancel is assigned to the blank
+  identifier. A bound cancel that is never deferred is the more common defect
+  and is invisible to this matcher; `go vet` does catch the lostcancel case.
+- `php-insecure-cookie-flags` checks the options-array form and calls too short
+  to carry flags. The seven-argument positional form is deliberately NOT
+  checked: its flags are unnamed booleans, so a syntactic matcher cannot tell a
+  flagged call from an unflagged one. The fixture carries that case under
+  `valid` with a comment marking it a known gap rather than an endorsement.
+- `py-tarfile-extractall` covers CWE-22. Per PEP 706, Python 3.12-3.13 emit a
+  DeprecationWarning but still extract with the `fully_trusted` filter, so a
+  match on those versions is exploitable; 3.14+ defaults to `data` and a match
+  there is already safe. Check the interpreter floor before dismissing. Found
+  one true positive outside this repo, at tools/patch-management.py:36.
+- `c-scanf-unbounded-string` matches a `%s` or `%[` conversion with no field
+  width in the scanf family. It reads the format literal, so a format passed
+  through a variable is not seen.

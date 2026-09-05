@@ -1,0 +1,12 @@
+id: sh-tls-verify-disabled
+valid:
+- curl -sSL https://example.com/f -o f
+- curl --cacert /etc/ssl/ca.pem https://example.com/f
+- wget https://example.com/f
+- pip install --cert /etc/ssl/ca.pem requests
+- pip install requests
+invalid:
+- curl -k https://example.com/f -o f
+- curl --insecure https://example.com/i.sh -o i.sh
+- wget --no-check-certificate https://example.com/f
+- pip install --trusted-host pypi.org requests

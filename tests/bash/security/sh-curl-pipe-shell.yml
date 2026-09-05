@@ -1,0 +1,14 @@
+id: sh-curl-pipe-shell
+valid:
+- curl -sSL https://example.com/i.sh -o i.sh
+- curl -s https://example.com/data.json | jq .
+- wget https://example.com/f.tar.gz && sha256sum -c f.sha256
+- bash ./install.sh
+- cat script.sh | grep curl
+- curl -sS "$H/api/ps" | python3 -c 'import sys, json; print(json.load(sys.stdin))'
+- curl -s "$H/v" | perl -e 'print <>'
+invalid:
+- curl -sSL https://get.example.com/i.sh | bash
+- wget -qO- https://example.com/setup.sh | sh
+- curl https://example.com/get.py | python3
+- curl -fsSL https://example.com/i.sh | sudo bash

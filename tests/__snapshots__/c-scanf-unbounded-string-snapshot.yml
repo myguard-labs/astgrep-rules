@@ -1,0 +1,74 @@
+id: c-scanf-unbounded-string
+snapshots:
+  void f(void) { fscanf(fp, "%d %s", &n, buf); }:
+    labels:
+    - source: fscanf(fp, "%d %s", &n, buf)
+      style: primary
+      start: 15
+      end: 43
+    - source: fscanf
+      style: secondary
+      start: 15
+      end: 21
+    - source: '"%d %s"'
+      style: secondary
+      start: 26
+      end: 33
+    - source: '"%d %s"'
+      style: secondary
+      start: 26
+      end: 33
+  void f(void) { scanf("%s", buf); }:
+    labels:
+    - source: scanf("%s", buf)
+      style: primary
+      start: 15
+      end: 31
+    - source: scanf
+      style: secondary
+      start: 15
+      end: 20
+    - source: '"%s"'
+      style: secondary
+      start: 21
+      end: 25
+    - source: '"%s"'
+      style: secondary
+      start: 21
+      end: 25
+  void f(void) { sscanf(line, "%[^\n]", buf); }:
+    labels:
+    - source: sscanf(line, "%[^\n]", buf)
+      style: primary
+      start: 15
+      end: 42
+    - source: sscanf
+      style: secondary
+      start: 15
+      end: 21
+    - source: '"%[^\n]"'
+      style: secondary
+      start: 28
+      end: 36
+    - source: '"%[^\n]"'
+      style: secondary
+      start: 28
+      end: 36
+  void f(void) { sscanf(line, "%s", buf); }:
+    labels:
+    - source: sscanf(line, "%s", buf)
+      style: primary
+      start: 15
+      end: 38
+    - source: sscanf
+      style: secondary
+      start: 15
+      end: 21
+    - source: '"%s"'
+      style: secondary
+      start: 28
+      end: 32
+    - source: '"%s"'
+      style: secondary
+      start: 28
+      end: 32

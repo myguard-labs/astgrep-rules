@@ -1,0 +1,12 @@
+id: c-scanf-unbounded-string
+valid:
+- void f(void) { sscanf(line, "%31s", buf); }
+- void f(void) { scanf("%d", &n); }
+- void f(void) { fscanf(fp, "%63[^\n]", buf); }
+- void f(void) { sscanf(line, "%d %d", &a, &b); }
+- /* void f(void) { scanf("%s", buf); } */
+invalid:
+- void f(void) { scanf("%s", buf); }
+- void f(void) { sscanf(line, "%s", buf); }
+- void f(void) { fscanf(fp, "%d %s", &n, buf); }
+- void f(void) { sscanf(line, "%[^\n]", buf); }

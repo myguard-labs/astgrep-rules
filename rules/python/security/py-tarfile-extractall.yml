@@ -1,0 +1,27 @@
+id: py-tarfile-extractall
+language: python
+severity: error
+message: >-
+  Archive extracted without a filter — a member named ../../etc/cron.d/x, or an
+  absolute path, is written outside the destination (CWE-22). Python 3.12+ takes
+  filter="data", which rejects traversal, absolute paths, links and device
+  files; on 3.11 and older, validate every member path against the destination
+  before extracting.
+note: >-
+  Fires on extractall/extract with no filter argument. PEP 706 made
+  filter="data" the default in 3.14, so a match on a codebase pinned to 3.14+ is
+  already safe — check the floor in pyproject before dismissing, since the same
+  call on an older interpreter is exploitable.
+rule:
+  kind: call
+  all:
+    - has:
+        field: function
+        regex: '\.(extractall|extract)$'
+    - not:
+        has:
+          stopBy: end
+          kind: keyword_argument
+          has:
+            field: name
+            regex: '^filter$'

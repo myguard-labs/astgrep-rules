@@ -1,0 +1,80 @@
+id: go-context-cancel-leak
+snapshots:
+  package m; func f() { ctx, _ := context.WithCancel(p) }:
+    labels:
+    - source: ctx, _ := context.WithCancel(p)
+      style: primary
+      start: 22
+      end: 53
+    - source: context.WithCancel
+      style: secondary
+      start: 32
+      end: 50
+    - source: context.WithCancel(p)
+      style: secondary
+      start: 32
+      end: 53
+    - source: context.WithCancel(p)
+      style: secondary
+      start: 32
+      end: 53
+    - source: _
+      style: secondary
+      start: 27
+      end: 28
+    - source: ctx, _
+      style: secondary
+      start: 22
+      end: 28
+  package m; func f() { ctx, _ := context.WithTimeout(p, d); use(ctx) }:
+    labels:
+    - source: ctx, _ := context.WithTimeout(p, d)
+      style: primary
+      start: 22
+      end: 57
+    - source: context.WithTimeout
+      style: secondary
+      start: 32
+      end: 51
+    - source: context.WithTimeout(p, d)
+      style: secondary
+      start: 32
+      end: 57
+    - source: context.WithTimeout(p, d)
+      style: secondary
+      start: 32
+      end: 57
+    - source: _
+      style: secondary
+      start: 27
+      end: 28
+    - source: ctx, _
+      style: secondary
+      start: 22
+      end: 28
+  package m; func f() { ctx, _ = context.WithDeadline(p, t) }:
+    labels:
+    - source: ctx, _ = context.WithDeadline(p, t)
+      style: primary
+      start: 22
+      end: 57
+    - source: context.WithDeadline
+      style: secondary
+      start: 31
+      end: 51
+    - source: context.WithDeadline(p, t)
+      style: secondary
+      start: 31
+      end: 57
+    - source: context.WithDeadline(p, t)
+      style: secondary
+      start: 31
+      end: 57
+    - source: _
+      style: secondary
+      start: 27
+      end: 28
+    - source: ctx, _
+      style: secondary
+      start: 22
+      end: 28

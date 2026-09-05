@@ -1,0 +1,90 @@
+id: sh-curl-pipe-shell
+snapshots:
+  curl -fsSL https://example.com/i.sh | sudo bash:
+    labels:
+    - source: curl -fsSL https://example.com/i.sh | sudo bash
+      style: primary
+      start: 0
+      end: 47
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: curl -fsSL https://example.com/i.sh
+      style: secondary
+      start: 0
+      end: 35
+    - source: sudo
+      style: secondary
+      start: 38
+      end: 42
+    - source: sudo bash
+      style: secondary
+      start: 38
+      end: 47
+  curl -sSL https://get.example.com/i.sh | bash:
+    labels:
+    - source: curl -sSL https://get.example.com/i.sh | bash
+      style: primary
+      start: 0
+      end: 45
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: curl -sSL https://get.example.com/i.sh
+      style: secondary
+      start: 0
+      end: 38
+    - source: bash
+      style: secondary
+      start: 41
+      end: 45
+    - source: bash
+      style: secondary
+      start: 41
+      end: 45
+  curl https://example.com/get.py | python3:
+    labels:
+    - source: curl https://example.com/get.py | python3
+      style: primary
+      start: 0
+      end: 41
+    - source: curl
+      style: secondary
+      start: 0
+      end: 4
+    - source: curl https://example.com/get.py
+      style: secondary
+      start: 0
+      end: 31
+    - source: python3
+      style: secondary
+      start: 34
+      end: 41
+    - source: python3
+      style: secondary
+      start: 34
+      end: 41
+  wget -qO- https://example.com/setup.sh | sh:
+    labels:
+    - source: wget -qO- https://example.com/setup.sh | sh
+      style: primary
+      start: 0
+      end: 43
+    - source: wget
+      style: secondary
+      start: 0
+      end: 4
+    - source: wget -qO- https://example.com/setup.sh
+      style: secondary
+      start: 0
+      end: 38
+    - source: sh
+      style: secondary
+      start: 41
+      end: 43
+    - source: sh
+      style: secondary
+      start: 41
+      end: 43

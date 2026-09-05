@@ -1,0 +1,22 @@
+id: php-insecure-cookie-flags
+snapshots:
+  <?php setcookie("sid", $v);:
+    labels:
+    - source: setcookie("sid", $v)
+      style: primary
+      start: 6
+      end: 26
+    - source: setcookie
+      style: secondary
+      start: 6
+      end: 15
+  <?php setrawcookie("token", $v);:
+    labels:
+    - source: setrawcookie("token", $v)
+      style: primary
+      start: 6
+      end: 31
+    - source: setrawcookie
+      style: secondary
+      start: 6
+      end: 18

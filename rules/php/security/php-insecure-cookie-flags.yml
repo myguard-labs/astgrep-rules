@@ -1,0 +1,35 @@
+id: php-insecure-cookie-flags
+language: php
+severity: error
+message: >-
+  Cookie set without the httponly and secure flags — script on the page can read
+  it via document.cookie, and the browser will send it over plaintext HTTP where
+  it can be captured (CWE-1004, CWE-614). For a session or auth cookie that is
+  account takeover. Pass an options array with httponly, secure and samesite
+  set.
+note: >-
+  Fires on setcookie/setrawcookie called with at most three arguments, the shape
+  that cannot carry the flags, and on an options array naming neither flag. The
+  seven-argument positional form is not checked: its booleans are unnamed, so
+  their meaning is not visible to a syntactic matcher. A deliberately readable,
+  non-sensitive preference cookie is the routine dismissal.
+rule:
+  kind: function_call_expression
+  all:
+    - has:
+        field: function
+        regex: '^(setcookie|setrawcookie)$'
+    - not:
+        has:
+          stopBy: end
+          regex: '(?i)httponly'
+    - not:
+        has:
+          stopBy: end
+          regex: '(?i)secure'
+    - not:
+        has:
+          field: arguments
+          has:
+            kind: argument
+            nthChild: 4

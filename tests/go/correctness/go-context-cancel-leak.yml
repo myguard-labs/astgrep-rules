@@ -1,0 +1,11 @@
+id: go-context-cancel-leak
+valid:
+- 'package m; func f() { ctx, cancel := context.WithTimeout(p, d); defer cancel() }'
+- 'package m; func f() { ctx, cancel := context.WithCancel(p); defer cancel(); use(ctx) }'
+- 'package m; func f() { ctx := context.Background() }'
+- 'package m; func f() { _, err := g(); return err }'
+- 'package m; // ctx, _ := context.WithTimeout(p, d)'
+invalid:
+- 'package m; func f() { ctx, _ := context.WithTimeout(p, d); use(ctx) }'
+- 'package m; func f() { ctx, _ := context.WithCancel(p) }'
+- 'package m; func f() { ctx, _ = context.WithDeadline(p, t) }'
