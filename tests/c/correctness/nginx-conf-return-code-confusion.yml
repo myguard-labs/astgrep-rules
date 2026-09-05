@@ -29,6 +29,13 @@ valid:
   }
 - |
   char *
+  outer2(ngx_conf_t *cf)
+  {
+      char *helper(void) { return NGX_OK; }
+      return NGX_CONF_OK;
+  }
+- |
+  char *
   lookup(void)
   {
       return NGX_OK;
@@ -54,6 +61,12 @@ valid:
       return "return NGX_ERROR;";
   }
 invalid:
+- |
+  char *
+  init_conf(ngx_cycle_t *cycle, void *conf)
+  {
+      return NGX_OK;
+  }
 - |
   static char *
   merge(ngx_conf_t *cf, void *parent, void *child)

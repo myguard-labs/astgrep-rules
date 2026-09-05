@@ -12,8 +12,10 @@ note: >-
   without a sentinel; an unmatched directive value walked into unrelated
   memory. The rule asks only whether a sentinel appears among the initialiser
   elements, not whether it is last, so a sentinel in the middle of a table
-  still passes here even though the walker stops there. Only initialised array
-  definitions are checked; a table filled at runtime is out of scope.
+  still passes here even though the walker stops there. The sentinel must be
+  a real identifier child, so a string or comment merely naming it does not
+  satisfy the rule. Only initialised array definitions are checked; a table
+  filled at runtime is out of scope.
 rule:
   kind: declaration
   any:
@@ -30,7 +32,9 @@ rule:
               not:
                 has:
                   kind: initializer_list
-                  regex: \bngx_null_string\b
+                  has:
+                    kind: identifier
+                    regex: ^ngx_null_string$
     - all:
         - has:
             field: type

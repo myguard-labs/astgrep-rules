@@ -69,6 +69,74 @@ snapshots:
       start: 27
       end: 105
   ? |
+    static ngx_conf_enum_t  ngx_http_x_spoof2[] = {
+        { ngx_string("on"), 1 /* ngx_null_string */ },
+        { ngx_string("off"), 0 }
+    };
+  : labels:
+    - source: |-
+        static ngx_conf_enum_t  ngx_http_x_spoof2[] = {
+            { ngx_string("on"), 1 /* ngx_null_string */ },
+            { ngx_string("off"), 0 }
+        };
+      style: primary
+      start: 0
+      end: 130
+    - source: ngx_conf_enum_t
+      style: secondary
+      start: 7
+      end: 22
+    - source: |-
+        {
+            { ngx_string("on"), 1 /* ngx_null_string */ },
+            { ngx_string("off"), 0 }
+        }
+      style: secondary
+      start: 46
+      end: 129
+    - source: |-
+        ngx_http_x_spoof2[] = {
+            { ngx_string("on"), 1 /* ngx_null_string */ },
+            { ngx_string("off"), 0 }
+        }
+      style: secondary
+      start: 24
+      end: 129
+  ? |
+    static ngx_conf_enum_t  ngx_http_x_spoof[] = {
+        { ngx_string("ngx_null_string"), 1 },
+        { ngx_string("off"), 0 }
+    };
+  : labels:
+    - source: |-
+        static ngx_conf_enum_t  ngx_http_x_spoof[] = {
+            { ngx_string("ngx_null_string"), 1 },
+            { ngx_string("off"), 0 }
+        };
+      style: primary
+      start: 0
+      end: 120
+    - source: ngx_conf_enum_t
+      style: secondary
+      start: 7
+      end: 22
+    - source: |-
+        {
+            { ngx_string("ngx_null_string"), 1 },
+            { ngx_string("off"), 0 }
+        }
+      style: secondary
+      start: 45
+      end: 119
+    - source: |-
+        ngx_http_x_spoof[] = {
+            { ngx_string("ngx_null_string"), 1 },
+            { ngx_string("off"), 0 }
+        }
+      style: secondary
+      start: 24
+      end: 119
+  ? |
     static ngx_conf_enum_t  ngx_http_x_static[] = {
         { ngx_null_string, 0 },
         { ngx_string("on"), 1 }

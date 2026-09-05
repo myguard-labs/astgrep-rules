@@ -33,3 +33,5 @@ invalid:
 - void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%zX", n); }
 - void f(void) { p = ngx_slprintf(buf, last, "%lu", n); }
 - void f(void) { ngx_log_stderr(0, "%llu", n); }
+- void f(void) { ngx_log_abort(0, "%lu", n); }
+- void f(void) { ngx_log_error(NGX_LOG_ERR, log, /* errno */ 0, "%lu", n); }

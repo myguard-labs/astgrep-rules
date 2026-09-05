@@ -2,25 +2,49 @@ id: nginx-pool-cleanup-add-size-discarded
 language: c
 severity: info
 message: >-
-  ngx_pool_cleanup_add() was given a non-zero size, so it may allocate
-  cleanup->data, and a later statement overwrites cleanup->data with another
-  pointer. Where the size is genuinely non-zero the allocated block is
-  orphaned. Pass 0 when the handler receives an external pointer.
+  ngx_pool_cleanup_add() was given a size expression other than literal zero,
+  so it may allocate cleanup->data, and a later statement overwrites
+  cleanup->data with another pointer. Where the size is genuinely non-zero the
+  allocated block is orphaned. Pass 0 when the handler receives an external
+  pointer.
 note: >-
   Real: nginx-zstd-module f735a5d. Advisory: ngx_pool_cleanup_add allocates
   only when the runtime size is non-zero (core/ngx_palloc.c), and this rule
   cannot evaluate the expression, so a macro or variable that happens to be
-  zero still matches. The overwrite must appear after the allocation in
-  source order, but no path analysis is done, so the two may be on branches
-  that never both execute.
+  zero still matches. The allocating statement may be a plain assignment, a
+  declaration, or an assignment inside an if condition. The overwrite must
+  follow it in source order, but no path analysis is done, so the two may be
+  on branches that never both execute. An overwrite inside a nested function
+  definition is not attributed to the enclosing allocation.
+utils:
+  alloc-stmt:
+    any:
+      - kind: expression_statement
+        has:
+          pattern: $C = ngx_pool_cleanup_add($P, $N)
+          stopBy: end
+      - kind: if_statement
+        has:
+          pattern: $C = ngx_pool_cleanup_add($P, $N)
+          stopBy: end
+      - kind: declaration
+        has:
+          pattern: $C = ngx_pool_cleanup_add($P, $N)
+          stopBy: end
 rule:
-  kind: expression_statement
-  pattern: $C = ngx_pool_cleanup_add($P, $N);
+  matches: alloc-stmt
   precedes:
     stopBy: end
     has:
       pattern: $C->data = $V
       stopBy: end
+      not:
+        inside:
+          kind: function_definition
+          stopBy: end
+          inside:
+            kind: function_definition
+            stopBy: end
 constraints:
   N:
     not:

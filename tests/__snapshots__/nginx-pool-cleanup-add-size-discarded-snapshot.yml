@@ -6,6 +6,10 @@ snapshots:
       style: primary
       start: 15
       end: 74
+    - source: cln = ngx_pool_cleanup_add(cf->pool, sizeof(ZSTD_CDict *))
+      style: secondary
+      start: 15
+      end: 73
     - source: cln->data = conf->dict
       style: secondary
       start: 118
@@ -20,6 +24,10 @@ snapshots:
       style: primary
       start: 15
       end: 54
+    - source: cln = ngx_pool_cleanup_add(pool, size)
+      style: secondary
+      start: 15
+      end: 53
     - source: cln->data = ctx
       style: secondary
       start: 97
@@ -28,3 +36,21 @@ snapshots:
       style: secondary
       start: 97
       end: 112
+  void f(void) { if ((cln = ngx_pool_cleanup_add(pool, sizeof(x))) == NULL) { return; } cln->data = ctx; }:
+    labels:
+    - source: if ((cln = ngx_pool_cleanup_add(pool, sizeof(x))) == NULL) { return; }
+      style: primary
+      start: 15
+      end: 85
+    - source: cln = ngx_pool_cleanup_add(pool, sizeof(x))
+      style: secondary
+      start: 20
+      end: 63
+    - source: cln->data = ctx
+      style: secondary
+      start: 86
+      end: 101
+    - source: cln->data = ctx
+      style: secondary
+      start: 86
+      end: 101

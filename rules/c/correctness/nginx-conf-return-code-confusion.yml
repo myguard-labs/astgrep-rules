@@ -9,9 +9,11 @@ message: >-
   result against the other family.
 note: >-
   Real: nginx-zstd-module 1b52f42, merge_loc_conf returned NGX_OK from a
-  char * function. The char * side requires an ngx_conf_t * parameter, so an
-  unrelated char * helper returning a sentinel is not flagged, and a return
-  nested inside a differently typed inner function is excluded. Only return
+  char * function. The char * side requires an ngx_conf_t * or ngx_cycle_t *
+  parameter, which covers both directive handlers and the core module
+  init_conf callback (core/ngx_module.h), so an unrelated char * helper
+  returning a sentinel is not flagged. A return nested inside an inner
+  function is attributed to that function, not the enclosing handler. Only return
   statements are matched; a value stored in a local first needs the local's
   type, and u_char * / char ** functions are out of scope.
 rule:
@@ -32,15 +34,19 @@ rule:
                   has:
                     field: declarator
                     kind: function_declarator
-                    regex: \bngx_conf_t\s*\*
+                    regex: \bngx_(conf|cycle)_t\s*\*
         - not:
             inside:
               kind: function_definition
               stopBy: end
               not:
                 has:
-                  field: type
-                  regex: ^char$
+                  field: declarator
+                  kind: pointer_declarator
+                  has:
+                    field: declarator
+                    kind: function_declarator
+                    regex: \bngx_(conf|cycle)_t\s*\*
     - kind: return_statement
       regex: ^return\s+NGX_CONF_(OK|ERROR)\s*;$
       all:

@@ -35,6 +35,40 @@ snapshots:
       start: 0
       end: 88
   ? |
+    char *
+    init_conf(ngx_cycle_t *cycle, void *conf)
+    {
+        return NGX_OK;
+    }
+  : labels:
+    - source: return NGX_OK;
+      style: primary
+      start: 55
+      end: 69
+    - source: char
+      style: secondary
+      start: 0
+      end: 4
+    - source: init_conf(ngx_cycle_t *cycle, void *conf)
+      style: secondary
+      start: 7
+      end: 48
+    - source: |-
+        *
+        init_conf(ngx_cycle_t *cycle, void *conf)
+      style: secondary
+      start: 5
+      end: 48
+    - source: |-
+        char *
+        init_conf(ngx_cycle_t *cycle, void *conf)
+        {
+            return NGX_OK;
+        }
+      style: secondary
+      start: 0
+      end: 71
+  ? |
     int
     init(ngx_conf_t *cf)
     {

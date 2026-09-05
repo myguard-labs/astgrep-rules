@@ -68,9 +68,10 @@ Each rule's `note` names the commit that motivated it.
   elements, not whether it is last, so a sentinel in the middle passes even
   though the walker stops there. Position-based matching was tried first and
   rejected: a trailing comment is a named node, so it took the last slot and
-  produced an error-level false positive on a correctly terminated table. A
-  table filled at runtime, or terminated through a macro with another name,
-  is not checked.
+  produced an error-level false positive on a correctly terminated table. The
+  sentinel must appear as a real identifier child: a string or comment merely
+  naming `ngx_null_string` does not satisfy it. A table filled at runtime, or
+  terminated through a macro with another name, is not checked.
 - `nginx-command-offset-struct-mismatch` counts fields with `ofRule` so that
   inline comments between them do not shift the positions. It trusts the
   `*_main_conf_t`,
@@ -81,12 +82,14 @@ Each rule's `note` names the commit that motivated it.
 - `nginx-format-libc-length-modifier` checks the format argument at its known
   position per function: second for `ngx_sprintf` and `ngx_log_stderr`, third
   for `ngx_snprintf`/`ngx_slprintf`/`ngx_vslprintf`, fourth for the log and
-  conf-log family. A `%lu` sitting in a data argument is therefore not
-  flagged. `%l` and `%ul` are legal nginx conversions and stay quiet; `%lu`,
-  `%ld`, `%zu`, `%zi`, `%zo`, `%zX`, `%hu`, `%lld` and a bare `%u` without a
-  conversion letter fire. Note what nginx actually does with these: `%l`
-  consumes a long and then prints the trailing `u` literally, so the argument
-  list is not shifted; a bare `%u` consumes nothing. Wrappers, macros and
+  conf-log family, plus `ngx_log_abort`. Positions skip comment nodes, so an
+  inline comment before the format does not hide it. A `%lu` sitting in a data
+  argument is therefore not flagged. `%l` and `%ul` are legal nginx
+  conversions and stay quiet; `%lu`, `%ld`, `%zu`, `%zi`, `%zo`, `%zX`, `%hu`,
+  `%lld` and a bare `%u` without a conversion letter fire. Note what nginx
+  actually does with these: `%l` consumes a long and then prints the trailing
+  `u` literally, so the argument list is not shifted; a bare `%u` consumes
+  nothing. Wrappers, macros and
   format strings held in variables are not seen. Measured zero hits on the
   Angie tree.
 - `c-duplicate-boolean-clause` compares operand text, so two clauses that
@@ -111,16 +114,20 @@ Each rule's `note` names the commit that motivated it.
   cannot tell them apart; the reviewer does.
 - `nginx-conf-return-code-confusion` sees return statements only. A code
   stored in a local and returned later needs the local's type. `u_char *` and
-  `char **` functions are excluded, and the `char *` side additionally
-  requires an `ngx_conf_t *` parameter so an unrelated `char *` helper
-  returning a sentinel is not flagged. A return inside a nested function
-  definition is judged on that function's own signature.
+  `char **` functions are excluded, and the `char *` side requires an
+  `ngx_conf_t *` or `ngx_cycle_t *` parameter, which covers both directive
+  handlers and the core module `init_conf` callback (`core/ngx_module.h`), so
+  an unrelated `char *` helper returning a sentinel is not flagged. A return
+  inside a nested function is attributed to that function, not the enclosing
+  handler.
 - `nginx-buf-flush-before-last-buf` matches the direct `else if` shape on the
   same buffer expression. Two independent `if` statements, or a compound
   condition on the first branch, do not match.
-- `nginx-pool-cleanup-add-size-discarded` requires the `->data` assignment to
-  follow the allocation in source order, but does no path analysis, so the
-  two may sit on branches that never both execute. `ngx_pool_cleanup_add`
+- `nginx-pool-cleanup-add-size-discarded` recognises the allocation as a plain
+  assignment, a declaration, or an assignment inside an `if` condition, and
+  requires the `->data` assignment to follow it in source order without
+  crossing into a nested function. It does no path analysis, so the two may
+  sit on branches that never both execute. `ngx_pool_cleanup_add`
   allocates only when the runtime size is non-zero (`core/ngx_palloc.c`), and
   the rule cannot evaluate the expression, so a macro or variable that
   happens to be zero still matches.

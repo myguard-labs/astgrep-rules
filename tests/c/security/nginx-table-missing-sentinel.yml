@@ -55,6 +55,18 @@ valid:
 - /* static ngx_conf_enum_t  bad[] = { { ngx_string("off"), 0 } }; */
 - static const char  *text = "static ngx_command_t  bad[] = { { ngx_string(\"x\") } };";
 invalid:
+# Spoof controls: the sentinel must be a real identifier child, not text that
+# merely names it inside a string or a comment.
+- |
+  static ngx_conf_enum_t  ngx_http_x_spoof[] = {
+      { ngx_string("ngx_null_string"), 1 },
+      { ngx_string("off"), 0 }
+  };
+- |
+  static ngx_conf_enum_t  ngx_http_x_spoof2[] = {
+      { ngx_string("on"), 1 /* ngx_null_string */ },
+      { ngx_string("off"), 0 }
+  };
 - |
   static ngx_conf_enum_t  ngx_http_x_static[] = {
       { ngx_string("off"), 0 },

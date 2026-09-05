@@ -18,6 +18,24 @@ snapshots:
       style: secondary
       start: 56
       end: 79
+  void f(void) { ngx_log_abort(0, "%lu", n); }:
+    labels:
+    - source: ngx_log_abort(0, "%lu", n)
+      style: primary
+      start: 15
+      end: 41
+    - source: ngx_log_abort
+      style: secondary
+      start: 15
+      end: 28
+    - source: '"%lu"'
+      style: secondary
+      start: 32
+      end: 37
+    - source: '"%lu"'
+      style: secondary
+      start: 32
+      end: 37
   void f(void) { ngx_log_debug1(NGX_LOG_DEBUG_HTTP, log, 0, "ratio %ld", r); }:
     labels:
     - source: ngx_log_debug1(NGX_LOG_DEBUG_HTTP, log, 0, "ratio %ld", r)
@@ -36,6 +54,24 @@ snapshots:
       style: secondary
       start: 58
       end: 69
+  void f(void) { ngx_log_error(NGX_LOG_ERR, log, /* errno */ 0, "%lu", n); }:
+    labels:
+    - source: ngx_log_error(NGX_LOG_ERR, log, /* errno */ 0, "%lu", n)
+      style: primary
+      start: 15
+      end: 71
+    - source: ngx_log_error
+      style: secondary
+      start: 15
+      end: 28
+    - source: '"%lu"'
+      style: secondary
+      start: 62
+      end: 67
+    - source: '"%lu"'
+      style: secondary
+      start: 62
+      end: 67
   void f(void) { ngx_log_error(NGX_LOG_ERR, log, 0, "%lld", v); }:
     labels:
     - source: ngx_log_error(NGX_LOG_ERR, log, 0, "%lld", v)

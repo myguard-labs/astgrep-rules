@@ -14,7 +14,9 @@ note: >-
   the unsigned %uL. The related 89199b0 (#290) widened four log arguments
   rather than changing a specifier. The format argument is matched by
   position per function, so a %lu inside a data argument is not flagged.
-  Wrappers and macros with their own format position need their own entry,
+  Field positions skip comment nodes, so an inline comment before the format
+  does not hide it. Wrappers and macros with their own format position need
+  their own entry,
   and a format string held in a variable is not seen. Snapshots show the
   format literal twice as a secondary label: the argument-list traversal and
   the literal match annotate the same range. Scan output reports one finding
@@ -39,7 +41,9 @@ rule:
         - has:
             field: arguments
             has:
-              nthChild: 2
+              nthChild:
+                position: 2
+                ofRule: {not: {kind: comment}}
               matches: format-literal
     # ngx_snprintf(buf, max, fmt, ...) / ngx_slprintf(buf, last, fmt, ...)
     # / ngx_vslprintf(buf, last, fmt, args) -- format is argument 3
@@ -50,7 +54,9 @@ rule:
         - has:
             field: arguments
             has:
-              nthChild: 3
+              nthChild:
+                position: 3
+                ofRule: {not: {kind: comment}}
               matches: format-literal
     # ngx_log_error(level, log, err, fmt, ...) and the ngx_log_debugN macros,
     # ngx_conf_log_error(level, cf, err, fmt, ...) -- format is argument 4
@@ -61,15 +67,20 @@ rule:
         - has:
             field: arguments
             has:
-              nthChild: 4
+              nthChild:
+                position: 4
+                ofRule: {not: {kind: comment}}
               matches: format-literal
-    # ngx_log_stderr(err, fmt, ...) -- format is argument 2
+    # ngx_log_stderr(err, fmt, ...) and ngx_log_abort(err, fmt, ...)
+    # -- format is argument 2
     - all:
         - has:
             field: function
-            regex: ^ngx_log_stderr$
+            regex: ^(ngx_log_stderr|ngx_log_abort)$
         - has:
             field: arguments
             has:
-              nthChild: 2
+              nthChild:
+                position: 2
+                ofRule: {not: {kind: comment}}
               matches: format-literal
