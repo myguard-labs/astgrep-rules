@@ -334,3 +334,61 @@ Use a script for this check, not a rule. Shift-width truncation
 separately: 297 sites, nearly all constant shifts such as `1u << 20` that are
 correct, and the defective form is only defective when the destination is
 64-bit, which is a type question ast-grep cannot answer.
+
+## Tenth batch: mined from quality-lint catalogs
+
+Previous passes mined CVE, CWE Top 25, OWASP, the nginx development guide and
+this codebase's own fix history — all security-shaped. This pass (2026-09-05)
+mined the correctness/nit catalogs instead: staticcheck's SA/S checks and
+ruff's flake8-bugbear (B) rules, on the theory that the pack's `correctness`
+category was thin (8 of 69 rules) and that the two vendored packs under
+`.ast-grep/vendor` are security-only, so a quality defect has no lens here at
+all. Every candidate was measured against first-party code before shipping;
+`labs/build_psol/src` is upstream pagespeed and was excluded from the counts.
+
+- `py-raise-without-from` covers ruff B904/CWE-390. Measured 16 hits across 347
+  first-party Python files, all genuine: 12 in `tools/mariadb-mcp`, 2 in
+  `tools/wp_mcp_client.py`, 2 in `labs/nginx-http-sentinel-module`. Every one
+  interpolates the caught exception into the message while dropping the
+  explicit chain. It excludes `from None`, the documented suppression idiom,
+  and a bare re-raise. It requires the raised expression to be a call, so
+  `raise SomeError` (a class, no call) is a false negative.
+- `py-zip-without-strict` covers ruff B905/PEP 618. Measured 9 first-party
+  hits; three are alignment invariants where truncation would corrupt output
+  rather than crash — `mailstrix-yara-gen/src/schedule.py:155` pairs cron
+  fields with their ranges, `src/classifier.py:215` pairs feature names with
+  importances, and `tools/mariadb-mcp/src/server.py:828` zips three parallel
+  lists. It is `info` because shortest-wins is sometimes deliberate. The
+  `nthChild: 2` clause on the argument list is what excludes single-argument
+  `zip()`, which cannot mismatch; the identifier `kind` on the function field
+  is what excludes a `.zip()` method call. Snapshots show the second argument
+  as a duplicated secondary label, the same nested-`has` artifact recorded for
+  `c-strncat-size-misuse`.
+
+Measured rejections, recorded so the seams are not re-mined:
+
+- A `requests`/session call with no `timeout=` argument: 0 first-party hits.
+  Every call site in `tools/website-tester` and `labs/webtester` already passes
+  one. The `go-http-no-timeout` analogue stays the only timeout rule.
+- Go was measured clean on the classic staticcheck shapes across 2366
+  first-party non-vendor files: `time.Tick` 0, `signal.Notify` 0, `rand.Seed`
+  0, `time.Now().Sub` 0, `fmt.Sprintf("%s", x)` 0, `x == true` 0, defer in a
+  range loop 0. golangci-lint already runs on those modules, so the shapes a
+  Go linter covers are not worth re-encoding here.
+- `in_array($needle, $haystack)` without the strict flag: 43 raw hits, 41 in
+  `labs/vimbadmin/vendor` and the rest third-party, against 240 already-strict
+  calls. First-party PHP does not carry the defect.
+- Bash shapes (`cd $D` 1653, `rm -rf $V` 496) are too broad to narrow into a
+  selective matcher at this corpus size; shellcheck already covers them.
+
+The parse trap worth recording: a rule whose `all` array contains only `kind`
+plus `not`/`inside` clauses is rejected with "Rule must have one positive
+matcher" — `kind` alone does not satisfy it. Adding a positive `has` fixes it.
+The `not: {has: {field: cause}}` spelling for excluding `raise ... from` also
+failed to compose; `not: {pattern: 'raise $EXC($$$ARGS) from $CAUSE'}` works
+and was verified against both forms on 0.45.2.
+
+The splat case was caught in review: `zip(*rows)` is a single `list_splat`
+argument that expands to many iterables, so the `nthChild: 2` clause alone
+made the common transpose idiom a false negative. The shipped rule matches
+either a second argument or a `list_splat`.

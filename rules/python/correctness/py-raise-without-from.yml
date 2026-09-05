@@ -1,0 +1,26 @@
+id: py-raise-without-from
+language: python
+severity: warning
+message: >-
+  Raising a new exception inside an `except` clause without `from` breaks the
+  explicit cause chain (CWE-390, ruff B904). The original error is still
+  attached as `__context__`, but tooling that reads `__cause__` — and any
+  handler that re-wraps again — loses the deliberate link, so the traceback
+  reads as if the second failure arose on its own.
+note: >-
+  Fires on a `raise <call>` inside an `except` clause with no `from` clause.
+  `raise ... from None` is the documented way to suppress a chain deliberately
+  and does not match. A bare `re-raise` does not match either. The rule does
+  not check whether the caught exception is referenced in the message: a raise
+  that interpolates the caught value but drops the chain is exactly the shape
+  this catches.
+rule:
+  all:
+    - kind: raise_statement
+    - has:
+        kind: call
+    - not:
+        pattern: raise $EXC($$$ARGS) from $CAUSE
+    - inside:
+        kind: except_clause
+        stopBy: end

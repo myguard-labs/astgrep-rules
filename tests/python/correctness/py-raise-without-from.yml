@@ -1,0 +1,36 @@
+id: py-raise-without-from
+valid:
+- |
+  try:
+      connect()
+  except OSError as e:
+      raise RuntimeError("connect failed") from e
+- |
+  try:
+      connect()
+  except OSError:
+      raise RuntimeError("connect failed") from None
+- |
+  try:
+      connect()
+  except OSError:
+      raise
+- |
+  def f():
+      raise RuntimeError("not in a handler")
+- |
+  try:
+      connect()
+  except OSError as e:
+      log.warning("connect failed: %s", e)
+invalid:
+- |
+  try:
+      connect()
+  except OSError as e:
+      raise RuntimeError(f"connect failed: {e}")
+- |
+  try:
+      load()
+  except ImportError:
+      raise RuntimeError("dependency missing")
