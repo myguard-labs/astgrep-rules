@@ -56,3 +56,46 @@ The time truncation rule covers explicit casts and direct integer declarations.
 It includes qualifiers, signed/unsigned forms, and individual declarators in a
 multi-declaration. Assignments to previously declared variables need type
 resolution and remain outside this matcher.
+
+## nginx-zstd-module history batch
+
+Rules mined from the nginx-zstd-module commit history (2018 to 2026-09).
+Each rule's `note` names the commit that motivated it.
+
+- `nginx-table-missing-sentinel` reads the last named element of an
+  initialised `ngx_conf_enum_t`, `ngx_conf_bitmask_t`, `ngx_command_t`,
+  `ngx_http_variable_t` or `ngx_stream_variable_t` array. A table filled at
+  runtime, or terminated through a macro with another name, is not checked.
+- `nginx-command-offset-struct-mismatch` trusts the `*_main_conf_t`,
+  `*_srv_conf_t`, `*_loc_conf_t` naming convention and fires only for generic
+  `ngx_*_set_*_slot` handlers. A custom handler may reinterpret the offset
+  (Angie's `status_zone` stores a main-conf field under the srv offset) and
+  is skipped; a struct that does not follow the convention is skipped too.
+- `nginx-format-libc-length-modifier` checks direct literal arguments of the
+  listed nginx formatting and logging functions. `%l` and `%ul` are legal
+  nginx conversions and stay quiet; `%lu`, `%ld`, `%zu`, `%hu`, `%lld` and a
+  bare `%u` without a type letter fire. Wrappers, macros and format strings
+  held in variables are not seen. Measured zero hits on the Angie tree.
+- `c-duplicate-boolean-clause` compares operand text, so two clauses that
+  differ only in spacing are still distinct. Operands containing a call are
+  excluded: nginx's DoH parser repeats `skip_name()` on purpose. Anything
+  under a preprocessor condition or a tree-sitter ERROR node is excluded; a
+  continued `#if` line recovers into an ERROR subtree and matched wrongly.
+- `nginx-strstrn-length-off-by-one` matches only `sizeof(lit) - 1` with the
+  same literal as the needle. A hand-counted length or a named needle is left
+  to review. The defect is a missed match, not an over-read: `strncasecmp`
+  stops at the needle's NUL.
+- `zstd-ifdef-on-enum-constant` flags every `#ifdef`, `#ifndef` and
+  `defined()` on a `ZSTD_c_`, `ZSTD_d_` or `ZSTD_e_` name. Experimental
+  parameters are macros under `ZSTD_STATIC_LINKING_ONLY`, so a guard may be
+  intentional in a static-only build; the rule still asks for a version gate.
+- `nginx-conf-return-code-confusion` sees return statements only. A code
+  stored in a local and returned later needs the local's type. `u_char *`
+  and `char **` functions are excluded because they are not conf handlers.
+- `nginx-buf-flush-before-last-buf` matches the direct `else if` shape on the
+  same buffer expression. Two independent `if` statements, or a compound
+  condition on the first branch, do not match.
+- `nginx-pool-cleanup-add-size-discarded` pairs the allocation with any
+  `->data` assignment on the same cleanup variable anywhere in the function.
+  It does not order the two statements or follow the value; a size given by
+  a macro that expands to zero still counts as an allocation request.

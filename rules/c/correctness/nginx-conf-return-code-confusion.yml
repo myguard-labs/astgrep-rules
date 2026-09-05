@@ -1,0 +1,43 @@
+id: nginx-conf-return-code-confusion
+language: c
+severity: warning
+message: >-
+  Return code from the wrong nginx family. Configuration handlers return
+  char * and use NGX_CONF_OK / NGX_CONF_ERROR; ngx_int_t handlers use NGX_OK /
+  NGX_ERROR. The wrong family only works by pointer/integer coincidence
+  (NGX_OK is 0, NGX_ERROR is -1) and breaks any caller that compares the
+  result against the other family.
+note: >-
+  Real: nginx-zstd-module 1b52f42, merge_loc_conf returned NGX_OK from a
+  char * function. Only return statements are matched; a value stored in a
+  local first needs the local's type, and a function returning u_char * or
+  char ** is deliberately excluded.
+rule:
+  any:
+    - kind: return_statement
+      regex: ^return\s+NGX_(OK|ERROR|AGAIN|DECLINED|DONE|BUSY|ABORT)\s*;$
+      inside:
+        kind: function_definition
+        stopBy: end
+        all:
+          - has:
+              field: type
+              regex: ^char$
+          - has:
+              field: declarator
+              kind: pointer_declarator
+              has:
+                field: declarator
+                kind: function_declarator
+    - kind: return_statement
+      regex: ^return\s+NGX_CONF_(OK|ERROR)\s*;$
+      inside:
+        kind: function_definition
+        stopBy: end
+        all:
+          - has:
+              field: type
+              regex: ^(ngx_int_t|ngx_uint_t|int)$
+          - has:
+              field: declarator
+              kind: function_declarator

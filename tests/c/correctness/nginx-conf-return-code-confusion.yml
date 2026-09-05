@@ -1,0 +1,69 @@
+id: nginx-conf-return-code-confusion
+valid:
+- |
+  static char *
+  merge(ngx_conf_t *cf, void *parent, void *child)
+  {
+      if (x) { return NGX_CONF_ERROR; }
+      return NGX_CONF_OK;
+  }
+- |
+  static ngx_int_t
+  init(ngx_conf_t *cf)
+  {
+      if (x) return NGX_ERROR;
+      return NGX_OK;
+  }
+- |
+  static u_char *
+  fmt(u_char *p)
+  {
+      return NGX_OK;
+  }
+- |
+  static char **
+  names(void)
+  {
+      return NGX_OK;
+  }
+- |
+  static char *
+  merge(ngx_conf_t *cf, void *parent, void *child)
+  {
+      rc = NGX_OK;
+      return rc;
+  }
+- |
+  static char *
+  merge(ngx_conf_t *cf, void *parent, void *child)
+  {
+      /* return NGX_OK; */
+      return "return NGX_ERROR;";
+  }
+invalid:
+- |
+  static char *
+  merge(ngx_conf_t *cf, void *parent, void *child)
+  {
+      if (x) { return NGX_OK; }
+      return NGX_CONF_OK;
+  }
+- |
+  char *
+  handler(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+  {
+      return NGX_ERROR;
+  }
+- |
+  static ngx_int_t
+  init(ngx_conf_t *cf)
+  {
+      if (x) return NGX_CONF_ERROR;
+      return NGX_OK;
+  }
+- |
+  int
+  init(ngx_conf_t *cf)
+  {
+      return NGX_CONF_OK;
+  }

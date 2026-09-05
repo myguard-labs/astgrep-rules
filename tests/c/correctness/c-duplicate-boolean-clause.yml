@@ -1,0 +1,23 @@
+id: c-duplicate-boolean-clause
+valid:
+- void f(void) { if (a || b) { x(); } }
+- void f(void) { if (a && b || a) { x(); } }
+- void f(void) { if (a || b || c || a) { x(); } }
+- void f(void) { if (a == 1 || a == 2) { x(); } }
+- void f(void) { if (a | a) { x(); } }
+- void f(void) { if (g(&rp, end) == NGX_OK && g(&rp, end) == NGX_OK) { x(); } }
+- void f(void) { if (a || (g() && b) || (g() && b)) { x(); } }
+- |
+  #if defined(NGX_X) \
+      && NGX_X
+  int a;
+  #endif
+- /* void f(void) { if (a || a) { x(); } } */
+- void f(void) { const char *t = "if (a || a) { x(); }"; }
+invalid:
+- void f(void) { if (a || a) { x(); } }
+- void f(void) { if (a && a) { x(); } }
+- void f(void) { if (a || (b && c) || (b && c) || d) { x(); } }
+- void f(void) { if (x && conf->max != NGX_CONF_UNSET && conf->max != NGX_CONF_UNSET) { y(); } }
+- void f(void) { if (a->b == c->d || a->b == c->d) { x(); } }
+- void f(void) { r = a || b || b; }

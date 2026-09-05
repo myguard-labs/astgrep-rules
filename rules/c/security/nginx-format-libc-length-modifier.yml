@@ -1,0 +1,31 @@
+id: nginx-format-libc-length-modifier
+language: c
+severity: error
+message: >-
+  libc length modifier inside an nginx format string. ngx_vslprintf() knows
+  %d %i %l %z %L %D %O %T %M %A %p %P %s %V %v %Z and the u/x/X prefixes, not
+  h/ll/j/t, and a bare %u with no conversion letter after it prints nothing.
+  An unknown letter is copied literally and its argument is not consumed, so
+  every later argument is misread. Use %ui, %uz, %uL, %ul, %O.
+note: >-
+  Real: nginx-zstd-module 6038ff2 (#207) and 89199b0 (#290) reworked the
+  byte-counter specifiers. %z alone is ssize_t and %uz is size_t; %zu prints
+  the number followed by a literal u. Only the listed nginx formatting and
+  logging functions are checked; wrappers need their own entry.
+utils:
+  bad-format:
+    regex: '%[-+ 0#]*\d*(?:\.\d+)?(?:(?:hh?|ll?|j|t|q)[diouxX]|z[dux])|%[-+ 0#]*\d*[umxX]*u[^A-Za-z.*%]'
+rule:
+  kind: call_expression
+  all:
+    - has:
+        field: function
+        regex: ^(ngx_sprintf|ngx_snprintf|ngx_slprintf|ngx_vslprintf|ngx_log_error|ngx_log_debug\d|ngx_conf_log_error|ngx_log_stderr|ngx_ssl_error|ngx_http_log_error|ngx_log_abort)$
+    - has:
+        field: arguments
+        has:
+          any:
+            - kind: string_literal
+              matches: bad-format
+            - kind: concatenated_string
+              matches: bad-format

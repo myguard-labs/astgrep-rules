@@ -1,0 +1,22 @@
+id: zstd-ifdef-on-enum-constant
+language: c
+severity: warning
+message: >-
+  Preprocessor test on a libzstd ZSTD_c_* / ZSTD_d_* / ZSTD_e_* name. Stable
+  parameters are enum members, invisible to #ifdef; experimental ones are
+  macros only under ZSTD_STATIC_LINKING_ONLY. The guard therefore tracks the
+  build flavour, not the library version. Gate on ZSTD_VERSION_NUMBER.
+note: >-
+  Real: nginx-zstd-module b3cd0ad / 3ff4c24, #ifdef ZSTD_c_targetCBlockSize
+  compiled the feature out on every release build against libzstd >= 1.5.6,
+  where the name became a plain enumerator.
+rule:
+  any:
+    - kind: preproc_ifdef
+      has:
+        field: name
+        regex: ^ZSTD_[cde]_
+    - kind: preproc_defined
+      has:
+        kind: identifier
+        regex: ^ZSTD_[cde]_

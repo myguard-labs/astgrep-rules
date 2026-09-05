@@ -1,0 +1,11 @@
+id: nginx-pool-cleanup-add-size-discarded
+valid:
+- void f(void) { cln = ngx_pool_cleanup_add(cf->pool, 0); if (cln == NULL) return; cln->data = conf->dict; }
+- void f(void) { cln = ngx_pool_cleanup_add(cf->pool, sizeof(ngx_x_cleanup_t)); if (cln == NULL) return; clnd = cln->data; clnd->dict = conf->dict; }
+- void f(void) { cln = ngx_pool_cleanup_add(cf->pool, sizeof(ZSTD_CDict *)); other->data = conf->dict; }
+- void f(void) { cln = ngx_pool_cleanup_add(cf->pool, sizeof(ZSTD_CDict *)); cln->handler = h; }
+- /* void f(void) { cln = ngx_pool_cleanup_add(cf->pool, sizeof(x)); cln->data = conf->dict; } */
+- void f(void) { const char *t = "cln = ngx_pool_cleanup_add(cf->pool, sizeof(x)); cln->data = conf->dict;"; }
+invalid:
+- void f(void) { cln = ngx_pool_cleanup_add(cf->pool, sizeof(ZSTD_CDict *)); if (cln == NULL) return; cln->handler = h; cln->data = conf->dict; }
+- void f(void) { cln = ngx_pool_cleanup_add(pool, size); if (cln == NULL) { return; } if (ready) { cln->data = ctx; } }

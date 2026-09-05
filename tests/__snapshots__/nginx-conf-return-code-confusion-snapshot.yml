@@ -1,0 +1,130 @@
+id: nginx-conf-return-code-confusion
+snapshots:
+  ? |
+    char *
+    handler(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+    {
+        return NGX_ERROR;
+    }
+  : labels:
+    - source: return NGX_ERROR;
+      style: primary
+      start: 69
+      end: 86
+    - source: char
+      style: secondary
+      start: 0
+      end: 4
+    - source: handler(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+      style: secondary
+      start: 7
+      end: 62
+    - source: |-
+        *
+        handler(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+      style: secondary
+      start: 5
+      end: 62
+    - source: |-
+        char *
+        handler(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+        {
+            return NGX_ERROR;
+        }
+      style: secondary
+      start: 0
+      end: 88
+  ? |
+    int
+    init(ngx_conf_t *cf)
+    {
+        return NGX_CONF_OK;
+    }
+  : labels:
+    - source: return NGX_CONF_OK;
+      style: primary
+      start: 31
+      end: 50
+    - source: int
+      style: secondary
+      start: 0
+      end: 3
+    - source: init(ngx_conf_t *cf)
+      style: secondary
+      start: 4
+      end: 24
+    - source: |-
+        int
+        init(ngx_conf_t *cf)
+        {
+            return NGX_CONF_OK;
+        }
+      style: secondary
+      start: 0
+      end: 52
+  ? |
+    static char *
+    merge(ngx_conf_t *cf, void *parent, void *child)
+    {
+        if (x) { return NGX_OK; }
+        return NGX_CONF_OK;
+    }
+  : labels:
+    - source: return NGX_OK;
+      style: primary
+      start: 78
+      end: 92
+    - source: char
+      style: secondary
+      start: 7
+      end: 11
+    - source: merge(ngx_conf_t *cf, void *parent, void *child)
+      style: secondary
+      start: 14
+      end: 62
+    - source: |-
+        *
+        merge(ngx_conf_t *cf, void *parent, void *child)
+      style: secondary
+      start: 12
+      end: 62
+    - source: |-
+        static char *
+        merge(ngx_conf_t *cf, void *parent, void *child)
+        {
+            if (x) { return NGX_OK; }
+            return NGX_CONF_OK;
+        }
+      style: secondary
+      start: 0
+      end: 120
+  ? |
+    static ngx_int_t
+    init(ngx_conf_t *cf)
+    {
+        if (x) return NGX_CONF_ERROR;
+        return NGX_OK;
+    }
+  : labels:
+    - source: return NGX_CONF_ERROR;
+      style: primary
+      start: 51
+      end: 73
+    - source: ngx_int_t
+      style: secondary
+      start: 7
+      end: 16
+    - source: init(ngx_conf_t *cf)
+      style: secondary
+      start: 17
+      end: 37
+    - source: |-
+        static ngx_int_t
+        init(ngx_conf_t *cf)
+        {
+            if (x) return NGX_CONF_ERROR;
+            return NGX_OK;
+        }
+      style: secondary
+      start: 0
+      end: 94

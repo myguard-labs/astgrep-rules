@@ -1,0 +1,23 @@
+id: nginx-pool-cleanup-add-size-discarded
+language: c
+severity: info
+message: >-
+  ngx_pool_cleanup_add() was asked to allocate cleanup->data, but the same
+  function then overwrites cleanup->data with its own pointer. The allocated
+  block is orphaned. Pass 0 when the handler receives an external pointer.
+note: >-
+  Real: nginx-zstd-module f735a5d. Syntactic only: the overwrite is matched
+  anywhere in the same function, on any path, and a size expression other
+  than the literal 0 counts as a request to allocate.
+rule:
+  pattern: $C = ngx_pool_cleanup_add($P, $N)
+  inside:
+    kind: function_definition
+    stopBy: end
+    has:
+      pattern: $C->data = $V
+      stopBy: end
+constraints:
+  N:
+    not:
+      regex: ^0$

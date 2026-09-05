@@ -1,0 +1,64 @@
+id: nginx-table-missing-sentinel
+language: c
+severity: error
+message: >-
+  nginx static table lacks its terminating sentinel. ngx_conf_enum_t and
+  ngx_conf_bitmask_t arrays end with { ngx_null_string, 0 }, ngx_command_t
+  arrays with ngx_null_command, and ngx_http_variable_t / ngx_stream_variable_t
+  arrays with ngx_http_null_variable / ngx_stream_null_variable. The slot
+  walker and the module loader read past the array otherwise.
+note: >-
+  Real: nginx-zstd-module 08ef190 (#74), ngx_http_zstd_static[] enum table
+  without a sentinel; an unmatched directive value walked into unrelated
+  memory. Only initialised array definitions are checked; a table filled at
+  runtime is out of scope.
+utils:
+  last-element:
+    nthChild:
+      position: 1
+      reverse: true
+rule:
+  kind: declaration
+  any:
+    - all:
+        - has:
+            field: type
+            regex: ^ngx_conf_(enum|bitmask)_t$
+        - has:
+            field: declarator
+            kind: init_declarator
+            has:
+              field: value
+              kind: initializer_list
+              not:
+                has:
+                  matches: last-element
+                  regex: \bngx_null_string\b
+    - all:
+        - has:
+            field: type
+            regex: ^ngx_command_t$
+        - has:
+            field: declarator
+            kind: init_declarator
+            has:
+              field: value
+              kind: initializer_list
+              not:
+                has:
+                  matches: last-element
+                  regex: \bngx_null_command\b
+    - all:
+        - has:
+            field: type
+            regex: ^ngx_(http|stream)_variable_t$
+        - has:
+            field: declarator
+            kind: init_declarator
+            has:
+              field: value
+              kind: initializer_list
+              not:
+                has:
+                  matches: last-element
+                  regex: \bngx_(http|stream)_null_variable\b

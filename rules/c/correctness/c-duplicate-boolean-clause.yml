@@ -1,0 +1,45 @@
+id: c-duplicate-boolean-clause
+language: c
+severity: warning
+message: >-
+  The same operand appears twice in one && / || chain. The repeat is dead:
+  either a copy-paste left a condition out, or the clause should be removed.
+note: >-
+  Real: nginx-zstd-module e9cf598, a three-line max_length clause duplicated
+  verbatim in the header-filter eligibility test. Operands containing a call
+  are skipped because a repeated side-effecting call (skip two DNS names) is
+  intentional. Preprocessor conditions and anything under a parse-error
+  node are skipped: a continued #if line recovers into an ERROR subtree.
+utils:
+  call-free:
+    not:
+      any:
+        - kind: call_expression
+        - has:
+            kind: call_expression
+            stopBy: end
+rule:
+  kind: binary_expression
+  not:
+    inside:
+      any:
+        - kind: preproc_if
+        - kind: preproc_elif
+        - kind: ERROR
+      stopBy: end
+  any:
+    - pattern: $A || $A
+    - pattern: $A && $A
+    - all:
+        - pattern: $L || $A
+        - has:
+            field: left
+            pattern: $M || $A
+    - all:
+        - pattern: $L && $A
+        - has:
+            field: left
+            pattern: $M && $A
+constraints:
+  A:
+    matches: call-free
