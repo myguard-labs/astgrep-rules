@@ -1,5 +1,95 @@
 id: sh-eval-expansion
 snapshots:
+  '"eval" "$value"':
+    labels:
+    - source: '"eval" "$value"'
+      style: primary
+      start: 0
+      end: 15
+    - source: '"eval"'
+      style: secondary
+      start: 0
+      end: 6
+    - source: $value
+      style: secondary
+      start: 8
+      end: 14
+  MODE=x builtin eval "$value":
+    labels:
+    - source: MODE=x builtin eval "$value"
+      style: primary
+      start: 0
+      end: 28
+    - source: builtin
+      style: secondary
+      start: 7
+      end: 14
+    - source: eval
+      style: secondary
+      start: 15
+      end: 19
+    - source: $value
+      style: secondary
+      start: 21
+      end: 27
+  builtin "eval" "$value":
+    labels:
+    - source: builtin "eval" "$value"
+      style: primary
+      start: 0
+      end: 23
+    - source: builtin
+      style: secondary
+      start: 0
+      end: 7
+    - source: '"eval"'
+      style: secondary
+      start: 8
+      end: 14
+    - source: $value
+      style: secondary
+      start: 16
+      end: 22
+  builtin 'eval' "$value":
+    labels:
+    - source: builtin 'eval' "$value"
+      style: primary
+      start: 0
+      end: 23
+    - source: builtin
+      style: secondary
+      start: 0
+      end: 7
+    - source: '''eval'''
+      style: secondary
+      start: 8
+      end: 14
+    - source: $value
+      style: secondary
+      start: 16
+      end: 22
+  builtin -- eval "$value":
+    labels:
+    - source: builtin -- eval "$value"
+      style: primary
+      start: 0
+      end: 24
+    - source: builtin
+      style: secondary
+      start: 0
+      end: 7
+    - source: --
+      style: secondary
+      start: 8
+      end: 10
+    - source: eval
+      style: secondary
+      start: 11
+      end: 15
+    - source: $value
+      style: secondary
+      start: 17
+      end: 23
   builtin eval "$value":
     labels:
     - source: builtin eval "$value"
@@ -7,6 +97,24 @@ snapshots:
       start: 0
       end: 21
     - source: builtin
+      style: secondary
+      start: 0
+      end: 7
+    - source: eval
+      style: secondary
+      start: 8
+      end: 12
+    - source: $value
+      style: secondary
+      start: 14
+      end: 20
+  command eval "$value":
+    labels:
+    - source: command eval "$value"
+      style: primary
+      start: 0
+      end: 21
+    - source: command
       style: secondary
       start: 0
       end: 7

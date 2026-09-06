@@ -31,7 +31,7 @@ rule:
                         position: 1
                         ofRule: {not: {kind: comment}}
                     - not: {regex: '^\s*header\s*:'}
-                    - regex: '(?is)^(?:\s|[()]|/\*.*?\*/)*["'']location\s*:'
+                    - regex: '(?is)^(?:\s|[()]|/\*.*?\*/|//[^\n]*(?:\n|$)|#[^\n]*(?:\n|$))*["'']location\s*:'
                 - all:
                     - has:
                         field: name

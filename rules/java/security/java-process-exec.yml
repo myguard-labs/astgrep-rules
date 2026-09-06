@@ -10,10 +10,10 @@ note: >-
   Candidate inventory of Runtime.getRuntime().exec(...) and a new
   ProcessBuilder(...).start(), directly or after one chained configuration
   call. Java does not invoke a shell automatically for these APIs, so a fixed
-  executable and separate arguments may be safe. A direct start on a parameter
-  declared as ProcessBuilder is also included. Longer fluent chains, aliases,
-  wrappers, locally stored ProcessBuilder instances, and subclasses are not
-  resolved.
+  executable and separate arguments may be safe. A direct start on a method or
+  constructor parameter declared as ProcessBuilder is also included. Longer
+  fluent chains, aliases, wrappers, locally stored ProcessBuilder instances,
+  and subclasses are not resolved.
 utils:
   process-builder-type:
     regex: '(?s)^(?:java(?:\s|/\*.*?\*/|//[^\n]*(?:\n|$))*\.(?:\s|/\*.*?\*/|//[^\n]*(?:\n|$))*lang(?:\s|/\*.*?\*/|//[^\n]*(?:\n|$))*\.(?:\s|/\*.*?\*/|//[^\n]*(?:\n|$))*)?ProcessBuilder$'
@@ -48,11 +48,27 @@ rule:
     - pattern: $BUILDER.start()
       all:
         - inside:
-            stopBy: end
-            kind: method_declaration
-            has:
-              stopBy: end
-              kind: formal_parameter
-              all:
-                - has: {field: type, matches: process-builder-type}
-                - has: {field: name, pattern: $BUILDER}
+            stopBy:
+              any:
+                - kind: method_declaration
+                - kind: constructor_declaration
+                - kind: lambda_expression
+            any:
+              - kind: method_declaration
+                has:
+                  field: parameters
+                  kind: formal_parameters
+                  has:
+                    kind: formal_parameter
+                    all:
+                      - has: {field: type, matches: process-builder-type}
+                      - has: {field: name, pattern: $BUILDER}
+              - kind: constructor_declaration
+                has:
+                  field: parameters
+                  kind: formal_parameters
+                  has:
+                    kind: formal_parameter
+                    all:
+                      - has: {field: type, matches: process-builder-type}
+                      - has: {field: name, pattern: $BUILDER}

@@ -110,6 +110,66 @@ snapshots:
       style: secondary
       start: 12
       end: 52
+  ? |
+    <?php header((# direct
+      "Location: " . $_GET["next"]));
+  : labels:
+    - source: |-
+        header((# direct
+          "Location: " . $_GET["next"]))
+      style: primary
+      start: 6
+      end: 55
+    - source: header
+      style: secondary
+      start: 6
+      end: 12
+    - source: $_GET
+      style: secondary
+      start: 40
+      end: 45
+    - source: |-
+        (# direct
+          "Location: " . $_GET["next"])
+      style: secondary
+      start: 13
+      end: 54
+    - source: |-
+        ((# direct
+          "Location: " . $_GET["next"]))
+      style: secondary
+      start: 12
+      end: 55
+  ? |
+    <?php header((// direct
+      "Location: " . $_GET["next"]));
+  : labels:
+    - source: |-
+        header((// direct
+          "Location: " . $_GET["next"]))
+      style: primary
+      start: 6
+      end: 56
+    - source: header
+      style: secondary
+      start: 6
+      end: 12
+    - source: $_GET
+      style: secondary
+      start: 41
+      end: 46
+    - source: |-
+        (// direct
+          "Location: " . $_GET["next"])
+      style: secondary
+      start: 13
+      end: 55
+    - source: |-
+        ((// direct
+          "Location: " . $_GET["next"]))
+      style: secondary
+      start: 12
+      end: 56
   '<?php header(header /* direct */ : "Location: " . $_GET["next"]);':
     labels:
     - source: 'header(header /* direct */ : "Location: " . $_GET["next"])'

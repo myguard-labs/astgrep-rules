@@ -43,7 +43,8 @@ Consumers can add this checkout's `rules` directory to their `sgconfig.yml`
 `ruleDirs`; paths are relative to that config. Keep tests and `docs/candidates`
 out of rule discovery. Project-config settings do not follow a `ruleDirs`
 import: consumers that scan PHP templates must also copy this repository's
-`languageGlobs.php` mapping so both `*.php` and `*.phtml` use the PHP parser.
+`languageGlobs` PHP mapping (`php: ['*.php', '*.phtml']`) so both extensions use
+the PHP parser.
 
 Warnings and information are advisory; error severity can fail a scan. Validate
 any promoted rule IDs and exercise a known positive before using a scan as a gate.

@@ -676,14 +676,14 @@ and the [Lua standard-library contract](https://www.lua.org/manual/5.4/manual.ht
   Encoding a URL does not establish an allowed origin and deliberately does not
   suppress the finding.
 - `sh-eval-expansion` flags reparsing of parameter and command substitutions.
-  It cannot decide whether their values are trusted. Direct and `builtin eval`
-  forms match; aliases, wrappers, and text that only expands into another
-  expansion are missed.
+  It cannot decide whether their values are trusted. Direct, `builtin eval`,
+  and `command eval` forms match; aliases, other wrappers, and text that only
+  expands into another expansion are missed.
   `sh-ssh-host-key-check-disabled` binds the literal disabling option to direct
-  ssh/scp/sftp commands before the remote-command region; config files, arrays,
-  variables, and wrappers are not resolved. Its conservative operand boundary
-  can miss the option after another option's separate value. `accept-new` is
-  outside its stricter literal claim.
+  or `command`-prefixed ssh/scp/sftp commands before the remote-command region;
+  config files, arrays, variables, and other wrappers are not resolved. Its
+  conservative operand boundary can miss the option after another option's
+  separate value. `accept-new` is outside its stricter literal claim.
 - `go-tls-min-version` recognizes the named SSLv3, TLS 1.0, and TLS 1.1
   constants in the nearest `tls.Config` literal. Numeric values, aliases,
   computed constants, and later assignments are missed. The Go default and
@@ -699,6 +699,7 @@ and the [Lua standard-library contract](https://www.lua.org/manual/5.4/manual.ht
 - `java-process-exec` inventories direct Runtime execution and a ProcessBuilder
   started immediately or after one chained configuration call. These Java APIs
   do not themselves invoke a shell, so separate fixed arguments can be safe.
-  A direct start on a typed ProcessBuilder parameter also matches. Longer fluent
-  chains, locally stored builders, aliases, wrappers, and executable trust
-  require semantic review.
+  A direct start on a typed ProcessBuilder method or constructor parameter also
+  matches, with nested methods, constructors, and lambdas treated as new scopes.
+  Longer fluent chains, locally stored builders, aliases, wrappers, and
+  executable trust require semantic review.

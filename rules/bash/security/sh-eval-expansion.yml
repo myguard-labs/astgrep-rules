@@ -8,21 +8,34 @@ message: >-
   case statement that maps allowlisted names to fixed commands.
 note: >-
   Matches a direct eval command containing a simple/braced parameter expansion
-  or command substitution, including `builtin eval`. It does not determine
-  whether the expanded value is attacker-controlled, and it misses aliases,
-  wrappers, and expansions introduced only after another evaluation step. A
-  fixed literal eval is excluded, though it remains unnecessary in most code.
+  or command substitution, including `builtin eval` and `command eval`. It does
+  not determine whether the expanded value is attacker-controlled, and it
+  misses aliases, other wrappers, and expansions introduced only after another
+  evaluation step. A fixed literal eval is excluded, though it remains
+  unnecessary in most code.
 rule:
   kind: command
   all:
     - any:
-        - has: {field: name, regex: '^eval$'}
-        - all:
-            - has: {field: name, regex: '^builtin$'}
-            - has:
-                nthChild: 2
-                kind: word
-                regex: '^eval$'
+        - has: {field: name, regex: '^["'']?eval["'']?$'}
+        - has:
+            all:
+              - any:
+                  - kind: word
+                  - kind: string
+                  - kind: raw_string
+              - regex: '^["'']?eval["'']?$'
+              - any:
+                  - follows:
+                      kind: command_name
+                      regex: '^["'']?(builtin|command)["'']?$'
+                  - follows:
+                      kind: word
+                      all:
+                        - regex: '^--$'
+                        - follows:
+                            kind: command_name
+                            regex: '^["'']?(builtin|command)["'']?$'
     - has:
         stopBy: end
         any:

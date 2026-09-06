@@ -3,6 +3,12 @@ valid:
   - 'class T { void f() { service.exec(command); } }'
   - 'class T { void f() { new ProcessBuilder("tool"); } }'
   - 'class T { void f(OtherBuilder builder) throws Exception { builder.start(); } }'
+  - 'class T { void f(ProcessBuilder builder) { class L { void g(OtherBuilder builder) { builder.start(); } } } }'
+  - 'class T { void f(ProcessBuilder builder) { class L { L(OtherBuilder builder) { builder.start(); } } } }'
+  - 'class T { void f(ProcessBuilder builder) { Consumer<OtherBuilder> c = builder -> builder.start(); } }'
+  - 'class T { void f(OtherBuilder builder) { builder.start(); class L { void g(ProcessBuilder builder) {} } } }'
+  - 'class T { T(OtherBuilder builder) { builder.start(); class L { L(ProcessBuilder builder) {} } } }'
+  - 'class T { void f(OtherBuilder builder) { builder.start(); Consumer<ProcessBuilder> c = (ProcessBuilder builder) -> {}; } }'
   - 'class T { String s = "Runtime.getRuntime().exec(command)"; }'
   - 'class T { void f() { /* Runtime.getRuntime().exec(command); */ } }'
 invalid:
@@ -13,3 +19,4 @@ invalid:
   - 'class T { void f() throws Exception { new ProcessBuilder("tool").redirectErrorStream(true).start(); } }'
   - 'class T { void f(String arg) throws Exception { new ProcessBuilder("tool", arg).start(); } }'
   - 'class T { void f(ProcessBuilder builder) throws Exception { builder.start(); } }'
+  - 'class T { T(ProcessBuilder builder) { builder.start(); } }'

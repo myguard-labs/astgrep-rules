@@ -19,3 +19,9 @@ invalid:
   - |
     <?php header(header // direct
       : "Location: " . $_GET["next"]);
+  - |
+    <?php header((// direct
+      "Location: " . $_GET["next"]));
+  - |
+    <?php header((# direct
+      "Location: " . $_GET["next"]));
