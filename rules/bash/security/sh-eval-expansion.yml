@@ -1,0 +1,31 @@
+id: sh-eval-expansion
+language: bash
+severity: warning
+message: >-
+  eval reparses expanded text as shell syntax. A variable or command
+  substitution can therefore turn data into commands, redirections, or extra
+  arguments. Replace eval with arrays, indirect expansion, printf -v, or a
+  case statement that maps allowlisted names to fixed commands.
+note: >-
+  Matches a direct eval command containing a simple/braced parameter expansion
+  or command substitution, including `builtin eval`. It does not determine
+  whether the expanded value is attacker-controlled, and it misses aliases,
+  wrappers, and expansions introduced only after another evaluation step. A
+  fixed literal eval is excluded, though it remains unnecessary in most code.
+rule:
+  kind: command
+  all:
+    - any:
+        - has: {field: name, regex: '^eval$'}
+        - all:
+            - has: {field: name, regex: '^builtin$'}
+            - has:
+                nthChild: 2
+                kind: word
+                regex: '^eval$'
+    - has:
+        stopBy: end
+        any:
+          - kind: simple_expansion
+          - kind: expansion
+          - kind: command_substitution
