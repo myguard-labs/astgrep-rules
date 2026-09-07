@@ -22,11 +22,18 @@ valid:
   - 'const char *s = "for (size_t i = 0; i < n - 1; i++) { c[i] = 42; } c[n] = 0;";'
   # Negative control: an unrelated loop plus an unrelated terminator.
   - 'void f(char *c, size_t n) { for (size_t i = 0; i < n; i++) { c[i] = 42; } return; }'
+  # Near miss: `i <= n - 1` writes through n - 1, so it reserves no element and
+  # makes no claim the terminator at n contradicts.
+  - 'void f(char *c, size_t n) { for (size_t i = 0; i <= n - 1; i++) { c[i] = 42; } c[n] = 0; }'
+  # Near miss: an addition bound describes an n + 1 byte buffer; c[n] is in range.
+  - 'void f(char *c, size_t n) { for (size_t i = 0; i < n + 1; i++) { c[i] = 42; } c[n] = 0; }'
+  # Near miss: a multiplication bound is not the - 1 reservation either.
+  - 'void f(char *c, size_t n) { for (size_t i = 0; i < n * 1; i++) { c[i] = 42; } c[n] = 0; }'
+  # Near miss: a division bound is not the - 1 reservation either.
+  - 'void f(char *c, size_t n) { for (size_t i = 0; i < n / 1; i++) { c[i] = 42; } c[n] = 0; }'
 invalid:
   # The upstream shape: sanitize to n - 1, terminate at n.
   - 'void f(char *c, size_t n) { for (size_t i = 0; i < n - 1; i++) { if (c[i] < 32) { c[i] = 42; } } c[n] = 0; }'
-  # <= reserves an element the same way for the purpose of this claim.
-  - 'void f(char *c, size_t n) { for (size_t i = 0; i <= n - 1; i++) { c[i] = 42; } c[n] = 0; }'
   # != is the same ascending shape spelled differently.
   - 'void f(char *c, size_t n) { for (size_t i = 0; i != n - 1; i++) { c[i] = 42; } c[n] = 0; }'
   # The buffer is a fixed array and the bound a macro-free constant name.
