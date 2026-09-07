@@ -110,6 +110,28 @@ snapshots:
       style: secondary
       start: 14
       end: 31
+  <?php ini_set("zend.assertions", "TRUE");:
+    labels:
+    - source: ini_set("zend.assertions", "TRUE")
+      style: primary
+      start: 6
+      end: 40
+    - source: ini_set
+      style: secondary
+      start: 6
+      end: 13
+    - source: '"zend.assertions"'
+      style: secondary
+      start: 14
+      end: 31
+    - source: '"zend.assertions"'
+      style: secondary
+      start: 14
+      end: 31
+    - source: '"zend.assertions"'
+      style: secondary
+      start: 14
+      end: 31
   <?php ini_set("zend.assertions", "on");:
     labels:
     - source: ini_set("zend.assertions", "on")

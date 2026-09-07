@@ -26,6 +26,8 @@ valid:
 - <?php ini_set("zend.assertions", 1);
 # The unquoted boolean casts to 1 and does enable assertions.
 - <?php ini_set("zend.assertions", true);
+# PHP boolean literals are case-insensitive.
+- <?php ini_set("zend.assertions", TRUE);
 # Named-argument and single-quoted spellings of the same exemption.
 - '<?php ini_set(value: 1, option: "zend.assertions");'
 - <?php ini_set('zend.assertions', '1');
@@ -43,6 +45,8 @@ invalid:
 # DISABLE assertions, unlike the boolean assert.active directive.
 - <?php ini_set("zend.assertions", "on");
 - <?php ini_set("zend.assertions", "true");
+# The quoted string is not a boolean: it still parses to 0.
+- <?php ini_set("zend.assertions", "TRUE");
 - '<?php ini_set(value: 0, option: "zend.assertions");'
 - <?php ini_set("open_basedir", "..");
 - <?php ini_set('include_path', '/tmp');

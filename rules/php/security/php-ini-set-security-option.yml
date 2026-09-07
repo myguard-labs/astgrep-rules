@@ -133,4 +133,4 @@ rule:
                         - kind: encapsed_string
                         - kind: integer
                         - kind: boolean
-                      regex: '^([''"]?1[''"]?|true)$'
+                      regex: '^([''"]?1[''"]?|(?i:true))$'
