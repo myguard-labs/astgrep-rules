@@ -6,6 +6,9 @@ valid:
 - void f(void) { char buf[64]; }
 - void f(void) { char buf[MAX_LEN]; }
 - void f(void) { char buf[SIZE_CONST]; }
+- void f(int n, char buf[n]) { }
+- void f(void) { char buf[n * 2]; }
+- void f(void) { char buf[len + 1]; }
 invalid:
 - void f(void) { alloca(n); }
 - void f(void) { char *p = alloca(64); }

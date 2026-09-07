@@ -8,10 +8,15 @@ message: >-
   ngx_pnalloc from the request pool) with a bounded size. For VLAs, use
   fixed-size arrays, or allocate on the heap.
 note: >-
-  Dismiss if the size is a small compile-time constant (alloca) or a
-  compile-time constant / uppercase macro / known constant expression (VLA).
-  VLAs are matched only when the size expression is a lowercase identifier,
-  to avoid false positives on constant-valued uppercase macros.
+  Dismiss if the size is a small compile-time constant. The VLA arm is a
+  naming heuristic, not a constant-expression analysis: it reports an array
+  declarator whose size is a bare identifier not starting with an uppercase
+  letter or underscore, so a conventionally-named macro such as MAX_LEN is
+  skipped while a lowercase `static const` or lowercase macro still reports.
+  Sizes that are not a bare identifier -- `buf[n * 2]`, `buf[len + 1]`,
+  `buf[get_len()]` -- are out of scope and not reported. Parameter
+  declarators such as `void f(int n, char buf[n])` are excluded because they
+  decay to a pointer and allocate nothing.
 rule:
   any:
     - kind: call_expression
@@ -19,9 +24,14 @@ rule:
         field: function
         regex: ^alloca$
     - kind: array_declarator
-      has:
-        field: size
-        all:
-          - kind: identifier
-          - not:
-              regex: ^[A-Z_]
+      all:
+        - has:
+            field: size
+            all:
+              - kind: identifier
+              - not:
+                  regex: ^[A-Z_]
+        - not:
+            inside:
+              kind: parameter_declaration
+              stopBy: end
