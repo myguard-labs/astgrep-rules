@@ -1,0 +1,62 @@
+id: php-loose-array-membership
+language: php
+severity: warning
+message: >-
+  An array membership test runs in loose mode. Without strict comparison PHP
+  applies juggling rules, so a string needle can equal a numeric element, "abc"
+  can equal 0 on older engines, and null can equal an empty string — an attacker
+  who controls the needle picks a value that satisfies the check without being
+  in the list, which turns an allowlist into a bypass (CWE-697, CWE-1025). Pass
+  true as the strict argument.
+note: >-
+  Matches in_array and array_search with no third argument, or with one that is
+  neither the literal true nor the literal 1, and array_keys when a search value
+  is supplied without one of those. The strict parameter is declared bool, so 1
+  coerces to true and is accepted. A one-argument array_keys, which does not
+  compare at all, and a strict argument given by name are both outside the
+  shape. A strictness
+  flag computed at runtime matches because the matcher cannot read its value.
+  A haystack of uniform, non-attacker-controlled values where juggling cannot
+  change the answer is the routine dismissal.
+utils:
+  strict-positional-true:
+    kind: argument
+    nthChild: 3
+    regex: '(?i)^(true|1)$'
+  strict-named-true:
+    kind: argument
+    all:
+      - has:
+          field: name
+          regex: '^strict$'
+      - regex: '(?i):\s*(true|1)$'
+  not-strict:
+    all:
+      - not:
+          has:
+            field: arguments
+            has:
+              matches: strict-positional-true
+      - not:
+          has:
+            field: arguments
+            has:
+              matches: strict-named-true
+rule:
+  kind: function_call_expression
+  any:
+    # in_array()/array_search() always compare, so any non-strict call matches.
+    - all:
+        - has:
+            field: function
+            regex: '(?i)^\\?(in_array|array_search)$'
+        - matches: not-strict
+    # array_keys() compares only when a search value is supplied.
+    - all:
+        - has:
+            field: function
+            regex: '(?i)^\\?array_keys$'
+        - has:
+            field: arguments
+            has: {kind: argument, nthChild: 2}
+        - matches: not-strict
