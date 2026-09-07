@@ -507,9 +507,15 @@ fixed by its fixtures.
   <https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parameters?view=powershell-7.5>
 - `powershell-pssession-option-transport-check-skipped` — CWE-295, CWE-319; the
   `New-PSSessionOption` reference, which documents `-SkipCACheck`,
-  `-SkipCNCheck` and `-SkipRevocationCheck` as usable only when the remote
-  machine is trusted by other means, and `-NoEncryption` as turning off the
-  session's message encryption
+  `-SkipCNCheck` and `-SkipRevocationCheck` as HTTPS certificate-validation
+  bypasses usable only when the remote machine is trusted by other means, and
+  `-NoEncryption` as turning off the per-message encryption WinRM applies on
+  the HTTP transport -- a separate protection, not a certificate check, and
+  one that does not apply to an HTTPS session
   <https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/new-pssessionoption?view=powershell-7.5>;
-  `about_Remote_Requirements` for the HTTPS transport those checks protect
-  <https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_remote_requirements?view=powershell-7.5>
+  `about_Remote_Requirements` for the HTTPS transport the three certificate
+  checks protect
+  <https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_remote_requirements?view=powershell-7.5>;
+  `about_Remote_Troubleshooting` for WinRM's default refusal of unencrypted
+  HTTP traffic, which `-NoEncryption` is what overrides
+  <https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_remote_troubleshooting?view=powershell-7.5>
