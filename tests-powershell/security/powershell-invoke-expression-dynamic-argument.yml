@@ -6,6 +6,12 @@ valid:
 - "iex 'Get-Date'"
 - "IEX 'Get-Date'"
 - "Invoke-Expression -Command 'Get-Date'"
+# A constant code argument with a variable-valued common parameter. The
+# variable controls -Verbose/-ErrorVariable, not the executed text, so this is
+# not an injection site. Regression for the false positive that reported it.
+- "Invoke-Expression 'Get-Date' -Verbose:$verbose"
+- "iex 'Get-Date' -ErrorVariable $e"
+- "Invoke-Expression -Command 'Get-Date' -ErrorAction:$ea"
 # Direct invocation without Invoke-Expression: the preserve case.
 - 'Get-Date'
 - '& $command'
@@ -49,3 +55,12 @@ invalid:
 - 'iex ($prefix + $suffix)'
 # Concatenation via a subexpression.
 - 'Invoke-Expression $(Get-Payload)'
+# A parenthesised command invocation whose output is parsed as code. It carries
+# neither a variable nor a subexpression, and the piped rule does not cover this
+# unpiped form, so before the code-argument clause nothing reported this site.
+- 'Invoke-Expression (Get-Content payload.txt)'
+- 'iex (Invoke-WebRequest http://example.test)'
+- 'Invoke-Expression -Command (Get-Content payload.txt)'
+# A dynamic code argument alongside a variable-valued common parameter: the
+# code argument still decides, so this must match.
+- 'Invoke-Expression $cmd -Verbose:$verbose'
