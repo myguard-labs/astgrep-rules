@@ -4,8 +4,9 @@ severity: error
 message: >-
   Add-Type is compiling source that is not selected by a constant: either the
   type definition itself contains a variable, a subexpression or the output of
-  a command invocation, or the source FILE named by -Path/-LiteralPath is. Both
-  forms compile. Add-Type invokes the C# compiler at runtime on whatever text
+  a command invocation, or the MEMBER definition bound to -MemberDefinition
+  does, or the source FILE named by -Path/-LiteralPath is. All three forms
+  compile. Add-Type invokes the C# compiler at runtime on whatever text
   that argument resolves to, or on the contents of whatever file the path
   resolves to, and loads the resulting assembly into the current session, so
   the code that executes is decided by a value produced at runtime rather than
@@ -29,9 +30,16 @@ message: >-
   path at all.
 note: >-
   Matches an Add-Type command, in any casing, whose SOURCE argument is dynamic.
-  Add-Type has two ways of naming source: the text bound to -TypeDefinition (or
-  the positional argument that follows no parameter at all), and the source FILE
-  bound to -Path or -LiteralPath. Both are compiled. Microsoft documents -Path
+  Add-Type has three ways of naming source: the text bound to -TypeDefinition
+  (or the positional argument that follows no parameter at all), the member text
+  bound to -MemberDefinition, and the source FILE bound to -Path or
+  -LiteralPath. All are compiled. Microsoft documents -MemberDefinition as
+  specifying "new properties or methods for the class", for which Add-Type
+  "generates the template code that's required to support the properties or
+  methods" -- the P/Invoke idiom, used with -Name and -Namespace -- so the
+  supplied member text is compiled into a type that is loaded and callable, and
+  a dynamic value bound to it decides compiled code exactly as -TypeDefinition
+  does. Microsoft documents -Path
   as "the path to source code files or assembly DLL files" and states that when
   source files are submitted Add-Type "compiles the code in the files and
   creates an in-memory assembly", choosing the compiler from the file
@@ -71,8 +79,10 @@ rule:
     # selecting a direct child of `command_elements` that either follows no
     # `command_parameter` at all (the positional source form) or follows one of
     # the parameters that names compiled source across that separator. Those are
-    # -TypeDefinition, which carries the text, and -Path/-LiteralPath, which name
-    # a source file Add-Type reads and compiles. -AssemblyName and
+    # -TypeDefinition, which carries the text, -MemberDefinition, which carries
+    # member text Add-Type wraps in generated class scaffolding and compiles,
+    # and -Path/-LiteralPath, which name a source file Add-Type reads and
+    # compiles. -AssemblyName and
     # -ReferencedAssemblies are absent on purpose: they name prebuilt assemblies,
     # so in `Add-Type -AssemblyName $asm` the variable follows a parameter that
     # is neither in the list nor absent, and nothing here matches it.
@@ -102,6 +112,9 @@ rule:
                       #   -T is already unambiguous -- TypeDefinition is the
                       #     only parameter, common ones included, that starts
                       #     with T -- so the enumeration runs from -T.
+                      #   -M is already unambiguous -- MemberDefinition is the
+                      #     only parameter, common ones included, that starts
+                      #     with M -- so that enumeration runs from -M.
                       #   -P and -Pa are AMBIGUOUS between Path and PassThru,
                       #     so the Path enumeration starts at -Pat.
                       #   -L is ambiguous between LiteralPath and Language, and
@@ -111,7 +124,7 @@ rule:
                       # PSPath and LP; -LP is listed, while -PS.. is left out
                       # because PSPath's own prefixes collide with PassThru at
                       # -P and the alias is vanishingly rare in real scripts.
-                      regex: '(?i)^-(t|ty|typ|type|typed|typede|typedef|typedefi|typedefin|typedefini|typedefinit|typedefiniti|typedefinitio|typedefinition|pat|path|li|lit|lite|liter|litera|literal|literalp|literalpa|literalpat|literalpath|lp)$'
+                      regex: '(?i)^-(t|ty|typ|type|typed|typede|typedef|typedefi|typedefin|typedefini|typedefinit|typedefiniti|typedefinitio|typedefinition|m|me|mem|memb|membe|member|memberd|memberde|memberdef|memberdefi|memberdefin|memberdefini|memberdefinit|memberdefiniti|memberdefinitio|memberdefinition|pat|path|li|lit|lite|liter|litera|literal|literalp|literalpa|literalpat|literalpath|lp)$'
             # Matching `variable` and `sub_expression` rather than the enclosing
             # string node is what keeps constant arguments out: a
             # non-interpolating double-quoted string, a single-quoted string, a

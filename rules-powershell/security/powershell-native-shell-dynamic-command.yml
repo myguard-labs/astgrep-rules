@@ -22,15 +22,17 @@ note: >-
   command-string argument is the element that directly follows an execution
   switch across a command_argument_sep: cmd's /c or /k, which the parser reports
   as a generic_token rather than a parameter, or -Command or -EncodedCommand on
-  the PowerShell hosts, together with the abbreviations PowerShell resolves
-  unambiguously (-c through -command, -enc through -encodedcommand). It is
+  the PowerShell hosts, together with the abbreviations those hosts document
+  (-c through -command, and -e, -ec, -enc through -encodedcommand). It is
   dynamic when it contains a variable, a subexpression, or a parenthesised
   command invocation. The test applies to that argument alone, so a variable
   bound to some other switch does not match: powershell -File $script runs a
   script file whose path is data, and powershell -ExecutionPolicy $p sets a
-  policy, and neither decides an executed command string. -e is deliberately
-  excluded because PowerShell does not resolve it unambiguously to
-  -EncodedCommand; -ExecutionPolicy and -Encoding share the prefix. It
+  policy, and neither decides an executed command string. These are the host
+  executable's own switch table, not cmdlet parameters bound by prefix
+  resolution: about_Pwsh documents `-EncodedCommand | -e | -ec`, so -e and -ec
+  are execution switches and are matched. -ex is excluded because it belongs to
+  `-ExecutionPolicy | -ex | -ep`, and there is no -Encoding host switch. It
   deliberately does not match a constant command string -- cmd /c "dir",
   powershell -Command 'Get-Date' -- which runs fixed text, and it does not match
   direct argument passing such as cmd /c dir $path, where the variable is an
@@ -62,12 +64,16 @@ rule:
                     - kind: generic_token
                       regex: '^/[ckCK]$'
                     # Spelled out rather than written as a nested-optional
-                    # regex: the abbreviations PowerShell actually resolves
-                    # without ambiguity stop at -c and -enc respectively, and an
-                    # enumeration makes the boundary reviewable. -e is absent on
-                    # purpose.
+                    # regex, so the boundary stays reviewable. These are the
+                    # host executable's own switches, not cmdlet parameters
+                    # bound by prefix resolution: about_Pwsh documents
+                    # `-Command | -c` and `-EncodedCommand | -e | -ec`, so -e
+                    # and -ec are named abbreviations of -EncodedCommand. -ex
+                    # is absent on purpose -- it belongs to
+                    # `-ExecutionPolicy | -ex | -ep`, which decides no command
+                    # string -- and there is no -Encoding host switch at all.
                     - kind: command_parameter
-                      regex: '(?i)^-(c|co|com|comm|comma|comman|command|enc|enco|encod|encode|encoded|encodedc|encodedco|encodedcom|encodedcomm|encodedcomma|encodedcomman|encodedcommand)$'
+                      regex: '(?i)^-(c|co|com|comm|comma|comman|command|e|ec|enc|enco|encod|encode|encoded|encodedc|encodedco|encodedcom|encodedcomm|encodedcomma|encodedcomman|encodedcommand)$'
             # As in the Add-Type rule, matching the inner kinds rather than the
             # enclosing string node is what keeps a constant command string out:
             # a non-interpolating double-quoted string and a single-quoted

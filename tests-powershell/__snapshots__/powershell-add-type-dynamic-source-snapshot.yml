@@ -224,6 +224,156 @@ snapshots:
       style: secondary
       start: 22
       end: 25
+  Add-Type -M $sig -Name W -Namespace N:
+    labels:
+    - source: Add-Type -M $sig -Name W -Namespace N
+      style: primary
+      start: 0
+      end: 37
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -M
+      style: secondary
+      start: 9
+      end: 11
+    - source: ' '
+      style: secondary
+      start: 11
+      end: 12
+    - source: $sig
+      style: secondary
+      start: 12
+      end: 16
+    - source: $sig
+      style: secondary
+      start: 12
+      end: 16
+    - source: $sig
+      style: secondary
+      start: 12
+      end: 16
+  Add-Type -Member $sig -Name W -Namespace N:
+    labels:
+    - source: Add-Type -Member $sig -Name W -Namespace N
+      style: primary
+      start: 0
+      end: 42
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -Member
+      style: secondary
+      start: 9
+      end: 16
+    - source: ' '
+      style: secondary
+      start: 16
+      end: 17
+    - source: $sig
+      style: secondary
+      start: 17
+      end: 21
+    - source: $sig
+      style: secondary
+      start: 17
+      end: 21
+    - source: $sig
+      style: secondary
+      start: 17
+      end: 21
+  Add-Type -MemberDefinition "public static int A() { return $n; }" -Name W:
+    labels:
+    - source: Add-Type -MemberDefinition "public static int A() { return $n; }" -Name W
+      style: primary
+      start: 0
+      end: 73
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -MemberDefinition
+      style: secondary
+      start: 9
+      end: 26
+    - source: ' '
+      style: secondary
+      start: 26
+      end: 27
+    - source: $n
+      style: secondary
+      start: 59
+      end: 61
+    - source: '"public static int A() { return $n; }"'
+      style: secondary
+      start: 27
+      end: 65
+    - source: '"public static int A() { return $n; }"'
+      style: secondary
+      start: 27
+      end: 65
+  Add-Type -MemberDefinition $sig -Name W -Namespace N:
+    labels:
+    - source: Add-Type -MemberDefinition $sig -Name W -Namespace N
+      style: primary
+      start: 0
+      end: 52
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -MemberDefinition
+      style: secondary
+      start: 9
+      end: 26
+    - source: ' '
+      style: secondary
+      start: 26
+      end: 27
+    - source: $sig
+      style: secondary
+      start: 27
+      end: 31
+    - source: $sig
+      style: secondary
+      start: 27
+      end: 31
+    - source: $sig
+      style: secondary
+      start: 27
+      end: 31
+  Add-Type -MemberDefinition (Get-Content sig.cs) -Name W -Namespace N:
+    labels:
+    - source: Add-Type -MemberDefinition (Get-Content sig.cs) -Name W -Namespace N
+      style: primary
+      start: 0
+      end: 68
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -MemberDefinition
+      style: secondary
+      start: 9
+      end: 26
+    - source: ' '
+      style: secondary
+      start: 26
+      end: 27
+    - source: Get-Content sig.cs
+      style: secondary
+      start: 28
+      end: 46
+    - source: (Get-Content sig.cs)
+      style: secondary
+      start: 27
+      end: 47
+    - source: (Get-Content sig.cs)
+      style: secondary
+      start: 27
+      end: 47
   Add-Type -Pat $cs:
     labels:
     - source: Add-Type -Pat $cs
@@ -746,6 +896,36 @@ snapshots:
       style: secondary
       start: 25
       end: 55
+  Add-Type -memberdefinition $sig -Name W:
+    labels:
+    - source: Add-Type -memberdefinition $sig -Name W
+      style: primary
+      start: 0
+      end: 39
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -memberdefinition
+      style: secondary
+      start: 9
+      end: 26
+    - source: ' '
+      style: secondary
+      start: 26
+      end: 27
+    - source: $sig
+      style: secondary
+      start: 27
+      end: 31
+    - source: $sig
+      style: secondary
+      start: 27
+      end: 31
+    - source: $sig
+      style: secondary
+      start: 27
+      end: 31
   Add-Type -typeDefinition $code:
     labels:
     - source: Add-Type -typeDefinition $code

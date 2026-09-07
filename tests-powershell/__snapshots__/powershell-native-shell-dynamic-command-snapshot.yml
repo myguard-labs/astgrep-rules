@@ -60,6 +60,36 @@ snapshots:
       style: secondary
       start: 20
       end: 22
+  POWERSHELL -E $enc:
+    labels:
+    - source: POWERSHELL -E $enc
+      style: primary
+      start: 0
+      end: 18
+    - source: POWERSHELL
+      style: secondary
+      start: 0
+      end: 10
+    - source: -E
+      style: secondary
+      start: 11
+      end: 13
+    - source: ' '
+      style: secondary
+      start: 13
+      end: 14
+    - source: $enc
+      style: secondary
+      start: 14
+      end: 18
+    - source: $enc
+      style: secondary
+      start: 14
+      end: 18
+    - source: $enc
+      style: secondary
+      start: 14
+      end: 18
   cmd /C $cmd:
     labels:
     - source: cmd /C $cmd
@@ -480,6 +510,66 @@ snapshots:
       style: secondary
       start: 16
       end: 18
+  powershell -e $x:
+    labels:
+    - source: powershell -e $x
+      style: primary
+      start: 0
+      end: 16
+    - source: powershell
+      style: secondary
+      start: 0
+      end: 10
+    - source: -e
+      style: secondary
+      start: 11
+      end: 13
+    - source: ' '
+      style: secondary
+      start: 13
+      end: 14
+    - source: $x
+      style: secondary
+      start: 14
+      end: 16
+    - source: $x
+      style: secondary
+      start: 14
+      end: 16
+    - source: $x
+      style: secondary
+      start: 14
+      end: 16
+  powershell -ec $x:
+    labels:
+    - source: powershell -ec $x
+      style: primary
+      start: 0
+      end: 17
+    - source: powershell
+      style: secondary
+      start: 0
+      end: 10
+    - source: -ec
+      style: secondary
+      start: 11
+      end: 14
+    - source: ' '
+      style: secondary
+      start: 14
+      end: 15
+    - source: $x
+      style: secondary
+      start: 15
+      end: 17
+    - source: $x
+      style: secondary
+      start: 15
+      end: 17
+    - source: $x
+      style: secondary
+      start: 15
+      end: 17
   powershell -enc $enc:
     labels:
     - source: powershell -enc $enc
@@ -570,6 +660,36 @@ snapshots:
       style: secondary
       start: 31
       end: 35
+  powershell.exe -e $enc:
+    labels:
+    - source: powershell.exe -e $enc
+      style: primary
+      start: 0
+      end: 22
+    - source: powershell.exe
+      style: secondary
+      start: 0
+      end: 14
+    - source: -e
+      style: secondary
+      start: 15
+      end: 17
+    - source: ' '
+      style: secondary
+      start: 17
+      end: 18
+    - source: $enc
+      style: secondary
+      start: 18
+      end: 22
+    - source: $enc
+      style: secondary
+      start: 18
+      end: 22
+    - source: $enc
+      style: secondary
+      start: 18
+      end: 22
   pwsh -Command $c:
     labels:
     - source: pwsh -Command $c
@@ -630,6 +750,66 @@ snapshots:
       style: secondary
       start: 8
       end: 12
+  pwsh -e $x:
+    labels:
+    - source: pwsh -e $x
+      style: primary
+      start: 0
+      end: 10
+    - source: pwsh
+      style: secondary
+      start: 0
+      end: 4
+    - source: -e
+      style: secondary
+      start: 5
+      end: 7
+    - source: ' '
+      style: secondary
+      start: 7
+      end: 8
+    - source: $x
+      style: secondary
+      start: 8
+      end: 10
+    - source: $x
+      style: secondary
+      start: 8
+      end: 10
+    - source: $x
+      style: secondary
+      start: 8
+      end: 10
+  pwsh -ec $enc:
+    labels:
+    - source: pwsh -ec $enc
+      style: primary
+      start: 0
+      end: 13
+    - source: pwsh
+      style: secondary
+      start: 0
+      end: 4
+    - source: -ec
+      style: secondary
+      start: 5
+      end: 8
+    - source: ' '
+      style: secondary
+      start: 8
+      end: 9
+    - source: $enc
+      style: secondary
+      start: 9
+      end: 13
+    - source: $enc
+      style: secondary
+      start: 9
+      end: 13
+    - source: $enc
+      style: secondary
+      start: 9
+      end: 13
   pwsh -encodedcommand $enc:
     labels:
     - source: pwsh -encodedcommand $enc

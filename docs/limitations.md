@@ -1378,8 +1378,9 @@ rejected and is recorded in `rejected-candidates.md`.
   argument — is correct whether or not the value is currently constant.
 - `powershell-add-type-dynamic-source` does not model which of Add-Type's
   parameter sets is actually in effect. It selects the source argument
-  syntactically: the value bound to `-TypeDefinition`, `-Path` or
-  `-LiteralPath`, or the positional argument that follows no parameter. A
+  syntactically: the value bound to `-TypeDefinition`, `-MemberDefinition`,
+  `-Path` or `-LiteralPath`, or the positional argument that follows no
+  parameter. A
   command that mixes parameter sets in a way PowerShell would reject at runtime
   is judged on that syntax alone.
 - `powershell-add-type-dynamic-source` cannot tell a dynamic `-Path` that names
@@ -1391,12 +1392,17 @@ rejected and is recorded in `rejected-candidates.md`.
   value validated against an allowlist — is correct for both. `-AssemblyName` is
   excluded because it can only name a prebuilt assembly.
 - `powershell-add-type-dynamic-source` accepts the unambiguous parameter
-  prefixes PowerShell itself binds (`-T` through `-TypeDefinition`, `-Pat`
-  through `-Path`, `-Li` through `-LiteralPath`, plus `-LP`) by enumerating
-  them. Prefixes PowerShell would reject as ambiguous are not matched: `-P` and
-  `-Pa` are ambiguous between `-Path` and `-PassThru`, and `-La` resolves to
-  `-Language`. The `PSPath` alias of `-LiteralPath` is not covered, because its
-  own prefixes collide with `-PassThru` at `-P`.
+  prefixes PowerShell itself binds (`-T` through `-TypeDefinition`, `-M`
+  through `-MemberDefinition`, `-Pat` through `-Path`, `-Li` through
+  `-LiteralPath`, plus `-LP`) by enumerating them. `-M` is unambiguous because
+  `MemberDefinition` is the only Add-Type parameter, common parameters
+  included, that starts with M. Prefixes PowerShell would reject as ambiguous
+  are not matched: `-P` and `-Pa` are ambiguous between `-Path` and
+  `-PassThru`, and `-La` resolves to `-Language`. `-N` prefixes are not matched
+  either: `-Name` and `-Namespace` name the generated class rather than the
+  compiled member text, so a variable bound to one decides no code. The
+  `PSPath` alias of `-LiteralPath` is not covered, because its own prefixes
+  collide with `-PassThru` at `-P`.
 - `powershell-add-type-dynamic-source` does **not** match source accepted
   positionally after a named parameter, such as `Add-Type -PassThru $code` or
   `Add-Type -IgnoreWarnings $code`, where PowerShell binds `$code` positionally
@@ -1420,6 +1426,14 @@ rejected and is recorded in `rejected-candidates.md`.
   `cmd /c dir $path` as argument passing rather than a command string, which is
   correct for the common case but wrong where the invoked program itself
   re-parses its argument.
+- `powershell-native-shell-dynamic-command` enumerates the PowerShell hosts'
+  own documented switch abbreviations, not cmdlet parameter prefixes. The hosts
+  do not use cmdlet binding for their own command line: `about_Pwsh` documents
+  `-Command | -c` and `-EncodedCommand | -e | -ec`, so `-e` and `-ec` select an
+  executed command string and are matched, while `-ex` and `-ep` belong to
+  `-ExecutionPolicy` and are not. There is no `-Encoding` host switch. The
+  enumeration is fixed text, so a switch abbreviation a future host version
+  adds is not matched until the rule is updated.
 - Aliases are matched by name, not resolved. A script that does
   `Set-Alias run Invoke-Expression` and then calls `run $cmd` is not matched,
   and conversely a user-defined `iex` alias pointing somewhere harmless is.

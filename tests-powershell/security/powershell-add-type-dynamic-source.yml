@@ -31,6 +31,15 @@ valid:
 - 'Add-Type -P $cs'
 - 'Add-Type -Pa $cs'
 - 'Add-Type -La $lang -TypeDefinition "public class X {}"'
+# A CONSTANT member definition is the supported P/Invoke idiom: the compiled
+# member text is fixed and under review, so only -Name/-Namespace vary.
+- "Add-Type -MemberDefinition '[DllImport(\"user32.dll\")]public static extern bool ShowWindowAsync(IntPtr h, int n);' -Name W -Namespace N"
+- "Add-Type -MemberDefinition '[DllImport(\"user32.dll\")]public static extern bool X();' -Name $cls -Namespace $ns"
+# -Name and -Namespace name the generated class, not the compiled member text,
+# so a variable bound to either decides no code. They start with N, not M, so
+# the -MemberDefinition enumeration must not reach them.
+- "Add-Type -MemberDefinition 'public static int A() { return 1; }' -Name $n"
+- "Add-Type -MemberDefinition 'public static int A() { return 1; }' -NS $ns"
 # Constant source alongside a variable-valued unrelated parameter: the variable
 # controls the output object or the reference set, not the compiled text.
 - 'Add-Type -TypeDefinition "public class X {}" -OutputAssembly $out'
@@ -97,3 +106,14 @@ invalid:
 - 'Add-Type -Li $cs'
 - 'Add-Type -LiteralPat $cs'
 - 'Add-Type -LP $cs'
+# -MemberDefinition compiles supplied C# member text into a type that is loaded
+# and callable -- the P/Invoke idiom, used with -Name and -Namespace -- so a
+# dynamic value bound to it decides compiled code exactly as -TypeDefinition
+# does. -M is unambiguous: MemberDefinition is the only Add-Type parameter,
+# common parameters included, that starts with M.
+- 'Add-Type -MemberDefinition $sig -Name W -Namespace N'
+- 'Add-Type -M $sig -Name W -Namespace N'
+- 'Add-Type -Member $sig -Name W -Namespace N'
+- 'Add-Type -memberdefinition $sig -Name W'
+- 'Add-Type -MemberDefinition "public static int A() { return $n; }" -Name W'
+- 'Add-Type -MemberDefinition (Get-Content sig.cs) -Name W -Namespace N'
