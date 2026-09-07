@@ -160,20 +160,28 @@ ast-grep scan -c sgconfig.powershell.yml path/to/scripts
 
 The library is built, not vendored, and `build/` is git-ignored. The script:
 
-1. fetches the grammar by **immutable commit hash**, not by tag -- a tag can be
+1. **validates the lockfile before fetching anything**, so a malformed pin
+   costs nothing to reject and the gate does not depend on the network being
+   up. It refuses when the checksum list cannot be read, is empty, is wrongly
+   typed, or does not cover exactly the sources it will compile -- in both
+   directions, so neither an unverified source nor a digest for a file nobody
+   compiles can slip through;
+2. fetches the grammar by **immutable commit hash**, not by tag -- a tag can be
    moved, a commit cannot;
-2. verifies the SHA-256 of each compiled source file against
-   `grammar.lock.json` and **refuses to build on a mismatch**. Checksums are
-   over `src/parser.c` and `src/scanner.c` rather than the tarball, because
-   GitHub's archive bytes are not stable over time while file contents at a
-   fixed commit are. It also refuses when the checksum list cannot be read or
-   does not cover every source it is about to compile -- an unreadable,
-   empty, wrongly typed or partial `sourceSha256` aborts rather than compiling
-   what it could not check. Verifying only the entries that happen to be
-   present would let a tampered lockfile skip a file by omitting it;
-3. compiles to the platform-native suffix -- `.so` on Linux, `.dylib` on macOS,
+3. verifies the SHA-256 of each source against `grammar.lock.json` and
+   **refuses to build on a mismatch**. Checksums are over `src/parser.c` and
+   `src/scanner.c` rather than the tarball, because GitHub's archive bytes are
+   not stable over time while file contents at a fixed commit are;
+4. **hands the compiler exactly the list it verified**, accumulated during
+   verification rather than hardcoded, so a file that was not verified cannot
+   be compiled. It then requires that the verified set equals every C source
+   the extracted archive ships. An internally consistent lockfile can still be
+   wrong about the grammar -- dropping `scanner.c` from both lists passes every
+   internal check while building a parser with no external lexer -- so the
+   archive, not the lockfile, is the authority on what must be verified;
+5. compiles to the platform-native suffix -- `.so` on Linux, `.dylib` on macOS,
    `.dll` on Windows -- resolved from `uname`;
-4. asserts the built library exports `tree_sitter_powershell`. A library missing
+6. asserts the built library exports `tree_sitter_powershell`. A library missing
    its entry point loads but matches nothing, which is indistinguishable from
    clean code.
 
