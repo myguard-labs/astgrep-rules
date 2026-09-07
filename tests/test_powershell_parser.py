@@ -553,6 +553,7 @@ class TestNativeScanUnaffected(unittest.TestCase):
                 self.assertEqual(set(snapshot["snapshots"]), set(data["invalid"]))
         self.assertEqual(expected, fixtures)
 
+    @requires_parser
     def test_powershell_rules_emit_their_declared_diagnostics(self):
         """Mirror of tests/test_diagnostics.py for the opt-in pack.
 
