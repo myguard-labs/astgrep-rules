@@ -50,6 +50,10 @@ note: >-
   or a parenthesised command invocation whose output becomes the argument. An
   expandable here-string counts as dynamic only when it actually interpolates
   something, because the parser gives a purely literal one no variable child.
+  The parenthesised invocation counts because its OUTPUT becomes the compiled
+  text; a command that is merely literal script text inside a script block does
+  not, so Add-Type -TypeDefinition { public class X {} } is not reported. A
+  script block that interpolates is reported, through its variable.
   The test applies to those arguments alone. A CONSTANT path -- Add-Type -Path
   C:\src\Thing.cs -- names a fixed file under review and is not reported.
   -AssemblyName is excluded in every form, dynamic or not: it names a prebuilt
@@ -139,4 +143,19 @@ rule:
                 any:
                   - kind: variable
                   - kind: sub_expression
+                  # `command` is anchored to a `parenthesized_expression`
+                  # ancestor for the same reason as in the native-shell rule.
+                  # It exists for `Add-Type -TypeDefinition (Get-Content
+                  # src.cs)`, whose OUTPUT becomes the compiled text; unanchored
+                  # under `stopBy: end` it also matched every ordinary command
+                  # node inside a literal script block, so
+                  # `Add-Type -TypeDefinition { public class X {} }` -- whose
+                  # text is fixed by the source under review -- was reported.
+                  # The grammar separates the two shapes: the producing
+                  # invocation has a `parenthesized_expression` ancestor within
+                  # the argument, a script block's statements have only
+                  # `script_block`.
                   - kind: command
+                    inside:
+                      stopBy: end
+                      kind: parenthesized_expression

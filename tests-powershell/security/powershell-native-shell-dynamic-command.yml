@@ -35,6 +35,16 @@ valid:
 # executed text is fixed.
 - 'powershell -e RwBlAHQALQBEAGEAdABlAA=='
 - 'pwsh -ec RwBlAHQALQBEAGEAdABlAA=='
+# A LITERAL script block bound to an execution switch. Its text is fixed by the
+# source under review -- no variable, no subexpression, nothing decided at
+# runtime -- so it must not match. This is the form the message recommends over
+# a built-up string, and an unanchored `kind: command` alternative used to
+# report it, because `stopBy: end` descended into the block and matched the
+# ordinary command node of the statement inside it.
+- 'pwsh -Command { Get-Date }'
+- 'powershell -Command { Get-ChildItem }'
+- 'cmd /c { dir }'
+- 'pwsh -c { Get-Date; Get-Location }'
 # The safe alternative the message recommends: arguments passed as data.
 - 'Start-Process -FilePath cmd -ArgumentList $args'
 - '& $exe $arg1 $arg2'
@@ -60,9 +70,22 @@ invalid:
 - 'cmd /c "dir $path"'
 - 'cmd.exe /c "del $($target.FullName)"'
 - 'cmd /c "$env:PAYLOAD"'
-# A parenthesised expression built at runtime.
+# A parenthesised expression built at runtime. `(Get-Content cmdline.txt)` is
+# the positive the anchored `command` alternative exists for: the invocation's
+# OUTPUT becomes the command string. It is what separates a producing
+# invocation from the literal statements inside a script block above.
 - 'cmd /c ("dir " + $p)'
 - 'cmd /c (Get-Content cmdline.txt)'
+- 'pwsh -Command (Get-Payload)'
+- 'powershell -EncodedCommand (Get-Blob)'
+# A script block that INTERPOLATES. `pwsh -Command { ... }` does not hand the
+# child a script-block object: the parent stringifies the block and expands
+# `$path` before the text ever reaches the child's parser, so the executed text
+# is decided at runtime exactly as `"Get-Item $path"` would be. It matches
+# through the `variable` alternative, not through `command`.
+- 'pwsh -Command { Get-Item $path }'
+- 'powershell -Command { Remove-Item $target }'
+- 'pwsh -c { Get-Item $($n.Name) }'
 # The PowerShell hosts, full switch names and unambiguous abbreviations.
 - 'powershell -Command $c'
 - 'powershell.exe -Command $c'

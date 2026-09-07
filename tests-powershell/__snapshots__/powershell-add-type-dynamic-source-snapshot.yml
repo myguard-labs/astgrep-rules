@@ -362,6 +362,10 @@ snapshots:
       style: secondary
       start: 26
       end: 27
+    - source: (Get-Content sig.cs)
+      style: secondary
+      start: 27
+      end: 47
     - source: Get-Content sig.cs
       style: secondary
       start: 28
@@ -374,6 +378,40 @@ snapshots:
       style: secondary
       start: 27
       end: 47
+  Add-Type -MemberDefinition (Get-Sig) -Name W -Namespace N:
+    labels:
+    - source: Add-Type -MemberDefinition (Get-Sig) -Name W -Namespace N
+      style: primary
+      start: 0
+      end: 57
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -MemberDefinition
+      style: secondary
+      start: 9
+      end: 26
+    - source: ' '
+      style: secondary
+      start: 26
+      end: 27
+    - source: (Get-Sig)
+      style: secondary
+      start: 27
+      end: 36
+    - source: Get-Sig
+      style: secondary
+      start: 28
+      end: 35
+    - source: (Get-Sig)
+      style: secondary
+      start: 27
+      end: 36
+    - source: (Get-Sig)
+      style: secondary
+      start: 27
+      end: 36
   Add-Type -Pat $cs:
     labels:
     - source: Add-Type -Pat $cs
@@ -482,6 +520,10 @@ snapshots:
       style: secondary
       start: 14
       end: 15
+    - source: (Join-Path $dir Thing.cs)
+      style: secondary
+      start: 15
+      end: 40
     - source: Join-Path $dir Thing.cs
       style: secondary
       start: 16
@@ -842,6 +884,10 @@ snapshots:
       style: secondary
       start: 24
       end: 25
+    - source: (Get-Content src.cs)
+      style: secondary
+      start: 25
+      end: 45
     - source: Get-Content src.cs
       style: secondary
       start: 26
@@ -896,6 +942,36 @@ snapshots:
       style: secondary
       start: 25
       end: 55
+  Add-Type -TypeDefinition { public class X { $body } }:
+    labels:
+    - source: Add-Type -TypeDefinition { public class X { $body } }
+      style: primary
+      start: 0
+      end: 53
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TypeDefinition
+      style: secondary
+      start: 9
+      end: 24
+    - source: ' '
+      style: secondary
+      start: 24
+      end: 25
+    - source: $body
+      style: secondary
+      start: 44
+      end: 49
+    - source: '{ public class X { $body } }'
+      style: secondary
+      start: 25
+      end: 53
+    - source: '{ public class X { $body } }'
+      style: secondary
+      start: 25
+      end: 53
   Add-Type -memberdefinition $sig -Name W:
     labels:
     - source: Add-Type -memberdefinition $sig -Name W

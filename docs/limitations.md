@@ -1417,6 +1417,21 @@ rejected and is recorded in `rejected-candidates.md`.
   syntax-only matcher does not have and which would have to be maintained per
   cmdlet. The rule therefore treats an argument following any parameter as that
   parameter's value.
+- Both `powershell-native-shell-dynamic-command` and
+  `powershell-add-type-dynamic-source` treat a **literal script block** bound to
+  the sink argument as constant. `pwsh -Command { Get-Date }` and
+  `Add-Type -TypeDefinition { public class X {} }` are not reported: the text is
+  fixed by the source under review, and for the native-shell rule the script
+  block is the form the message recommends over a built-up string. A script
+  block that INTERPOLATES is still reported, through the `variable` or
+  `sub_expression` inside it -- `pwsh -Command { Get-Item $path }` matches,
+  because the parent expands the value and stringifies the block before the
+  child parses it. The discriminator is structural rather than an exclusion: the
+  `command` alternative that catches a producing invocation
+  (`cmd /c (Get-Payload)`, `Add-Type -TypeDefinition (Get-Content src.cs)`) is
+  anchored to a `parenthesized_expression` ancestor, which a script block's
+  statements do not have. The consequence is that a producing invocation reached
+  without parentheses -- were the grammar to admit one -- would be missed.
 - `powershell-native-shell-dynamic-command` matches the invoked shell by
   command name only. `& $exe /c $cmd`, a full path such as
   `C:\Windows\System32\cmd.exe /c $cmd`, and a shell reached through

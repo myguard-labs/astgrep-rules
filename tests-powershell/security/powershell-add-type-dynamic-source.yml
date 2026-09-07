@@ -59,6 +59,13 @@ valid:
 - 'Get-AddType $code'
 # Parser-error control.
 - 'Add-Type -TypeDefinition $code {'
+# A LITERAL script block bound to a source parameter. Nothing in it is decided
+# at runtime, so it must not match; an unanchored `kind: command` alternative
+# used to report it because `stopBy: end` descended into the block and matched
+# the ordinary command node of the statement inside.
+- 'Add-Type -TypeDefinition { public class X {} }'
+- 'Add-Type -MemberDefinition { Get-Thing } -Name W -Namespace N'
+- 'Add-Type { public class X {} }'
 invalid:
 # Bare variable bound to -TypeDefinition, and the positional source form.
 - 'Add-Type -TypeDefinition $code'
@@ -80,6 +87,10 @@ invalid:
 # compiled text. Neither carries a variable directly under the argument.
 - 'Add-Type -TypeDefinition ($prefix + $suffix)'
 - 'Add-Type -TypeDefinition (Get-Content src.cs)'
+- 'Add-Type -MemberDefinition (Get-Sig) -Name W -Namespace N'
+# A script block that INTERPOLATES: the value is expanded before it is bound,
+# so the compiled text is decided at runtime. It matches through `variable`.
+- 'Add-Type -TypeDefinition { public class X { $body } }'
 - 'Add-Type $(Get-Source)'
 # Splatted arguments parse as a variable in the positional slot.
 - 'Add-Type @splat'
