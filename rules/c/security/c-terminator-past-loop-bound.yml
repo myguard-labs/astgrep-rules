@@ -29,26 +29,40 @@ rule:
       - has:
           field: left
           kind: subscript_expression
-          has: {field: index, kind: identifier, pattern: $N}
+          all:
+            - has: {field: argument, kind: identifier, pattern: $BUF}
+            - has: {field: index, kind: identifier, pattern: $N}
       - has:
           field: right
           kind: number_literal
           regex: '^0$'
   follows:
     kind: for_statement
-    has:
-      field: condition
-      kind: binary_expression
-      all:
-        # Only the ascending, terminator-reserving comparisons. A decrementing
-        # `i > n - 1` loop makes no claim about the element at n - 1.
-        - any:
-            - pattern: $I < $BOUND
-            - pattern: $I != $BOUND
-        - has:
-            field: right
-            kind: binary_expression
-            pattern: $N - 1
-            all:
-              - has: {field: left, kind: identifier, pattern: $N}
-              - has: {field: right, kind: number_literal, regex: '^1$'}
+    all:
+      - has:
+          field: condition
+          kind: binary_expression
+          all:
+            # Only the ascending, terminator-reserving comparisons. A
+            # decrementing `i > n - 1` loop makes no claim about the element at
+            # n - 1.
+            - any:
+                - pattern: $I < $BOUND
+                - pattern: $I != $BOUND
+            - has:
+                field: right
+                kind: binary_expression
+                pattern: $N - 1
+                all:
+                  - has: {field: left, kind: identifier, pattern: $N}
+                  - has: {field: right, kind: number_literal, regex: '^1$'}
+      # The loop must actually index the buffer that receives the terminator,
+      # with the loop variable. Without this the rule pairs any adjacent loop
+      # with any following terminator.
+      - has:
+          field: body
+          stopBy: end
+          kind: subscript_expression
+          all:
+            - has: {field: argument, kind: identifier, pattern: $BUF}
+            - has: {field: index, kind: identifier, pattern: $I}

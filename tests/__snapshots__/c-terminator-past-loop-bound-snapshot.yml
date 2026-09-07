@@ -6,6 +6,10 @@ snapshots:
       style: primary
       start: 79
       end: 88
+    - source: c
+      style: secondary
+      start: 79
+      end: 80
     - source: n
       style: secondary
       start: 81
@@ -38,6 +42,18 @@ snapshots:
       style: secondary
       start: 47
       end: 57
+    - source: c
+      style: secondary
+      start: 66
+      end: 67
+    - source: i
+      style: secondary
+      start: 68
+      end: 69
+    - source: c[i]
+      style: secondary
+      start: 66
+      end: 70
     - source: for (size_t i = 0; i != n - 1; i++) { c[i] = 42; }
       style: secondary
       start: 28
@@ -48,6 +64,10 @@ snapshots:
       style: primary
       start: 97
       end: 106
+    - source: c
+      style: secondary
+      start: 97
+      end: 98
     - source: n
       style: secondary
       start: 99
@@ -80,6 +100,18 @@ snapshots:
       style: secondary
       start: 47
       end: 56
+    - source: c
+      style: secondary
+      start: 69
+      end: 70
+    - source: i
+      style: secondary
+      start: 71
+      end: 72
+    - source: c[i]
+      style: secondary
+      start: 69
+      end: 73
     - source: for (size_t i = 0; i < n - 1; i++) { if (c[i] < 32) { c[i] = 42; } }
       style: secondary
       start: 28
@@ -90,6 +122,10 @@ snapshots:
       style: primary
       start: 95
       end: 111
+    - source: buf
+      style: secondary
+      start: 95
+      end: 98
     - source: maxlen
       style: secondary
       start: 99
@@ -122,6 +158,18 @@ snapshots:
       style: secondary
       start: 57
       end: 71
+    - source: buf
+      style: secondary
+      start: 80
+      end: 83
+    - source: i
+      style: secondary
+      start: 84
+      end: 85
+    - source: buf[i]
+      style: secondary
+      start: 80
+      end: 86
     - source: for (size_t i = 0; i < maxlen - 1; i++) { buf[i] = 42; }
       style: secondary
       start: 38
