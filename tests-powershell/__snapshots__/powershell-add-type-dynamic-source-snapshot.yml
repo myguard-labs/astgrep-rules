@@ -74,6 +74,276 @@ snapshots:
       style: secondary
       start: 9
       end: 14
+  Add-Type -LP $cs:
+    labels:
+    - source: Add-Type -LP $cs
+      style: primary
+      start: 0
+      end: 16
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -LP
+      style: secondary
+      start: 9
+      end: 12
+    - source: ' '
+      style: secondary
+      start: 12
+      end: 13
+    - source: $cs
+      style: secondary
+      start: 13
+      end: 16
+    - source: $cs
+      style: secondary
+      start: 13
+      end: 16
+    - source: $cs
+      style: secondary
+      start: 13
+      end: 16
+  Add-Type -Li $cs:
+    labels:
+    - source: Add-Type -Li $cs
+      style: primary
+      start: 0
+      end: 16
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -Li
+      style: secondary
+      start: 9
+      end: 12
+    - source: ' '
+      style: secondary
+      start: 12
+      end: 13
+    - source: $cs
+      style: secondary
+      start: 13
+      end: 16
+    - source: $cs
+      style: secondary
+      start: 13
+      end: 16
+    - source: $cs
+      style: secondary
+      start: 13
+      end: 16
+  Add-Type -LiteralPat $cs:
+    labels:
+    - source: Add-Type -LiteralPat $cs
+      style: primary
+      start: 0
+      end: 24
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -LiteralPat
+      style: secondary
+      start: 9
+      end: 20
+    - source: ' '
+      style: secondary
+      start: 20
+      end: 21
+    - source: $cs
+      style: secondary
+      start: 21
+      end: 24
+    - source: $cs
+      style: secondary
+      start: 21
+      end: 24
+    - source: $cs
+      style: secondary
+      start: 21
+      end: 24
+  Add-Type -LiteralPath $cs:
+    labels:
+    - source: Add-Type -LiteralPath $cs
+      style: primary
+      start: 0
+      end: 25
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -LiteralPath
+      style: secondary
+      start: 9
+      end: 21
+    - source: ' '
+      style: secondary
+      start: 21
+      end: 22
+    - source: $cs
+      style: secondary
+      start: 22
+      end: 25
+    - source: $cs
+      style: secondary
+      start: 22
+      end: 25
+    - source: $cs
+      style: secondary
+      start: 22
+      end: 25
+  Add-Type -LiteralPath $cs -PassThru:
+    labels:
+    - source: Add-Type -LiteralPath $cs -PassThru
+      style: primary
+      start: 0
+      end: 35
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -LiteralPath
+      style: secondary
+      start: 9
+      end: 21
+    - source: ' '
+      style: secondary
+      start: 21
+      end: 22
+    - source: $cs
+      style: secondary
+      start: 22
+      end: 25
+    - source: $cs
+      style: secondary
+      start: 22
+      end: 25
+    - source: $cs
+      style: secondary
+      start: 22
+      end: 25
+  Add-Type -Pat $cs:
+    labels:
+    - source: Add-Type -Pat $cs
+      style: primary
+      start: 0
+      end: 17
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -Pat
+      style: secondary
+      start: 9
+      end: 13
+    - source: ' '
+      style: secondary
+      start: 13
+      end: 14
+    - source: $cs
+      style: secondary
+      start: 14
+      end: 17
+    - source: $cs
+      style: secondary
+      start: 14
+      end: 17
+    - source: $cs
+      style: secondary
+      start: 14
+      end: 17
+  Add-Type -Path "$dir\Thing.cs":
+    labels:
+    - source: Add-Type -Path "$dir\Thing.cs"
+      style: primary
+      start: 0
+      end: 30
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -Path
+      style: secondary
+      start: 9
+      end: 14
+    - source: ' '
+      style: secondary
+      start: 14
+      end: 15
+    - source: $dir
+      style: secondary
+      start: 16
+      end: 20
+    - source: '"$dir\Thing.cs"'
+      style: secondary
+      start: 15
+      end: 30
+    - source: '"$dir\Thing.cs"'
+      style: secondary
+      start: 15
+      end: 30
+  Add-Type -Path $cs:
+    labels:
+    - source: Add-Type -Path $cs
+      style: primary
+      start: 0
+      end: 18
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -Path
+      style: secondary
+      start: 9
+      end: 14
+    - source: ' '
+      style: secondary
+      start: 14
+      end: 15
+    - source: $cs
+      style: secondary
+      start: 15
+      end: 18
+    - source: $cs
+      style: secondary
+      start: 15
+      end: 18
+    - source: $cs
+      style: secondary
+      start: 15
+      end: 18
+  Add-Type -Path (Join-Path $dir Thing.cs):
+    labels:
+    - source: Add-Type -Path (Join-Path $dir Thing.cs)
+      style: primary
+      start: 0
+      end: 40
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -Path
+      style: secondary
+      start: 9
+      end: 14
+    - source: ' '
+      style: secondary
+      start: 14
+      end: 15
+    - source: Join-Path $dir Thing.cs
+      style: secondary
+      start: 16
+      end: 39
+    - source: (Join-Path $dir Thing.cs)
+      style: secondary
+      start: 15
+      end: 40
+    - source: (Join-Path $dir Thing.cs)
+      style: secondary
+      start: 15
+      end: 40
   Add-Type -ReferencedAssemblies System.Xml -TypeDefinition $code:
     labels:
     - source: Add-Type -ReferencedAssemblies System.Xml -TypeDefinition $code
@@ -104,6 +374,96 @@ snapshots:
       style: secondary
       start: 58
       end: 63
+  Add-Type -T $code:
+    labels:
+    - source: Add-Type -T $code
+      style: primary
+      start: 0
+      end: 17
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -T
+      style: secondary
+      start: 9
+      end: 11
+    - source: ' '
+      style: secondary
+      start: 11
+      end: 12
+    - source: $code
+      style: secondary
+      start: 12
+      end: 17
+    - source: $code
+      style: secondary
+      start: 12
+      end: 17
+    - source: $code
+      style: secondary
+      start: 12
+      end: 17
+  Add-Type -TypeD $code:
+    labels:
+    - source: Add-Type -TypeD $code
+      style: primary
+      start: 0
+      end: 21
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TypeD
+      style: secondary
+      start: 9
+      end: 15
+    - source: ' '
+      style: secondary
+      start: 15
+      end: 16
+    - source: $code
+      style: secondary
+      start: 16
+      end: 21
+    - source: $code
+      style: secondary
+      start: 16
+      end: 21
+    - source: $code
+      style: secondary
+      start: 16
+      end: 21
+  Add-Type -TypeDefi $code:
+    labels:
+    - source: Add-Type -TypeDefi $code
+      style: primary
+      start: 0
+      end: 24
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TypeDefi
+      style: secondary
+      start: 9
+      end: 18
+    - source: ' '
+      style: secondary
+      start: 18
+      end: 19
+    - source: $code
+      style: secondary
+      start: 19
+      end: 24
+    - source: $code
+      style: secondary
+      start: 19
+      end: 24
+    - source: $code
+      style: secondary
+      start: 19
+      end: 24
   Add-Type -TypeDefinition "$env:PAYLOAD":
     labels:
     - source: Add-Type -TypeDefinition "$env:PAYLOAD"

@@ -10,16 +10,27 @@ valid:
 - "Add-Type -TypeDefinition @'\npublic class X { $b }\n'@"
 # An expandable here-string with nothing to interpolate.
 - "Add-Type -TypeDefinition @\"\npublic class X {}\n\"@"
-# The safe parameter sets. Each names an artefact to load or reference rather
-# than source text to compile, so a variable bound to one of them decides no
-# compiled code. This is the exclusion a false positive would live in.
-- 'Add-Type -Path $cs'
-- 'Add-Type -LiteralPath $cs'
+# The genuinely safe parameter sets. -AssemblyName names a prebuilt assembly
+# resolved through .NET assembly binding and -ReferencedAssemblies names what
+# the compilation links against; neither is source text, so no compiler decides
+# anything from them and a variable bound to one is not a finding. This is the
+# exclusion a false positive would live in.
 - 'Add-Type -AssemblyName $asm'
 - 'Add-Type -ReferencedAssemblies $refs -TypeDefinition "public class X {}"'
-- 'Add-Type -Path C:\src\Thing.cs'
 - 'Add-Type -AssemblyName System.Windows.Forms'
-- 'Add-Type -LiteralPath $cs -PassThru'
+- 'Add-Type -AssemblyName $asm -PassThru'
+- 'Add-Type -AN $asm'
+# A CONSTANT source path names a fixed file that is itself under review, so the
+# compiled text is decided by the source, not at runtime.
+- 'Add-Type -Path C:\src\Thing.cs'
+- 'Add-Type -LiteralPath C:\src\Thing.cs'
+- 'Add-Type -Pat C:\src\Thing.cs'
+# Near misses on the prefix enumerations. -P and -Pa are ambiguous between
+# -Path and -PassThru so PowerShell rejects them, and the rule must not match
+# them either. -La resolves to -Language, not -LiteralPath.
+- 'Add-Type -P $cs'
+- 'Add-Type -Pa $cs'
+- 'Add-Type -La $lang -TypeDefinition "public class X {}"'
 # Constant source alongside a variable-valued unrelated parameter: the variable
 # controls the output object or the reference set, not the compiled text.
 - 'Add-Type -TypeDefinition "public class X {}" -OutputAssembly $out'
@@ -68,3 +79,21 @@ invalid:
 - 'Add-Type -TypeDefinition $code -Language CSharp'
 - 'Add-Type -ReferencedAssemblies System.Xml -TypeDefinition $code'
 - 'Add-Type -TypeDefinition $code -PassThru'
+# A dynamic SOURCE PATH. Add-Type -Path compiles the named .cs/.vb file rather
+# than loading a prebuilt assembly, so a runtime-decided path chooses the C#
+# that is compiled and run -- the same risk class as a dynamic definition.
+- 'Add-Type -Path $cs'
+- 'Add-Type -LiteralPath $cs'
+- 'Add-Type -LiteralPath $cs -PassThru'
+- 'Add-Type -Path "$dir\Thing.cs"'
+- 'Add-Type -Path (Join-Path $dir Thing.cs)'
+# Unambiguous parameter PREFIXES. PowerShell binds any prefix that resolves to
+# exactly one parameter, so the rule enumerates them; the ambiguous ones are in
+# the valid block above as near misses.
+- 'Add-Type -T $code'
+- 'Add-Type -TypeD $code'
+- 'Add-Type -TypeDefi $code'
+- 'Add-Type -Pat $cs'
+- 'Add-Type -Li $cs'
+- 'Add-Type -LiteralPat $cs'
+- 'Add-Type -LP $cs'

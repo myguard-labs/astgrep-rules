@@ -1378,9 +1378,39 @@ rejected and is recorded in `rejected-candidates.md`.
   argument — is correct whether or not the value is currently constant.
 - `powershell-add-type-dynamic-source` does not model which of Add-Type's
   parameter sets is actually in effect. It selects the source argument
-  syntactically: the value bound to `-TypeDefinition`, or the positional
-  argument that follows no parameter. A command that mixes parameter sets in a
-  way PowerShell would reject at runtime is judged on that syntax alone.
+  syntactically: the value bound to `-TypeDefinition`, `-Path` or
+  `-LiteralPath`, or the positional argument that follows no parameter. A
+  command that mixes parameter sets in a way PowerShell would reject at runtime
+  is judged on that syntax alone.
+- `powershell-add-type-dynamic-source` cannot tell a dynamic `-Path` that names
+  a **source file** from one that names a **prebuilt DLL**. `-Path` and
+  `-LiteralPath` accept both, and Add-Type picks the compiler from the file
+  extension, which is not knowable when the path is a variable. The rule reports
+  the dynamic path either way: the DLL case is still an assembly loaded into the
+  session by a runtime-decided value, and the remedy — a literal path, or the
+  value validated against an allowlist — is correct for both. `-AssemblyName` is
+  excluded because it can only name a prebuilt assembly.
+- `powershell-add-type-dynamic-source` accepts the unambiguous parameter
+  prefixes PowerShell itself binds (`-T` through `-TypeDefinition`, `-Pat`
+  through `-Path`, `-Li` through `-LiteralPath`, plus `-LP`) by enumerating
+  them. Prefixes PowerShell would reject as ambiguous are not matched: `-P` and
+  `-Pa` are ambiguous between `-Path` and `-PassThru`, and `-La` resolves to
+  `-Language`. The `PSPath` alias of `-LiteralPath` is not covered, because its
+  own prefixes collide with `-PassThru` at `-P`.
+- `powershell-add-type-dynamic-source` does **not** match source accepted
+  positionally after a named parameter, such as `Add-Type -PassThru $code` or
+  `Add-Type -IgnoreWarnings $code`, where PowerShell binds `$code` positionally
+  to `-TypeDefinition` because the preceding parameter is a switch that consumes
+  no value. This is refused by design, for the same reason as the
+  `PSH-IEX-POS` positional-argument boundary recorded for the Invoke-Expression
+  rules: `command_elements` is flat, so an argument that
+  follows a switch parameter and an argument that is a real parameter's value
+  are the same shape to the matcher. Distinguishing them would require a
+  per-parameter arity model — knowing that `-PassThru` and `-IgnoreWarnings` are
+  switches while `-Language` and `-OutputAssembly` take a value — which a
+  syntax-only matcher does not have and which would have to be maintained per
+  cmdlet. The rule therefore treats an argument following any parameter as that
+  parameter's value.
 - `powershell-native-shell-dynamic-command` matches the invoked shell by
   command name only. `& $exe /c $cmd`, a full path such as
   `C:\Windows\System32\cmd.exe /c $cmd`, and a shell reached through
