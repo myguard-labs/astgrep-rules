@@ -1,0 +1,23 @@
+id: php-ini-set-security-option
+valid:
+- <?php ini_set("memory_limit", "256M");
+- <?php ini_set("max_execution_time", "30");
+- <?php ini_set("date.timezone", "UTC");
+- <?php ini_set("open_basedir_extra", "/tmp");
+- <?php ini_set("$prefix.open_basedir", "/tmp");
+- <?php ini_set($option, "/tmp");
+- <?php ini_get("open_basedir");
+- <?php my_ini_set("open_basedir", "/");
+- <?php // ini_set("open_basedir", "/");
+- <?php $s = "ini_set('open_basedir', '/');";
+invalid:
+- <?php ini_set("open_basedir", "..");
+- <?php ini_set('include_path', '/tmp');
+- <?php ini_set("disable_functions", "");
+- <?php ini_set("disable_classes", "");
+- <?php ini_set("assert.active", 0);
+- <?php ini_set("zend.assertions", "-1");
+- <?php INI_SET("open_basedir", "/");
+- <?php \ini_set("open_basedir", "/");
+- '<?php ini_set(option: "disable_functions", value: "");'
+- '<?php ini_set(varname: "open_basedir", newvalue: "/");'

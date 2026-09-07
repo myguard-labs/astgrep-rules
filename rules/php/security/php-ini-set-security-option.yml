@@ -1,0 +1,49 @@
+id: php-ini-set-security-option
+language: php
+severity: error
+message: >-
+  ini_set rewrites a php.ini option that is itself a security control. Changing
+  open_basedir, include_path or disable_functions at runtime relaxes the
+  filesystem and callable restrictions the deployment relies on — the published
+  open_basedir escape walks the setting up to "/" with repeated ini_set and
+  chdir, then reads any file on the host — and turning off assert.active or
+  zend.assertions disables assertion-based checks the code still treats as
+  enforced (CWE-15, CWE-693). Pin these in php.ini or the FPM pool, where the
+  application cannot reach them.
+note: >-
+  Matches only a literal option name of open_basedir, include_path,
+  disable_functions, disable_classes, assert.active or zend.assertions, given
+  positionally or through the option/varname named argument. Ordinary runtime
+  tuning — memory_limit, max_execution_time, error_reporting, date.timezone —
+  is outside the shape, and so is an option name assembled from a variable or
+  concatenation, which is the bypass this shape cannot see. ini_get, which only
+  reads, does not match. A deployment that deliberately widens include_path from
+  a bootstrap file still holds a runtime-writable security control, so a match is
+  a site to move into configuration rather than proof of an attack.
+rule:
+  kind: function_call_expression
+  all:
+    - has:
+        field: function
+        regex: '(?i)^\\?ini_set$'
+    - has:
+        field: arguments
+        has:
+          kind: argument
+          all:
+            - any:
+                - all:
+                    - nthChild: 1
+                    - not: {has: {field: name, kind: name}}
+                - has: {field: name, kind: name, regex: '^(option|varname)$'}
+            # Inspect the literal text node, not the argument or string text.
+            # nthChild pins the option to the start of the literal, so an
+            # interpolated prefix cannot contaminate the match.
+            - has:
+                any:
+                  - kind: string
+                  - kind: encapsed_string
+                has:
+                  kind: string_content
+                  nthChild: 1
+                  regex: '(?i)^(open_basedir|include_path|disable_functions|disable_classes|assert\.active|zend\.assertions)$'
