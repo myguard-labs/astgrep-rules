@@ -105,12 +105,23 @@ NATIVE_TREE = Tree(
 # FILE. The mutant workspace below is a temp directory outside this repo, so
 # the config it writes needs an ABSOLUTE path to the built grammar or ast-grep
 # silently finds nothing where it should fail closed instead.
+# Every target the shipped config knows about is mapped to the one built
+# library. Hardcoding a single triple here would let the skip guard pass on
+# macOS, Windows or ARM Linux -- where the grammar IS built, so the guard sees
+# the file -- while ast-grep found no entry for its own target and reported
+# nothing. The triples come from the shipped config so the two cannot drift.
+_POWERSHELL_TARGETS = tuple(
+    yaml.safe_load((ROOT / "sgconfig.powershell.yml").read_text())
+    ["customLanguages"]["powershell"]["libraryPath"]
+)
+
 _POWERSHELL_CONFIG_EXTRA = (
     "customLanguages:\n"
     "  powershell:\n"
     "    libraryPath:\n"
-    f"      x86_64-unknown-linux-gnu: {POWERSHELL_LIBRARY.resolve()}\n"
-    "    extensions: [ps1, psm1, psd1]\n"
+    + "".join(f"      {target}: {POWERSHELL_LIBRARY.resolve()}\n"
+              for target in _POWERSHELL_TARGETS)
+    + "    extensions: [ps1, psm1, psd1]\n"
     "    expandoChar: 'µ'\n"
 )
 
@@ -211,6 +222,28 @@ class ArmCoverageTests(unittest.TestCase):
         self.assertEqual(seen_invalid, set(invalid))
         print(f"[{tree.name}] Matcher arms: {tested}; fixture kills: {fixture_kills}; "
               f"count kills: {count_kills}; invalid rules (not kills): {len(seen_invalid)}")
+
+    def test_powershell_test_config_registers_the_host_target(self):
+        """The mutant workspace config must carry an entry for the triple
+        ast-grep will actually resolve on this host. Without it the skip guard
+        still passes -- the grammar file exists -- while ast-grep finds no
+        library for its own target and quietly scans nothing, turning the
+        matcher-arm gate into a silent pass. Derived from the shipped config so
+        a platform added there is covered here without a second edit."""
+        generated = yaml.safe_load(_POWERSHELL_CONFIG_EXTRA)
+        registered = generated["customLanguages"]["powershell"]["libraryPath"]
+        # platform.machine() reports the OS name for the CPU; Rust target
+        # triples use its own. arm64 (macOS/BSD) and aarch64 (Linux) are the
+        # same architecture under two spellings.
+        machine = platform.machine().lower()
+        host = {"arm64": "aarch64", "amd64": "x86_64"}.get(machine, machine)
+        self.assertTrue(
+            any(target.startswith(f"{host}-") for target in registered),
+            f"no libraryPath entry for host architecture {host!r} "
+            f"(platform.machine()={platform.machine()!r}); "
+            f"registered: {sorted(registered)}",
+        )
+        self.assertTrue(all(Path(p).is_absolute() for p in registered.values()))
 
     def test_current_matcher_arm_inventory(self):
         self._run_arm_inventory(NATIVE_TREE)
