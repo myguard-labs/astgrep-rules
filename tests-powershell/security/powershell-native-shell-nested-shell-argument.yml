@@ -26,6 +26,16 @@ valid:
 # arguments as data, or not, and the lens cannot tell.
 - 'cmd /c wrapper.bat cmd /c $x'
 - 'cmd /c foo bar cmd /c $x'
+# The same bound under a REPEATED shell token. `command_elements` is flat, so a
+# second `/c cmd` pair further down the line is a sibling of the first and used
+# to satisfy the callee chain even though the program the outer `/c` invokes is
+# still wrapper.bat. The execution switch is now anchored to the outer command's
+# own switch slot: once a bare token has occupied the invoked-program slot,
+# every later switch belongs to that program's command line.
+- 'cmd /c wrapper.bat cmd /c cmd /c $x'
+- 'cmd /c wrapper.bat powershell -Command cmd /c $x'
+- 'cmd /c wrapper.bat cmd /c powershell -Command $x'
+- 'powershell -Command wrapper.bat cmd /c cmd /c $x'
 # The dynamic value PRECEDES the nested shell name, so the shell name is data
 # in the outer command line rather than the program a second parser runs.
 - 'cmd /c $x cmd /c dir'
@@ -53,6 +63,13 @@ valid:
 - "$s = 'cmd /c powershell -Command $cmd'"
 # Parser-error control.
 - 'cmd /c cmd /c $x {'
+# -EncodedCommand consumes a single base64-encoded script, so a literal shell
+# name and its own arguments can never follow it. The shape is impossible, and
+# the encoded-command spellings are absent from the OUTER anchor's switch table
+# for that reason. (-EncodedCommand on the INNER shell is a different matter
+# and stays a positive, below.)
+- 'powershell.exe -EncodedCommand cmd /k $x'
+- 'pwsh -EncodedCommand cmd /c $x'
 invalid:
 # Nested cmd, both switches, both name spellings, both casings.
 - 'cmd /c cmd /c $x'
@@ -69,7 +86,6 @@ invalid:
 # A PowerShell host as the OUTER shell, re-invoking a shell.
 - 'powershell -Command cmd /c $x'
 - 'pwsh -c pwsh -c $x'
-- 'powershell.exe -EncodedCommand cmd /k $x'
 # The dynamic value anywhere after the nested shell name, not only directly
 # after it: the outer shell parses the whole remaining line either way.
 - 'cmd /c cmd /c dir $path'

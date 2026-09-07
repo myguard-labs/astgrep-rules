@@ -1484,7 +1484,23 @@ rejected and is recorded in `rejected-candidates.md`.
   reached through a call operator, carries the same risk and is not matched.
   A dynamic value that PRECEDES the nested shell name (`cmd /c $x cmd /c dir`)
   is also out: there the shell name is data in the outer command line rather
-  than the program a second parser runs.
+  than the program a second parser runs. The immediate-callee bound holds under
+  repeated shell tokens as well: the matched execution switch is anchored to the
+  outer command's own switch slot, so once a bare token has taken the
+  invoked-program slot every later switch belongs to that program's command line
+  and cannot stand in for the outer one. `cmd /c wrapper.bat cmd /c cmd /c $x`
+  and `cmd /c wrapper.bat powershell -Command cmd /c $x` therefore stay out for
+  the same reason the single-wrapper form does.
+- The OUTER anchor of `powershell-native-shell-nested-shell-argument` accepts
+  only the command-string switches — `/c`, `/k` and `-Command` with its
+  documented abbreviations — and deliberately omits the `-EncodedCommand`
+  spellings its sibling carries. `-EncodedCommand` consumes a single
+  base64-encoded script, so a literal shell name followed by its own arguments
+  can never occupy the slot after it; admitting the switch on the outer anchor
+  would only match shapes that cannot occur. `-EncodedCommand` on the NESTED
+  shell is unaffected and still reported (`cmd /c pwsh -EncodedCommand $enc`),
+  because there the outer switch is `/c` and the encoded switch belongs to the
+  second parser.
 - `powershell-native-shell-dynamic-command` enumerates the PowerShell hosts'
   own documented switch abbreviations, not cmdlet parameter prefixes. The hosts
   do not use cmdlet binding for their own command line: `about_Pwsh` documents

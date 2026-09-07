@@ -35,7 +35,17 @@ note: >-
   reaches a second shell parser. The callee anchor is IMMEDIATE by design: the
   nested shell must be the program the execution switch invokes, so
   cmd /c wrapper.bat cmd /c $x is out -- what wrapper.bat does with its
-  arguments is not determined by this source. A script-block argument is
+  arguments is not determined by this source. That bound holds under repeated
+  shell tokens too, because the matched execution switch is itself anchored to
+  the outer command's switch slot: command_elements is flat, so without that
+  anchor a later /c cmd pair could stand in for the outer one and
+  cmd /c wrapper.bat cmd /c cmd /c $x would match on the SECOND pair. Once a
+  bare token occupies the invoked-program slot, every switch after it belongs
+  to that program's command line. The outer switch table is also narrower than
+  the sibling's: it carries /c, /k and -Command with its abbreviations, but not
+  the -EncodedCommand spellings, because that switch consumes a base64-encoded
+  script and can never be followed by a literal shell name and its arguments.
+  -EncodedCommand on the NESTED shell is unaffected and still reported. A script-block argument is
   excluded for the same reason as in the sibling rule: the parent does not
   interpolate it. A constant nested invocation such as cmd /c cmd /c dir stays
   out because there is no value the source under review fails to determine, and
@@ -102,15 +112,43 @@ rule:
                   follows:
                     kind: command_argument_sep
                     follows:
-                      any:
-                        # cmd's /c and /k are generic_token, not parameters: a
-                        # leading slash is not PowerShell parameter syntax.
-                        - kind: generic_token
-                          regex: '^/[ckCK]$'
-                        # The same host switch table the sibling rule pins,
-                        # spelled out rather than nested-optional so the
-                        # boundary stays reviewable. -ex is absent on purpose
-                        # (it abbreviates -ExecutionPolicy), and there is no
-                        # -Encoding host switch.
-                        - kind: command_parameter
-                          regex: '(?i)^-(c|co|com|comm|comma|comman|command|e|ec|enc|enco|encod|encode|encoded|encodedc|encodedco|encodedcom|encodedcomm|encodedcomma|encodedcomman|encodedcommand)$'
+                      all:
+                        - any:
+                            # cmd's /c and /k are generic_token, not
+                            # parameters: a leading slash is not PowerShell
+                            # parameter syntax.
+                            - kind: generic_token
+                              regex: '^/[ckCK]$'
+                            # The host command-string switches, spelled out
+                            # rather than nested-optional so the boundary stays
+                            # reviewable. -ex is absent on purpose (it
+                            # abbreviates -ExecutionPolicy), and there is no
+                            # -Encoding host switch. The -EncodedCommand
+                            # spellings the sibling rule carries are absent
+                            # here by construction: that switch consumes a
+                            # base64-encoded script, so a literal shell name
+                            # and its arguments can never follow it. Accepting
+                            # it on the OUTER anchor would only admit shapes
+                            # that cannot occur.
+                            - kind: command_parameter
+                              regex: '(?i)^-(c|co|com|comm|comma|comman|command)$'
+                        # Anchor the execution switch to the OUTER command's
+                        # own switch slot. `command_elements` is flat, so
+                        # without this a repeated `/c cmd` pair later in the
+                        # line satisfies the chain even though the program the
+                        # outer switch actually invokes is something else:
+                        # `cmd /c wrapper.bat cmd /c cmd /c $x` matched the
+                        # SECOND pair. Everything preceding a genuine outer
+                        # execution switch is a switch itself; the first bare
+                        # token is the invoked program, and any execution
+                        # switch after it belongs to that program's command
+                        # line, not to the outer shell's.
+                        - not:
+                            follows:
+                              stopBy: end
+                              not:
+                                any:
+                                  - kind: command_argument_sep
+                                  - kind: command_parameter
+                                  - kind: generic_token
+                                    regex: '^[-/]'
