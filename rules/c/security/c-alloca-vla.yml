@@ -2,12 +2,26 @@ id: c-alloca-vla
 language: c
 severity: warning
 message: >-
-  alloca() — stack overflow / stack clash if the size is non-constant and
-  attacker-influenced, and no failure path (alloca can't report OOM). Use a heap
-  allocation (in nginx: ngx_pnalloc from the request pool) with a bounded size.
-note: Dismiss if the size is a small compile-time constant.
+  alloca() or variable-length array (VLA) — stack overflow / stack clash if the
+  size is non-constant and attacker-influenced, and no failure path (alloca
+  can't report OOM, VLAs have no error path). Use a heap allocation (in nginx:
+  ngx_pnalloc from the request pool) with a bounded size. For VLAs, use
+  fixed-size arrays, or allocate on the heap.
+note: >-
+  Dismiss if the size is a small compile-time constant (alloca) or a
+  compile-time constant / uppercase macro / known constant expression (VLA).
+  VLAs are matched only when the size expression is a lowercase identifier,
+  to avoid false positives on constant-valued uppercase macros.
 rule:
-  kind: call_expression
-  has:
-    field: function
-    regex: ^alloca$
+  any:
+    - kind: call_expression
+      has:
+        field: function
+        regex: ^alloca$
+    - kind: array_declarator
+      has:
+        field: size
+        all:
+          - kind: identifier
+          - not:
+              regex: ^[A-Z_]
