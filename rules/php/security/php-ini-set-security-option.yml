@@ -48,7 +48,7 @@ rule:
                 any:
                   - kind: string
                   - kind: encapsed_string
-                regex: '(?i)^[''"](open_basedir|include_path|assert\.active)[''"]$'
+                regex: '(?i)^[''"](open_basedir|include_path|assert\.active|zend\.assertions)[''"]$'
     # Enabling the assertion options is hardening, not a weakening: the defect
     # this rule names is turning them OFF. Anchored to a literal enabling value,
     # so a dynamic or non-literal value stays reportable.
@@ -70,7 +70,7 @@ rule:
                       any:
                         - kind: string
                         - kind: encapsed_string
-                      regex: '(?i)^[''"](assert\.active)[''"]$'
+                      regex: '(?i)^[''"](assert\.active|zend\.assertions)[''"]$'
           - has:
               field: arguments
               has:

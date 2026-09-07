@@ -4,14 +4,18 @@ severity: error
 message: >-
   include/require of a stream-wrapper URL rather than a filesystem path. The
   interpreter executes whatever the wrapper yields: php://input replays the raw
-  request body as code, data:// and php://memory execute an inline payload,
-  expect:// runs the string as a command, and http:// or https:// fetches the
+  request body as code, data:// executes an inline payload, php://filter
+  transforms a resource the include then runs, expect:// runs the string as a
+  command, and http:// or https:// fetches the
   body from a host the local process does not control (CWE-98, CWE-829).
   Include a filesystem path resolved against a fixed base directory, and
   restrict the wrappers the deployment allows with allow_url_include off.
 note: >-
   Matches a literal included path whose scheme is php, data, expect, http or
-  https, including the interpolated form where the scheme is still literal.
+  https, in both the bare and the parenthesized form, including the interpolated
+  form where the scheme is still literal. php://memory and php://temp are
+  excluded: each open returns a fresh empty stream, so the include executes
+  nothing and a payload written through a different handle is not visible to it.
   A plain relative or absolute filesystem path does not match, and neither does
   a path stored in a variable — the variable form is the separate shipped
   php-file-inclusion-variable. phar:// and ftp:// are deliberately outside the
@@ -41,7 +45,12 @@ rule:
             has:
               kind: string_content
               nthChild: 1
-              regex: '(?i)^(php|data|expect|https?)://'
+              all:
+                - regex: '(?i)^(php|data|expect|https?)://'
+                # php://memory and php://temp start empty on every open, so
+                # including one executes nothing: a payload written through a
+                # different handle is not visible to this stream.
+                - not: {regex: '(?i)^php://(memory|temp)'}
         - has:
             kind: parenthesized_expression
             has:
@@ -51,4 +60,9 @@ rule:
               has:
                 kind: string_content
                 nthChild: 1
-                regex: '(?i)^(php|data|expect|https?)://'
+                all:
+                  - regex: '(?i)^(php|data|expect|https?)://'
+                  # php://memory and php://temp start empty on every open, so
+                  # including one executes nothing: a payload written through a
+                  # different handle is not visible to this stream.
+                  - not: {regex: '(?i)^php://(memory|temp)'}

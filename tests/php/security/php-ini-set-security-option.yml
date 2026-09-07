@@ -3,7 +3,6 @@ valid:
 # PHP_INI_SYSTEM options: the call fails and changes nothing.
 - <?php ini_set("disable_functions", "");
 - <?php ini_set("disable_classes", "");
-- <?php ini_set("zend.assertions", "0");
 # Narrowing open_basedir at runtime is supported and is not a weakening.
 - <?php ini_set("memory_limit", "256M");
 - <?php ini_set("max_execution_time", "30");
@@ -23,6 +22,7 @@ valid:
 - <?php ini_set("assert.active", true);
 # A double-quoted enabling value is encapsed_string, not string.
 - <?php ini_set("assert.active", "on");
+- <?php ini_set("zend.assertions", "1");
 - <?php ini_set("open_basedir$suffix", "/tmp");
 - <?php ini_set($option, "/tmp");
 - <?php ini_get("open_basedir");
@@ -30,6 +30,10 @@ valid:
 - <?php // ini_set("open_basedir", "/");
 - <?php $s = "ini_set('open_basedir', '/');";
 invalid:
+# Disabling assertions succeeds when they were enabled at startup, which is
+# exactly the configuration where they were doing work.
+- <?php ini_set("zend.assertions", "0");
+- '<?php ini_set(value: 0, option: "zend.assertions");'
 - <?php ini_set("open_basedir", "..");
 - <?php ini_set('include_path', '/tmp');
 - <?php ini_set("assert.active", 0);
