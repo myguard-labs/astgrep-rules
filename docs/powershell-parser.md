@@ -166,7 +166,11 @@ The library is built, not vendored, and `build/` is git-ignored. The script:
    `grammar.lock.json` and **refuses to build on a mismatch**. Checksums are
    over `src/parser.c` and `src/scanner.c` rather than the tarball, because
    GitHub's archive bytes are not stable over time while file contents at a
-   fixed commit are;
+   fixed commit are. It also refuses when the checksum list cannot be read or
+   does not cover every source it is about to compile -- an unreadable,
+   empty, wrongly typed or partial `sourceSha256` aborts rather than compiling
+   what it could not check. Verifying only the entries that happen to be
+   present would let a tampered lockfile skip a file by omitting it;
 3. compiles to the platform-native suffix -- `.so` on Linux, `.dylib` on macOS,
    `.dll` on Windows -- resolved from `uname`;
 4. asserts the built library exports `tree_sitter_powershell`. A library missing
