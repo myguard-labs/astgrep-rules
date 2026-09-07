@@ -54,20 +54,32 @@ rule:
               field: arguments
               has:
                 kind: argument
-                nthChild: 1
-                has:
-                  any:
-                    - kind: string
-                    - kind: encapsed_string
-                  regex: '(?i)^[''"](assert\.active|zend\.assertions)[''"]$'
+                all:
+                  # Positionally, or through the option/varname named argument,
+                  # mirroring the positive side of the rule.
+                  - any:
+                      - all:
+                          - nthChild: 1
+                          - not: {has: {field: name, kind: name}}
+                      - has: {field: name, kind: name, regex: '^(option|varname)$'}
+                  - has:
+                      any:
+                        - kind: string
+                        - kind: encapsed_string
+                      regex: '(?i)^[''"](assert\.active|zend\.assertions)[''"]$'
           - has:
               field: arguments
               has:
                 kind: argument
-                nthChild: 2
-                has:
-                  any:
-                    - kind: string
-                    - kind: encapsed_string
-                    - kind: integer
-                  regex: '(?i)^([''"]?(1|on|true)[''"]?)$'
+                all:
+                  - any:
+                      - all:
+                          - nthChild: 2
+                          - not: {has: {field: name, kind: name}}
+                      - has: {field: name, kind: name, regex: '^(value|newvalue)$'}
+                  - has:
+                      any:
+                        - kind: string
+                        - kind: encapsed_string
+                        - kind: integer
+                      regex: '(?i)^([''"]?(1|on|true)[''"]?)$'

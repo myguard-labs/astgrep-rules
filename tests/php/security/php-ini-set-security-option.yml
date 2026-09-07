@@ -15,6 +15,9 @@ valid:
 # Single-quoted spellings are a different node kind than double-quoted ones.
 - <?php ini_set('zend.assertions', '1');
 - <?php ini_set('assert.active', 'true');
+# Named arguments may be reordered; the exemption resolves them by name.
+- '<?php ini_set(value: 1, option: "assert.active");'
+- '<?php ini_set(newvalue: ''1'', varname: ''zend.assertions'');'
 - <?php ini_set("open_basedir$suffix", "/tmp");
 - <?php ini_set($option, "/tmp");
 - <?php ini_get("open_basedir");
@@ -22,6 +25,7 @@ valid:
 - <?php // ini_set("open_basedir", "/");
 - <?php $s = "ini_set('open_basedir', '/');";
 invalid:
+- '<?php ini_set(value: 0, option: "zend.assertions");'
 - <?php ini_set("open_basedir", "..");
 - <?php ini_set('include_path', '/tmp');
 - <?php ini_set("disable_functions", "");

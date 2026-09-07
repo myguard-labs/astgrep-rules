@@ -202,6 +202,32 @@ snapshots:
       style: secondary
       start: 14
       end: 41
+  '<?php ini_set(value: 0, option: "zend.assertions");':
+    labels:
+    - source: 'ini_set(value: 0, option: "zend.assertions")'
+      style: primary
+      start: 6
+      end: 50
+    - source: ini_set
+      style: secondary
+      start: 6
+      end: 13
+    - source: option
+      style: secondary
+      start: 24
+      end: 30
+    - source: '"zend.assertions"'
+      style: secondary
+      start: 32
+      end: 49
+    - source: 'option: "zend.assertions"'
+      style: secondary
+      start: 24
+      end: 49
+    - source: 'option: "zend.assertions"'
+      style: secondary
+      start: 24
+      end: 49
   '<?php ini_set(varname: "open_basedir", newvalue: "/");':
     labels:
     - source: 'ini_set(varname: "open_basedir", newvalue: "/")'
