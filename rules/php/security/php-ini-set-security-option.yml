@@ -36,14 +36,12 @@ rule:
                     - nthChild: 1
                     - not: {has: {field: name, kind: name}}
                 - has: {field: name, kind: name, regex: '^(option|varname)$'}
-            # Inspect the literal text node, not the argument or string text.
-            # nthChild pins the option to the start of the literal, so an
-            # interpolated prefix cannot contaminate the match.
+            # Anchor the regex to the WHOLE literal, quotes included, so an
+            # interpolated suffix such as "open_basedir{$s}" cannot satisfy it.
+            # A subtree match on string_content would accept any literal that
+            # merely STARTS with the option name.
             - has:
                 any:
                   - kind: string
                   - kind: encapsed_string
-                has:
-                  kind: string_content
-                  nthChild: 1
-                  regex: '(?i)^(open_basedir|include_path|disable_functions|disable_classes|assert\.active|zend\.assertions)$'
+                regex: '(?i)^[''"](open_basedir|include_path|disable_functions|disable_classes|assert\.active|zend\.assertions)[''"]$'

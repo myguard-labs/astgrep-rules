@@ -10,10 +10,6 @@ snapshots:
       style: secondary
       start: 6
       end: 13
-    - source: open_basedir
-      style: secondary
-      start: 15
-      end: 27
     - source: '"open_basedir"'
       style: secondary
       start: 14
@@ -36,10 +32,6 @@ snapshots:
       style: secondary
       start: 6
       end: 14
-    - source: open_basedir
-      style: secondary
-      start: 16
-      end: 28
     - source: '"open_basedir"'
       style: secondary
       start: 15
@@ -62,10 +54,6 @@ snapshots:
       style: secondary
       start: 6
       end: 13
-    - source: assert.active
-      style: secondary
-      start: 15
-      end: 28
     - source: '"assert.active"'
       style: secondary
       start: 14
@@ -88,10 +76,6 @@ snapshots:
       style: secondary
       start: 6
       end: 13
-    - source: disable_classes
-      style: secondary
-      start: 15
-      end: 30
     - source: '"disable_classes"'
       style: secondary
       start: 14
@@ -114,10 +98,6 @@ snapshots:
       style: secondary
       start: 6
       end: 13
-    - source: disable_functions
-      style: secondary
-      start: 15
-      end: 32
     - source: '"disable_functions"'
       style: secondary
       start: 14
@@ -140,10 +120,6 @@ snapshots:
       style: secondary
       start: 6
       end: 13
-    - source: open_basedir
-      style: secondary
-      start: 15
-      end: 27
     - source: '"open_basedir"'
       style: secondary
       start: 14
@@ -166,10 +142,6 @@ snapshots:
       style: secondary
       start: 6
       end: 13
-    - source: zend.assertions
-      style: secondary
-      start: 15
-      end: 30
     - source: '"zend.assertions"'
       style: secondary
       start: 14
@@ -192,10 +164,6 @@ snapshots:
       style: secondary
       start: 6
       end: 13
-    - source: include_path
-      style: secondary
-      start: 15
-      end: 27
     - source: '''include_path'''
       style: secondary
       start: 14
@@ -222,10 +190,6 @@ snapshots:
       style: secondary
       start: 14
       end: 20
-    - source: disable_functions
-      style: secondary
-      start: 23
-      end: 40
     - source: '"disable_functions"'
       style: secondary
       start: 22
@@ -252,10 +216,6 @@ snapshots:
       style: secondary
       start: 14
       end: 21
-    - source: open_basedir
-      style: secondary
-      start: 24
-      end: 36
     - source: '"open_basedir"'
       style: secondary
       start: 23
