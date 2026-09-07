@@ -178,8 +178,38 @@ It needs a C compiler (`cc`, or `$CC`), `python3`, and `curl` or `wget`. It does
 
 There is no cross-compilation and no prebuilt artifact: upstream publishes no
 release binaries, and each platform builds its own library from the same pinned,
-checksum-verified sources. That is what makes the result reproducible across
-Linux, macOS and Windows on any supported architecture.
+checksum-verified sources.
+
+### Platform support, and what is actually verified
+
+`sgconfig.powershell.yml` maps `libraryPath` by **Rust target triple**, which
+ast-grep resolves against its own host target, because the build script emits
+the platform-native suffix and a single hardcoded path would build one artifact
+and look for another:
+
+```yaml
+libraryPath:
+  x86_64-unknown-linux-gnu: build/powershell/powershell.so
+  aarch64-apple-darwin: build/powershell/powershell.dylib
+  x86_64-pc-windows-msvc: build/powershell/powershell.dll
+```
+
+**Only `x86_64-unknown-linux-gnu` is verified.** That is the platform this
+repository's CI runs on and the only one where the build, the load and the
+controls have actually been executed. The macOS and Windows entries are declared
+and the build script handles their suffixes, but no artifact has been built or
+loaded on those platforms here — treat them as untested until someone runs
+`tools/powershell/build-grammar.sh` and the suite on that host.
+
+Two properties make that honest rather than a silent gap:
+
+* A target triple absent from the map, or present with an unloadable path, is a
+  **fail-closed** error: ast-grep reports `Cannot load custom language library`
+  and exits non-zero. It does not scan zero files and report success.
+* `tests/test_powershell_parser.py` fails — it does not skip — when a grammar
+  artifact exists but does not match the running host. The parser-dependent
+  tests are skipped only when nothing was built at all, so a successful build on
+  an unverified platform cannot produce a green suite that verified nothing.
 
 ### Updating the grammar
 
@@ -188,7 +218,9 @@ Linux, macOS and Windows on any supported architecture.
    `tools/powershell/grammar.lock.json`. Compute the hashes from the extracted
    archive; do not copy them from an unverified source.
 3. Re-check `treeSitterAbi` against `LANGUAGE_VERSION` in `src/parser.c`.
-4. Rebuild and run `python3 -m unittest tests.test_powershell_parser`.
+4. Rebuild and run `python3 -m unittest tests.test_powershell_parser`. A skip
+   here means no artifact was built; a *failure* naming a suffix mismatch means
+   one was built for a different platform.
 5. Re-run the bake-off corpus if the update is a major version, and update the
    error-count table above.
 

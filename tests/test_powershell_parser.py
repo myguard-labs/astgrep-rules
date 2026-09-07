@@ -19,17 +19,31 @@ the PowerShell grammar has ever been built.
 
 import json
 import os
+import platform
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 AST_GREP = ROOT / "node_modules" / ".bin" / "ast-grep"
+PSH_CONFIG = ROOT / "sgconfig.powershell.yml"
 NATIVE_CONFIG = ROOT / "sgconfig.yml"
-LIBRARY = ROOT / "build" / "powershell" / "powershell.so"
+BUILD_DIR = ROOT / "build" / "powershell"
 BUILD_SCRIPT = ROOT / "tools" / "powershell" / "build-grammar.sh"
+
+# The build script emits the platform-native suffix, so the artifact this host
+# should have is not always `.so`.
+HOST_SUFFIX = {"Darwin": ".dylib", "Windows": ".dll"}.get(platform.system(), ".so")
+LIBRARY = BUILD_DIR / f"powershell{HOST_SUFFIX}"
+
+# Any artifact the build script could have produced, on any platform. Used to
+# tell "nothing was built" (skip is honest) apart from "something was built but
+# this host cannot use it" (a failure that must not hide behind a skip).
+ANY_ARTIFACT_SUFFIXES = (".so", ".dylib", ".dll")
 
 PROBE_SCRIPT = "Invoke-Expression $userInput\n"
 
@@ -47,6 +61,16 @@ rule:
 
 def library_available():
     return LIBRARY.is_file()
+
+
+def built_artifacts():
+    """Every grammar artifact present, regardless of which platform built it."""
+    if not BUILD_DIR.is_dir():
+        return []
+    return sorted(
+        p for p in BUILD_DIR.iterdir()
+        if p.is_file() and p.suffix in ANY_ARTIFACT_SUFFIXES
+    )
 
 
 requires_parser = unittest.skipUnless(
@@ -213,6 +237,59 @@ class TestFailsClosed(PowerShellHarness):
         self.assertGreater(
             len(findings), 0,
             "malformed PowerShell produced no ERROR node; parse failures would be invisible",
+        )
+
+
+class TestSkipCannotMasqueradeAsPass(unittest.TestCase):
+    """A built artifact this host cannot use must fail, never skip.
+
+    Every parser-dependent test above is guarded by `requires_parser`, which
+    skips when the host artifact is absent. That guard is correct only when the
+    grammar genuinely was not built: a skip and a pass are indistinguishable in
+    a suite summary, so if a build *did* succeed and the tests skipped anyway,
+    the whole positive-discovery half of this file would silently stop
+    asserting anything -- on exactly the platform it was meant to cover.
+
+    This test closes that gap. It is deliberately NOT guarded by
+    `requires_parser`.
+    """
+
+    def test_built_artifact_matches_this_host(self):
+        artifacts = built_artifacts()
+        if not artifacts:
+            self.skipTest(
+                "no grammar artifact built at all; "
+                f"run {BUILD_SCRIPT.relative_to(ROOT)}"
+            )
+        self.assertTrue(
+            LIBRARY.is_file(),
+            "a grammar artifact was built ("
+            + ", ".join(p.name for p in artifacts)
+            + f") but this host needs {LIBRARY.name}. The parser tests would "
+            "skip and the suite would look green while nothing was verified. "
+            "Rebuild with tools/powershell/build-grammar.sh on this platform.",
+        )
+
+    def test_config_maps_this_host_target(self):
+        """The config must name a path for a host that can build the grammar.
+
+        Independent of whether anything is built: a host absent from the
+        `libraryPath` map fails closed at scan time, but it would do so with a
+        generic loader error long after someone believed the platform was
+        supported. Assert the mapping is declared for the suffix this host
+        actually produces.
+        """
+        config = yaml.safe_load(PSH_CONFIG.read_text())
+        library_path = config["customLanguages"]["powershell"]["libraryPath"]
+        self.assertIsInstance(
+            library_path, dict,
+            "libraryPath must be a target-triple map; a single hardcoded path "
+            "cannot match the platform-specific suffix the build script emits",
+        )
+        suffixes = {Path(v).suffix for v in library_path.values()}
+        self.assertIn(
+            HOST_SUFFIX, suffixes,
+            f"no libraryPath entry uses {HOST_SUFFIX}, which this host builds",
         )
 
 

@@ -1323,6 +1323,13 @@ rejected and is recorded in `rejected-candidates.md`.
   with `-gt` as a command parameter, not as a comparison. Rules targeting
   expressions need an explicit `kind:` anchor; command-shaped patterns are
   unaffected.
+- PowerShell support is **verified only on `x86_64-unknown-linux-gnu`**.
+  `sgconfig.powershell.yml` declares `libraryPath` entries for macOS and Windows
+  target triples and the build script emits the right suffix for each, but no
+  artifact has been built or loaded on those platforms. An unmapped or
+  unloadable target fails closed (non-zero exit, no findings emitted) rather
+  than reporting a clean scan, and the test suite fails rather than skipping
+  when a built artifact does not match the running host.
 - PowerShell scanning is opt-in through `sgconfig.powershell.yml` and requires
   `tools/powershell/build-grammar.sh` to have run. It is deliberately kept out of
   `sgconfig.yml` because ast-grep aborts an entire scan when a registered custom
