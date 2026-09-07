@@ -10,17 +10,21 @@ message: >-
   deliberately left free.
 note: >-
   The pairing is a direct sibling relation: the terminating assignment must be
-  the statement immediately following the for loop, and the identifier indexing
-  it must be the same identifier the loop's ascending condition (`<` or `!=`)
-  compared against with the `- 1` subtraction. A descending `i > n - 1` loop
-  makes no claim about the element at `n - 1` and does not match. Writing the terminator at `buf[N - 1]`, at a different
-  variable, or at a constant index does not match, and neither does a loop whose
-  condition omits the `- 1` or corrects the bound with any operator other than
-  subtraction. `i <= n - 1` writes through `n - 1` and so reserves no element;
-  it does not match. Because only the identifier text is compared, a
-  bound reassigned between the loop and the terminator is not judged. A caller
-  that guarantees the buffer is at least N + 1 bytes, which makes the write
-  in-bounds though still inconsistent with the loop, is the routine dismissal.
+  the statement immediately following the for loop, the loop must index the same
+  buffer with its own loop variable, and the identifier indexing the terminator
+  must be the same identifier the loop's ascending condition (`<` or `!=`)
+  compared against with the `- 1` subtraction. The write must be a plain
+  assignment of `0` or `'\0'`; a compound assignment such as `c[n] += 0`
+  preserves the element and does not match. A descending `i > n - 1` loop makes
+  no claim about the element at `n - 1`. Writing the terminator at `buf[N - 1]`,
+  at a different variable, or at a constant index does not match, and neither
+  does a loop whose condition omits the `- 1` or corrects the bound with any
+  operator other than subtraction. `i <= n - 1` writes through `n - 1` and so
+  reserves no element; it does not match. Because ast-grep has no cross-relation
+  binding, only identifier text pairs the two sides: a buffer or bound shadowed
+  or reassigned between the loop and the terminator is not judged. A caller that
+  guarantees the buffer is at least N + 1 bytes, which makes the write in-bounds
+  though still inconsistent with the loop, is the routine dismissal.
 rule:
   kind: expression_statement
   has:
