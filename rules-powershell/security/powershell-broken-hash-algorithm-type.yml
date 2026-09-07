@@ -62,8 +62,32 @@ rule:
         - has:
             field: command_name
             regex: '(?i)^New-Object$'
+        # command_elements is FLAT: the type name is the first positional
+        # element, or the sibling that FOLLOWS -TypeName. Anchoring to the type
+        # slot is what keeps a hash type passed as constructor data -- e.g.
+        # `New-Object System.Text.StringBuilder -ArgumentList ...MD5` -- from
+        # being read as the type being constructed.
         - has:
             field: command_elements
             has:
-              kind: generic_token
-              regex: '(?i)^(System\.)?Security\.Cryptography\.(MD5|SHA1)(Managed|CryptoServiceProvider)?$'
+              any:
+                # Positional: the type is the first element.
+                - all:
+                    - kind: generic_token
+                      nthChild: 2
+                      regex: '(?i)^(System\.)?Security\.Cryptography\.(MD5|SHA1)(Managed|CryptoServiceProvider)?$'
+                # Named: -TypeName <value>, the value being the following
+                # sibling across the argument separator.
+                - all:
+                    - kind: generic_token
+                      regex: '(?i)^(System\.)?Security\.Cryptography\.(MD5|SHA1)(Managed|CryptoServiceProvider)?$'
+                    # command_elements separates every element with a
+                    # command_argument_sep, so -TypeName is two positions back,
+                    # not the immediate predecessor.
+                    - follows:
+                        stopBy: neighbor
+                        kind: command_argument_sep
+                        follows:
+                          stopBy: neighbor
+                          kind: command_parameter
+                          regex: '(?i)^-TypeName$'

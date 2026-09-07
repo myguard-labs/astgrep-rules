@@ -1,5 +1,8 @@
 id: powershell-broken-hash-algorithm-type
 valid:
+# A hash type passed as CONSTRUCTOR DATA is not the type being constructed.
+- New-Object System.Text.StringBuilder -ArgumentList System.Security.Cryptography.MD5
+- New-Object -TypeName System.Text.StringBuilder -ArgumentList Security.Cryptography.SHA1
 # The SHA-2 family is the fix, not the defect.
 - '[System.Security.Cryptography.SHA256]::Create()'
 - '[System.Security.Cryptography.SHA384]::Create()'
