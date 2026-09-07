@@ -36,6 +36,24 @@ snapshots:
       style: secondary
       start: 26
       end: 47
+  Invoke-RestMethod -Uri $u -SkipCertificateCheck:(!$false):
+    labels:
+    - source: Invoke-RestMethod -Uri $u -SkipCertificateCheck:(!$false)
+      style: primary
+      start: 0
+      end: 57
+    - source: Invoke-RestMethod
+      style: secondary
+      start: 0
+      end: 17
+    - source: -SkipCertificateCheck
+      style: secondary
+      start: 26
+      end: 47
+    - source: -SkipCertificateCheck
+      style: secondary
+      start: 26
+      end: 47
   Invoke-WebRequest -SkipCertificateCheck -Uri $u:
     labels:
     - source: Invoke-WebRequest -SkipCertificateCheck -Uri $u
@@ -132,6 +150,24 @@ snapshots:
       style: primary
       start: 0
       end: 53
+    - source: Invoke-WebRequest
+      style: secondary
+      start: 0
+      end: 17
+    - source: -SkipCertificateCheck
+      style: secondary
+      start: 26
+      end: 47
+    - source: -SkipCertificateCheck
+      style: secondary
+      start: 26
+      end: 47
+  Invoke-WebRequest -Uri $u -SkipCertificateCheck:(-not $false):
+    labels:
+    - source: Invoke-WebRequest -Uri $u -SkipCertificateCheck:(-not $false)
+      style: primary
+      start: 0
+      end: 61
     - source: Invoke-WebRequest
       style: secondary
       start: 0

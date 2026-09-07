@@ -38,6 +38,9 @@ note: >-
   excluded; -SkipCertificateCheck:$true is matched, as is the bare switch,
   which means $true. A colon-bound variable such as -SkipCertificateCheck:$lab
   is also matched, because the source does not fix it to $false.
+  The exclusion requires the bound value to be the $false literal in its
+  entirety, not merely to contain one somewhere in its subtree:
+  -SkipCertificateCheck:(-not $false) evaluates to true and is reported.
   The rule performs no reachability analysis and does not establish that the
   request crosses an untrusted network. A splat is not matched at all:
   splatting binds parameters through the @variable form, so the call site
@@ -67,6 +70,7 @@ rule:
                   kind: command_argument_sep
                   regex: '^:$'
                   precedes:
+                    regex: '(?i)^\$false$'
                     has:
                       stopBy: end
                       kind: variable

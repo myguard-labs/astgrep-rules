@@ -126,6 +126,24 @@ snapshots:
       style: secondary
       start: 20
       end: 32
+  New-PSSessionOption -SkipCACheck:(-not $false):
+    labels:
+    - source: New-PSSessionOption -SkipCACheck:(-not $false)
+      style: primary
+      start: 0
+      end: 46
+    - source: New-PSSessionOption
+      style: secondary
+      start: 0
+      end: 19
+    - source: -SkipCACheck
+      style: secondary
+      start: 20
+      end: 32
+    - source: -SkipCACheck
+      style: secondary
+      start: 20
+      end: 32
   New-PSSessionOption -SkipCN:
     labels:
     - source: New-PSSessionOption -SkipCN
@@ -150,6 +168,24 @@ snapshots:
       style: primary
       start: 0
       end: 32
+    - source: New-PSSessionOption
+      style: secondary
+      start: 0
+      end: 19
+    - source: -SkipCNCheck
+      style: secondary
+      start: 20
+      end: 32
+    - source: -SkipCNCheck
+      style: secondary
+      start: 20
+      end: 32
+  New-PSSessionOption -SkipCNCheck:(!$false):
+    labels:
+    - source: New-PSSessionOption -SkipCNCheck:(!$false)
+      style: primary
+      start: 0
+      end: 42
     - source: New-PSSessionOption
       style: secondary
       start: 0

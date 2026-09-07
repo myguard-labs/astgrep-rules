@@ -46,3 +46,7 @@ invalid:
 - 'Invoke-WebRequest -Uri $u -SkipCertificateCheck:$lab'
 # Credentials posted over an unauthenticated channel.
 - 'Invoke-RestMethod -Uri $u -Method Post -Body $creds -SkipCertificateCheck'
+# An expression that merely CONTAINS $false but evaluates to true still
+# disables validation; only the bare $false literal is the safe re-enable.
+- 'Invoke-WebRequest -Uri $u -SkipCertificateCheck:(-not $false)'
+- 'Invoke-RestMethod -Uri $u -SkipCertificateCheck:(!$false)'

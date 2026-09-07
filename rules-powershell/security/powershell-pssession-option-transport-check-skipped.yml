@@ -41,7 +41,9 @@ note: >-
   A switch bound through a colon carries its value as the sibling after a
   command_argument_sep whose text is that colon, so -SkipCACheck:$false is
   excluded as an explicit re-enable while the bare switch, :$true, and a
-  colon-bound variable are matched.
+  colon-bound variable are matched. The exclusion demands the bound value be
+  the $false literal in its entirety, so an expression that merely contains
+  one and evaluates to true, such as -SkipCACheck:(-not $false), is reported.
   The four switches are reported by one rule because they share a shape --
   a New-PSSessionOption switch that removes a WinRM transport protection --
   and a single construction site typically carries several of them. The
@@ -78,6 +80,7 @@ rule:
                   kind: command_argument_sep
                   regex: '^:$'
                   precedes:
+                    regex: '(?i)^\$false$'
                     has:
                       stopBy: end
                       kind: variable

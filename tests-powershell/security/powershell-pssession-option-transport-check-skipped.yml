@@ -43,3 +43,6 @@ invalid:
 # An explicit true, and a value the source does not fix to false.
 - 'New-PSSessionOption -SkipCACheck:$true'
 - 'New-PSSessionOption -NoEncryption:$lab'
+# An expression containing $false but evaluating to true is not a re-enable.
+- 'New-PSSessionOption -SkipCACheck:(-not $false)'
+- 'New-PSSessionOption -SkipCNCheck:(!$false)'
