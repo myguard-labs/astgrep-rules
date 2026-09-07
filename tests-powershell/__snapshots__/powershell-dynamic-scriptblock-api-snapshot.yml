@@ -10,6 +10,16 @@ snapshots:
       style: secondary
       start: 32
       end: 44
+  $ExecutionContext.InvokeCommand.InvokeScript($s):
+    labels:
+    - source: $ExecutionContext.InvokeCommand.InvokeScript($s)
+      style: primary
+      start: 0
+      end: 48
+    - source: InvokeScript
+      style: secondary
+      start: 32
+      end: 44
   $ExecutionContext.InvokeCommand.NewScriptBlock($s):
     labels:
     - source: $ExecutionContext.InvokeCommand.NewScriptBlock($s)
@@ -20,6 +30,16 @@ snapshots:
       style: secondary
       start: 32
       end: 46
+  $intrinsics.InvokeScript($s):
+    labels:
+    - source: $intrinsics.InvokeScript($s)
+      style: primary
+      start: 0
+      end: 28
+    - source: InvokeScript
+      style: secondary
+      start: 12
+      end: 24
   $ps.AddScript($s):
     labels:
     - source: $ps.AddScript($s)
@@ -60,16 +80,6 @@ snapshots:
       style: secondary
       start: 10
       end: 30
-  $sb.InvokeScript($s):
-    labels:
-    - source: $sb.InvokeScript($s)
-      style: primary
-      start: 0
-      end: 20
-    - source: InvokeScript
-      style: secondary
-      start: 4
-      end: 16
   '[ScriptBlock]::Create($s)':
     labels:
     - source: '[ScriptBlock]::Create($s)'

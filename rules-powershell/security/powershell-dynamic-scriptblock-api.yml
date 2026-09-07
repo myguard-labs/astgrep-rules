@@ -4,8 +4,8 @@ severity: warning
 message: >-
   A PowerShell API that compiles or evaluates text as code is called here.
   [ScriptBlock]::Create, InvokeCommand.NewScriptBlock and PowerShell.AddScript
-  parse a string into an executable script block; ScriptBlock.InvokeScript and
-  Runspace.CreateNestedPipeline run script text in the caller's session; and
+  parse a string into an executable script block; InvokeCommand.InvokeScript
+  and Runspace.CreateNestedPipeline run script text in the caller's session; and
   InvokeCommand.ExpandString performs PowerShell string interpolation on its
   argument, which evaluates any $(...) subexpression the string contains and is
   therefore an evaluator rather than a formatter. Each is the same class of sink

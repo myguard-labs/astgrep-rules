@@ -29,7 +29,10 @@ invalid:
 # Script-text sinks on any receiver.
 - '$ps.AddScript($s)'
 - '$ps.addscript($s)'
-- '$sb.InvokeScript($s)'
+- '$ExecutionContext.InvokeCommand.InvokeScript($s)'
+# InvokeScript is a CommandInvocationIntrinsics method, but the matcher is
+# receiver-agnostic by design, so an aliased intrinsics object matches too.
+- '$intrinsics.InvokeScript($s)'
 - '$runspace.CreateNestedPipeline($cmd, $true)'
 - '$ExecutionContext.InvokeCommand.NewScriptBlock($s)'
 - '$ExecutionContext.InvokeCommand.ExpandString($s)'

@@ -460,6 +460,7 @@ fixed by its fixtures.
   `[ScriptBlock]::Create` and `InvokeCommand.NewScriptBlock` as string-to-code
   compilers
   <https://learn.microsoft.com/en-us/dotnet/api/system.management.automation.scriptblock.create>;
-  `InvokeCommand.ExpandString` evaluating embedded subexpressions rather than
-  merely formatting
-  <https://learn.microsoft.com/en-us/dotnet/api/system.management.automation.enginereference.expandstring>
+  `CommandInvocationIntrinsics`, reached as `$ExecutionContext.InvokeCommand`,
+  which carries `InvokeScript`, `NewScriptBlock` and the `ExpandString` that
+  evaluates embedded subexpressions rather than merely formatting
+  <https://learn.microsoft.com/en-us/dotnet/api/system.management.automation.commandinvocationintrinsics>
