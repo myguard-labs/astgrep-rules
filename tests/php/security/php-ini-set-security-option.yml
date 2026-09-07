@@ -18,6 +18,9 @@ valid:
 # Named arguments may be reordered; the exemption resolves them by name.
 - '<?php ini_set(value: 1, option: "assert.active");'
 - '<?php ini_set(newvalue: ''1'', varname: ''zend.assertions'');'
+# A boolean literal is its own node kind, neither string nor integer.
+- <?php ini_set("assert.active", true);
+- '<?php ini_set(value: true, option: "zend.assertions");'
 - <?php ini_set("open_basedir$suffix", "/tmp");
 - <?php ini_set($option, "/tmp");
 - <?php ini_get("open_basedir");

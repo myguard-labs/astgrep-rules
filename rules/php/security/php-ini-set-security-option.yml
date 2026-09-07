@@ -82,4 +82,5 @@ rule:
                         - kind: string
                         - kind: encapsed_string
                         - kind: integer
+                        - kind: boolean
                       regex: '(?i)^([''"]?(1|on|true)[''"]?)$'
