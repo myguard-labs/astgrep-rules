@@ -1,0 +1,470 @@
+id: powershell-add-type-dynamic-source
+snapshots:
+  ADD-TYPE -TYPEDEFINITION $code:
+    labels:
+    - source: ADD-TYPE -TYPEDEFINITION $code
+      style: primary
+      start: 0
+      end: 30
+    - source: ADD-TYPE
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TYPEDEFINITION
+      style: secondary
+      start: 9
+      end: 24
+    - source: ' '
+      style: secondary
+      start: 24
+      end: 25
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+  Add-Type $(Get-Source):
+    labels:
+    - source: Add-Type $(Get-Source)
+      style: primary
+      start: 0
+      end: 22
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: $(Get-Source)
+      style: secondary
+      start: 9
+      end: 22
+    - source: $(Get-Source)
+      style: secondary
+      start: 9
+      end: 22
+    - source: $(Get-Source)
+      style: secondary
+      start: 9
+      end: 22
+  Add-Type $code:
+    labels:
+    - source: Add-Type $code
+      style: primary
+      start: 0
+      end: 14
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: $code
+      style: secondary
+      start: 9
+      end: 14
+    - source: $code
+      style: secondary
+      start: 9
+      end: 14
+    - source: $code
+      style: secondary
+      start: 9
+      end: 14
+  Add-Type -ReferencedAssemblies System.Xml -TypeDefinition $code:
+    labels:
+    - source: Add-Type -ReferencedAssemblies System.Xml -TypeDefinition $code
+      style: primary
+      start: 0
+      end: 63
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TypeDefinition
+      style: secondary
+      start: 42
+      end: 57
+    - source: ' '
+      style: secondary
+      start: 57
+      end: 58
+    - source: $code
+      style: secondary
+      start: 58
+      end: 63
+    - source: $code
+      style: secondary
+      start: 58
+      end: 63
+    - source: $code
+      style: secondary
+      start: 58
+      end: 63
+  Add-Type -TypeDefinition "$env:PAYLOAD":
+    labels:
+    - source: Add-Type -TypeDefinition "$env:PAYLOAD"
+      style: primary
+      start: 0
+      end: 39
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TypeDefinition
+      style: secondary
+      start: 9
+      end: 24
+    - source: ' '
+      style: secondary
+      start: 24
+      end: 25
+    - source: $env:PAYLOAD
+      style: secondary
+      start: 26
+      end: 38
+    - source: '"$env:PAYLOAD"'
+      style: secondary
+      start: 25
+      end: 39
+    - source: '"$env:PAYLOAD"'
+      style: secondary
+      start: 25
+      end: 39
+  Add-Type -TypeDefinition "public class X { $(Get-Body) }":
+    labels:
+    - source: Add-Type -TypeDefinition "public class X { $(Get-Body) }"
+      style: primary
+      start: 0
+      end: 57
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TypeDefinition
+      style: secondary
+      start: 9
+      end: 24
+    - source: ' '
+      style: secondary
+      start: 24
+      end: 25
+    - source: $(Get-Body)
+      style: secondary
+      start: 43
+      end: 54
+    - source: '"public class X { $(Get-Body) }"'
+      style: secondary
+      start: 25
+      end: 57
+    - source: '"public class X { $(Get-Body) }"'
+      style: secondary
+      start: 25
+      end: 57
+  Add-Type -TypeDefinition "public class X { $body }":
+    labels:
+    - source: Add-Type -TypeDefinition "public class X { $body }"
+      style: primary
+      start: 0
+      end: 51
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TypeDefinition
+      style: secondary
+      start: 9
+      end: 24
+    - source: ' '
+      style: secondary
+      start: 24
+      end: 25
+    - source: $body
+      style: secondary
+      start: 43
+      end: 48
+    - source: '"public class X { $body }"'
+      style: secondary
+      start: 25
+      end: 51
+    - source: '"public class X { $body }"'
+      style: secondary
+      start: 25
+      end: 51
+  Add-Type -TypeDefinition $code:
+    labels:
+    - source: Add-Type -TypeDefinition $code
+      style: primary
+      start: 0
+      end: 30
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TypeDefinition
+      style: secondary
+      start: 9
+      end: 24
+    - source: ' '
+      style: secondary
+      start: 24
+      end: 25
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+  Add-Type -TypeDefinition $code -Language CSharp:
+    labels:
+    - source: Add-Type -TypeDefinition $code -Language CSharp
+      style: primary
+      start: 0
+      end: 47
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TypeDefinition
+      style: secondary
+      start: 9
+      end: 24
+    - source: ' '
+      style: secondary
+      start: 24
+      end: 25
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+  Add-Type -TypeDefinition $code -PassThru:
+    labels:
+    - source: Add-Type -TypeDefinition $code -PassThru
+      style: primary
+      start: 0
+      end: 40
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TypeDefinition
+      style: secondary
+      start: 9
+      end: 24
+    - source: ' '
+      style: secondary
+      start: 24
+      end: 25
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+  Add-Type -TypeDefinition ($prefix + $suffix):
+    labels:
+    - source: Add-Type -TypeDefinition ($prefix + $suffix)
+      style: primary
+      start: 0
+      end: 44
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TypeDefinition
+      style: secondary
+      start: 9
+      end: 24
+    - source: ' '
+      style: secondary
+      start: 24
+      end: 25
+    - source: $prefix
+      style: secondary
+      start: 26
+      end: 33
+    - source: ($prefix + $suffix)
+      style: secondary
+      start: 25
+      end: 44
+    - source: ($prefix + $suffix)
+      style: secondary
+      start: 25
+      end: 44
+  Add-Type -TypeDefinition (Get-Content src.cs):
+    labels:
+    - source: Add-Type -TypeDefinition (Get-Content src.cs)
+      style: primary
+      start: 0
+      end: 45
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TypeDefinition
+      style: secondary
+      start: 9
+      end: 24
+    - source: ' '
+      style: secondary
+      start: 24
+      end: 25
+    - source: Get-Content src.cs
+      style: secondary
+      start: 26
+      end: 44
+    - source: (Get-Content src.cs)
+      style: secondary
+      start: 25
+      end: 45
+    - source: (Get-Content src.cs)
+      style: secondary
+      start: 25
+      end: 45
+  ? |-
+    Add-Type -TypeDefinition @"
+    public class X { $body }
+    "@
+  : labels:
+    - source: |-
+        Add-Type -TypeDefinition @"
+        public class X { $body }
+        "@
+      style: primary
+      start: 0
+      end: 55
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -TypeDefinition
+      style: secondary
+      start: 9
+      end: 24
+    - source: ' '
+      style: secondary
+      start: 24
+      end: 25
+    - source: $body
+      style: secondary
+      start: 45
+      end: 50
+    - source: |-
+        @"
+        public class X { $body }
+        "@
+      style: secondary
+      start: 25
+      end: 55
+    - source: |-
+        @"
+        public class X { $body }
+        "@
+      style: secondary
+      start: 25
+      end: 55
+  Add-Type -typeDefinition $code:
+    labels:
+    - source: Add-Type -typeDefinition $code
+      style: primary
+      start: 0
+      end: 30
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -typeDefinition
+      style: secondary
+      start: 9
+      end: 24
+    - source: ' '
+      style: secondary
+      start: 24
+      end: 25
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+  Add-Type @splat:
+    labels:
+    - source: Add-Type @splat
+      style: primary
+      start: 0
+      end: 15
+    - source: Add-Type
+      style: secondary
+      start: 0
+      end: 8
+    - source: '@splat'
+      style: secondary
+      start: 9
+      end: 15
+    - source: '@splat'
+      style: secondary
+      start: 9
+      end: 15
+    - source: '@splat'
+      style: secondary
+      start: 9
+      end: 15
+  add-type -typedefinition $code:
+    labels:
+    - source: add-type -typedefinition $code
+      style: primary
+      start: 0
+      end: 30
+    - source: add-type
+      style: secondary
+      start: 0
+      end: 8
+    - source: -typedefinition
+      style: secondary
+      start: 9
+      end: 24
+    - source: ' '
+      style: secondary
+      start: 24
+      end: 25
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30
+    - source: $code
+      style: secondary
+      start: 25
+      end: 30

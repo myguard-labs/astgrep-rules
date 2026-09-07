@@ -1363,6 +1363,33 @@ rejected and is recorded in `rejected-candidates.md`.
   finding. Only `Create` is type-anchored, to the `ScriptBlock` type literal,
   because an unanchored `Create` matched unrelated factories such as
   `[Regex]::Create` in probing.
+- **No variable-constant resolution.** No PowerShell rule tracks that a variable
+  was assigned a literal earlier in the same scope, so
+  `$code = 'public class X {}'; Add-Type -TypeDefinition $code` matches
+  `powershell-add-type-dynamic-source` exactly as an attacker-fed `$code` does.
+  This was considered and deliberately left out for PSH-04: a sound same-scope
+  proof would have to establish that no intervening statement, loop iteration,
+  function call, dot-sourced file or scope-crossing assignment rebinds the name,
+  and a syntax-only matcher cannot establish any of that. A heuristic that
+  looked only for a nearby literal assignment would suppress real findings
+  whenever a later reassignment sits outside its window, which is the wrong
+  direction for a security lens. The rules therefore report the shape, and the
+  recommended remedy — a literal definition with the varying data passed as an
+  argument — is correct whether or not the value is currently constant.
+- `powershell-add-type-dynamic-source` does not model which of Add-Type's
+  parameter sets is actually in effect. It selects the source argument
+  syntactically: the value bound to `-TypeDefinition`, or the positional
+  argument that follows no parameter. A command that mixes parameter sets in a
+  way PowerShell would reject at runtime is judged on that syntax alone.
+- `powershell-native-shell-dynamic-command` matches the invoked shell by
+  command name only. `& $exe /c $cmd`, a full path such as
+  `C:\Windows\System32\cmd.exe /c $cmd`, and a shell reached through
+  `Start-Process -FilePath cmd -ArgumentList "/c $x"` all carry the same risk
+  and none of them matches, because the name is not a literal `cmd`, `pwsh` or
+  `powershell` token in the `command_name` field. It also treats
+  `cmd /c dir $path` as argument passing rather than a command string, which is
+  correct for the common case but wrong where the invoked program itself
+  re-parses its argument.
 - Aliases are matched by name, not resolved. A script that does
   `Set-Alias run Invoke-Expression` and then calls `run $cmd` is not matched,
   and conversely a user-defined `iex` alias pointing somewhere harmless is.

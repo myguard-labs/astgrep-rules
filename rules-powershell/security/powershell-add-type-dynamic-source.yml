@@ -1,0 +1,84 @@
+id: powershell-add-type-dynamic-source
+language: powershell
+severity: error
+message: >-
+  Add-Type is compiling a source definition that is not a constant: the type
+  definition contains a variable, a subexpression, or the output of a command
+  invocation. Add-Type invokes the C# compiler at runtime on whatever text that
+  argument resolves to and loads the resulting assembly into the current
+  session, so the code that executes is decided by a value produced at runtime
+  rather than by the source under review. An attacker who influences that value
+  -- through a parameter, an environment variable, a file, a registry read or an
+  HTTP response -- chooses the C# that is compiled and run, in-process and with
+  the caller's privileges, and the loaded assembly can call any Win32 API
+  directly, bypassing PowerShell's own logging, constrained language mode and
+  execution policy (CWE-94, CWE-95). String interpolation is not escaping: there
+  is no quoting context in PowerShell source that makes an injected brace,
+  statement or using-directive inert once it reaches the C# compiler. Compile a
+  fixed type definition from a literal or a verbatim here-string and pass the
+  variable data to the compiled type as an argument, or use an existing .NET API
+  so no compiler is on the path at all.
+note: >-
+  Matches an Add-Type command, in any casing, whose SOURCE argument is dynamic.
+  The source argument is the value bound to -TypeDefinition across its separator,
+  or the positional argument that follows no parameter at all; it is dynamic
+  when it contains a variable, a subexpression, or a parenthesised command
+  invocation whose output becomes the compiled text. An expandable here-string
+  counts as dynamic only when it actually interpolates something, because the
+  parser gives a purely literal one no variable child. The test applies to that
+  argument alone. It deliberately does not match Add-Type's other parameter
+  sets: -Path, -LiteralPath, -AssemblyName and -ReferencedAssemblies name an
+  artefact to load or reference rather than source text to compile, so a
+  variable bound to one of them does not decide any compiled code and is not
+  reported, even when the same command also carries constant source. It does not
+  match a wholly constant definition either -- a single-quoted string, a
+  non-interpolating double-quoted string, or a verbatim here-string -- which is
+  the supported way to use this cmdlet. The rule performs no taint tracking and
+  does not claim the value is attacker-controlled; it does not need to, because
+  the compiled text is not determined by the source text under review. Where the
+  value really is a hardcoded constant assembled from variables the finding
+  still stands, because the correct edit is to make the definition literal and
+  pass the varying data as an argument to the compiled type.
+rule:
+  kind: command
+  all:
+    - has:
+        field: command_name
+        regex: '(?i)^Add-Type$'
+    # `command_elements` is flat: a parameter's value is not a child of the
+    # parameter, it is the sibling that follows it across a
+    # `command_argument_sep`. Selecting "the source argument" therefore means
+    # selecting a direct child of `command_elements` that either follows no
+    # `command_parameter` at all (the positional source form) or follows
+    # `-TypeDefinition` across that separator. This selection is what excludes
+    # the safe parameter sets for free: in `Add-Type -Path $p` the variable
+    # follows `-Path`, so it is neither positional nor the -TypeDefinition
+    # value, and nothing here matches it.
+    - has:
+        field: command_elements
+        has:
+          all:
+            - any:
+                - not:
+                    follows:
+                      stopBy: end
+                      kind: command_parameter
+                - follows:
+                    kind: command_argument_sep
+                    follows:
+                      kind: command_parameter
+                      regex: '(?i)^-TypeDefinition$'
+            # Matching `variable` and `sub_expression` rather than the enclosing
+            # string node is what keeps constant definitions out: a
+            # non-interpolating double-quoted string, a single-quoted string and
+            # a verbatim here-string all parse without either child, while an
+            # expandable here-string that really interpolates carries a
+            # `variable`. `command` covers `Add-Type -TypeDefinition (Get-Content
+            # src.cs)`, whose output becomes the compiled text but which contains
+            # neither of the other two kinds.
+            - has:
+                stopBy: end
+                any:
+                  - kind: variable
+                  - kind: sub_expression
+                  - kind: command

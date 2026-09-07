@@ -1,0 +1,71 @@
+id: powershell-native-shell-dynamic-command
+valid:
+# Constant command strings. This is the exclusion a false positive would live
+# in: the executed text is fixed, so there is nothing to inject into.
+- 'cmd /c "dir"'
+- 'cmd.exe /c "dir C:\Windows"'
+- 'cmd /c dir'
+- "powershell -Command 'Get-Date'"
+- 'powershell -Command "Get-Date"'
+- 'pwsh -c "Get-Date"'
+- 'powershell.exe -NoProfile -Command "Get-Date"'
+- 'powershell -EncodedCommand RwBlAHQALQBEAGEAdABlAA=='
+# Direct argument passing: the variable is an argument to the invoked program,
+# not part of a string the shell parses as a command line.
+- 'cmd /c dir $path'
+- 'cmd /c type $file'
+# Variables bound to switches that are not execution switches. -File names a
+# script whose path is data; -ExecutionPolicy sets a policy. Neither decides an
+# executed command string.
+- 'powershell -File $script'
+- 'powershell -ExecutionPolicy $policy -File script.ps1'
+- 'powershell -WindowStyle $style -Command "Get-Date"'
+- 'pwsh -WorkingDirectory $dir -c "Get-Date"'
+# -e is ambiguous between -EncodedCommand, -ExecutionPolicy and -Encoding, so
+# it is deliberately not treated as an execution switch.
+- 'powershell -e $x'
+- 'powershell -Encoding $enc'
+# The safe alternative the message recommends: arguments passed as data.
+- 'Start-Process -FilePath cmd -ArgumentList $args'
+- '& $exe $arg1 $arg2'
+- 'Start-Process -FilePath $exe -ArgumentList @($a, $b)'
+# A different program whose name merely begins with a matched one.
+- 'cmdkey /list $target'
+- 'powershell_ise $file'
+- 'pwshx -c $cmd'
+# Sink shape only in a comment or a string.
+- '# cmd /c $cmd'
+- '$s = "cmd /c $cmd"'
+- "$s = 'powershell -Command $cmd'"
+# Parser-error control.
+- 'cmd /c $cmd {'
+invalid:
+# cmd, both switches, both name spellings, both casings of the switch.
+- 'cmd /c $cmd'
+- 'cmd.exe /c $cmd'
+- 'cmd /k $cmd'
+- 'cmd /C $cmd'
+- 'CMD.EXE /C $cmd'
+# Interpolated command strings rather than bare variables.
+- 'cmd /c "dir $path"'
+- 'cmd.exe /c "del $($target.FullName)"'
+- 'cmd /c "$env:PAYLOAD"'
+# A parenthesised expression built at runtime.
+- 'cmd /c ("dir " + $p)'
+- 'cmd /c (Get-Content cmdline.txt)'
+# The PowerShell hosts, full switch names and unambiguous abbreviations.
+- 'powershell -Command $c'
+- 'powershell.exe -Command $c'
+- 'pwsh -Command $c'
+- 'pwsh -c "$x"'
+- 'powershell -com $c'
+- 'POWERSHELL -COMMAND $c'
+- 'powershell.exe -EncodedCommand $enc'
+- 'powershell -enc $enc'
+- 'pwsh -encodedcommand $enc'
+# The execution switch after other switches: the selection is positional
+# relative to the switch, not to the start of the command line.
+- 'powershell -NoProfile -Command "Get-Date; $x"'
+- 'powershell -NoProfile -ExecutionPolicy Bypass -Command $c'
+# Splatting into the command-string slot.
+- 'cmd /c @splat'

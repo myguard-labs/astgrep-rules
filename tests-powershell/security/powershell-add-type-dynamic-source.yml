@@ -1,0 +1,70 @@
+id: powershell-add-type-dynamic-source
+valid:
+# Constant definitions: single-quoted, non-interpolating double-quoted, and a
+# verbatim here-string. These are the supported way to use the cmdlet.
+- "Add-Type -TypeDefinition 'public class X {}'"
+- 'Add-Type -TypeDefinition "public class X {}"'
+- "Add-Type 'public class X {}'"
+# A verbatim here-string containing what looks like interpolation. `@'...'@` does
+# not expand, so the `$b` is literal C# text and this compiles fixed source.
+- "Add-Type -TypeDefinition @'\npublic class X { $b }\n'@"
+# An expandable here-string with nothing to interpolate.
+- "Add-Type -TypeDefinition @\"\npublic class X {}\n\"@"
+# The safe parameter sets. Each names an artefact to load or reference rather
+# than source text to compile, so a variable bound to one of them decides no
+# compiled code. This is the exclusion a false positive would live in.
+- 'Add-Type -Path $cs'
+- 'Add-Type -LiteralPath $cs'
+- 'Add-Type -AssemblyName $asm'
+- 'Add-Type -ReferencedAssemblies $refs -TypeDefinition "public class X {}"'
+- 'Add-Type -Path C:\src\Thing.cs'
+- 'Add-Type -AssemblyName System.Windows.Forms'
+- 'Add-Type -LiteralPath $cs -PassThru'
+# Constant source alongside a variable-valued unrelated parameter: the variable
+# controls the output object or the reference set, not the compiled text.
+- 'Add-Type -TypeDefinition "public class X {}" -OutputAssembly $out'
+- "Add-Type -TypeDefinition 'public class X {}' -ReferencedAssemblies $refs"
+# Case variants of a constant definition.
+- "ADD-TYPE -TYPEDEFINITION 'public class X {}'"
+- "add-type -typedefinition 'public class X {}'"
+# The value is built but never compiled.
+- '$code = "public class X { $b }"'
+- '$code = Get-Content src.cs'
+# Sink name only in a comment or a string.
+- '# Add-Type -TypeDefinition $code'
+- '$s = "Add-Type -TypeDefinition $code"'
+- "$s = 'Add-Type -TypeDefinition $code'"
+# A different cmdlet whose name merely contains the sink name.
+- 'Add-TypeDefinition $code'
+- 'Get-AddType $code'
+# Parser-error control.
+- 'Add-Type -TypeDefinition $code {'
+invalid:
+# Bare variable bound to -TypeDefinition, and the positional source form.
+- 'Add-Type -TypeDefinition $code'
+- 'Add-Type $code'
+# Case variants: the cmdlet name and the parameter name are both matched
+# case-insensitively.
+- 'ADD-TYPE -TYPEDEFINITION $code'
+- 'add-type -typedefinition $code'
+- 'Add-Type -typeDefinition $code'
+# Interpolated double-quoted string: variable, environment variable,
+# subexpression.
+- 'Add-Type -TypeDefinition "public class X { $body }"'
+- 'Add-Type -TypeDefinition "$env:PAYLOAD"'
+- 'Add-Type -TypeDefinition "public class X { $(Get-Body) }"'
+# An expandable here-string that really interpolates. The literal one above is
+# the near miss this is paired with.
+- "Add-Type -TypeDefinition @\"\npublic class X { $body }\n\"@"
+# Concatenation and a parenthesised command invocation whose output becomes the
+# compiled text. Neither carries a variable directly under the argument.
+- 'Add-Type -TypeDefinition ($prefix + $suffix)'
+- 'Add-Type -TypeDefinition (Get-Content src.cs)'
+- 'Add-Type $(Get-Source)'
+# Splatted arguments parse as a variable in the positional slot.
+- 'Add-Type @splat'
+# A dynamic definition alongside other parameters, in both orders: the source
+# argument still decides, so the safe-parameter exclusion must not swallow it.
+- 'Add-Type -TypeDefinition $code -Language CSharp'
+- 'Add-Type -ReferencedAssemblies System.Xml -TypeDefinition $code'
+- 'Add-Type -TypeDefinition $code -PassThru'
