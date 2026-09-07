@@ -1263,8 +1263,9 @@ rejected and is recorded in `rejected-candidates.md`.
   families — a pointer reused across an `emalloc` and a `malloc`, or two sibling
   scopes each declaring their own `p` — is deliberately not judged, for the same
   reason: identifier text cannot say which allocation a release belongs to. A
-  rebinding from anything that is not a recognized allocator, such as
-  `p = NULL` after a correct release, ends the chain for the same reason. The
+  rebinding from anything that is not a recognized allocator ends the chain for
+  the same reason, whether it is an assignment such as `p = NULL` after a correct
+  release or an inner scope shadowing the name with its own declaration. The
   `pemalloc`/`pefree` pair is excluded entirely, because which counterpart is
   correct depends on the runtime value of the `persistent` argument, so neither
   `pemalloc(n, 0); free(p);` nor `malloc(n); pefree(p, 1);` is judged.
@@ -1286,8 +1287,11 @@ rejected and is recorded in `rejected-candidates.md`.
   outright, so neither behaviour weakens verification.
 - `php-loose-array-membership` is a call-shape claim, not a reachability one.
   The `strict` parameter is declared `bool`, so a literal `1` coerces to `true`
-  and is accepted alongside it. It matches a strictness flag held in a variable
-  because it cannot read the value,
+  and is accepted alongside it. `array_keys` is judged only when a search value
+  is actually supplied — a second positional argument, or a named
+  `filter_value` — so a call passing only other options by name compares nothing
+  and is not reported. It matches a strictness flag held in a variable because it
+  cannot read the value,
   and it matches every loose call including haystacks of uniform values where
   juggling cannot change the answer. A strict argument supplied by name is
   recognized in any order.

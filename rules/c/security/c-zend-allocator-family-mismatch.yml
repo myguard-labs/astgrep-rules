@@ -48,6 +48,13 @@ utils:
   # with no allocation this release can be paired against.
   rebound-from-non-allocator:
     any:
+      # An inner scope shadowing the name with its own declaration: identifier
+      # text can no longer say which binding a release reads.
+      - kind: init_declarator
+        all:
+          - has: {field: declarator, stopBy: end, kind: identifier, pattern: $P}
+          - not: {has: {field: value, matches: zend-alloc-call}}
+          - not: {has: {field: value, matches: libc-alloc-call}}
       - kind: assignment_expression
         all:
           - has: {field: left, kind: identifier, pattern: $P}

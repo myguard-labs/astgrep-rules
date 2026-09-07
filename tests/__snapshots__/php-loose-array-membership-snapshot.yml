@@ -84,6 +84,28 @@ snapshots:
       style: secondary
       start: 21
       end: 23
+  '<?php array_keys(array: $a, filter_value: $v);':
+    labels:
+    - source: 'array_keys(array: $a, filter_value: $v)'
+      style: primary
+      start: 6
+      end: 45
+    - source: array_keys
+      style: secondary
+      start: 6
+      end: 16
+    - source: filter_value
+      style: secondary
+      start: 28
+      end: 40
+    - source: 'filter_value: $v'
+      style: secondary
+      start: 28
+      end: 44
+    - source: 'filter_value: $v'
+      style: secondary
+      start: 28
+      end: 44
   <?php array_search($n, $l);:
     labels:
     - source: array_search($n, $l)

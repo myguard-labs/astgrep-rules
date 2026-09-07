@@ -12,9 +12,10 @@ note: >-
   Matches in_array and array_search with no third argument, or with one that is
   neither the literal true nor the literal 1, and array_keys when a search value
   is supplied without one of those. The strict parameter is declared bool, so 1
-  coerces to true and is accepted. A one-argument array_keys, which does not
-  compare at all, and a strict argument given by name are both outside the
-  shape. A strictness
+  coerces to true and is accepted. array_keys is judged only when a search value
+  is actually supplied — a second positional argument, or a named filter_value —
+  so a one-argument call and a call passing only other options by name compare
+  nothing and are outside the shape, as is a strict argument given by name. A strictness
   flag computed at runtime matches because the matcher cannot read its value.
   A haystack of uniform, non-attacker-controlled values where juggling cannot
   change the answer is the routine dismissal.
@@ -56,7 +57,15 @@ rule:
         - has:
             field: function
             regex: '(?i)^\\?array_keys$'
+        # A comparison happens only when a search value is actually supplied:
+        # the second positional argument, or a named filter_value.
         - has:
             field: arguments
-            has: {kind: argument, nthChild: 2}
+            has:
+              kind: argument
+              any:
+                - all:
+                    - nthChild: 2
+                    - not: {has: {field: name, kind: name}}
+                - has: {field: name, kind: name, regex: '^filter_value$'}
         - matches: not-strict
