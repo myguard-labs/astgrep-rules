@@ -21,19 +21,34 @@ note: >-
   claim its error severity carries. An option-name or scheme assembled from a
   variable is likewise not visible here.
 rule:
-  any:
-    - kind: include_expression
-    - kind: include_once_expression
-    - kind: require_expression
-    - kind: require_once_expression
-  has:
-    # Anchor on the literal's own first text node: a regex over the include
-    # expression or the whole string would also be satisfied by a scheme
-    # appearing inside a longer interpolated path.
-    any:
-      - kind: string
-      - kind: encapsed_string
-    has:
-      kind: string_content
-      nthChild: 1
-      regex: '(?i)^(php|data|expect|https?)://'
+  all:
+    - any:
+        - kind: include_expression
+        - kind: include_once_expression
+        - kind: require_expression
+        - kind: require_once_expression
+    # The operand is a direct child in the bare `include "..."` form and sits
+    # one level down inside a parenthesized_expression in `include("...")`.
+    # Both are spelled out rather than walked: an unbounded stopBy would let a
+    # literal anywhere in a larger expression satisfy the include. The regex is
+    # anchored to the literal's own first text node so a scheme appearing inside
+    # a longer interpolated path does not match.
+    - any:
+        - has:
+            any:
+              - kind: string
+              - kind: encapsed_string
+            has:
+              kind: string_content
+              nthChild: 1
+              regex: '(?i)^(php|data|expect|https?)://'
+        - has:
+            kind: parenthesized_expression
+            has:
+              any:
+                - kind: string
+                - kind: encapsed_string
+              has:
+                kind: string_content
+                nthChild: 1
+                regex: '(?i)^(php|data|expect|https?)://'
