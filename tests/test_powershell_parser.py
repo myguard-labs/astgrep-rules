@@ -44,6 +44,20 @@ LIBRARY = BUILD_DIR / f"powershell{HOST_SUFFIX}"
 # this host cannot use it" (a failure that must not hide behind a skip).
 ANY_ARTIFACT_SUFFIXES = (".so", ".dylib", ".dll")
 
+
+def _netns_available():
+    """Can we run a child with no network? Used to keep build controls offline."""
+    try:
+        return subprocess.run(
+            ["unshare", "-rn", "true"],
+            capture_output=True, timeout=30, check=False,
+        ).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+NETNS_AVAILABLE = _netns_available()
+
 PROBE_SCRIPT = "Invoke-Expression $userInput\n"
 
 # A rule that matches the probe script, written out per-test so the controls do
@@ -259,23 +273,31 @@ class TestChecksumGateFailsClosed(unittest.TestCase):
     script ever fetches anything.
     """
 
-    def run_with_lock(self, lock_data):
-        """Run the build script against a doctored copy of the lockfile."""
+    def run_with_lock(self, lock_data, offline=True):
+        """Run the build script against a doctored copy of the lockfile.
+
+        Offline by default. The script validates the lockfile before it
+        fetches, so a rejection must not depend on the network being up -- and
+        running these with networking available would let a control "pass" on a
+        DNS failure without exercising the checksum logic at all.
+        """
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         tools = tmp / "tools" / "powershell"
         tools.mkdir(parents=True)
         shutil.copy(BUILD_SCRIPT, tools / BUILD_SCRIPT.name)
         (tools / "grammar.lock.json").write_text(json.dumps(lock_data))
+        cmd = [str(tools / BUILD_SCRIPT.name), str(tmp / "out.so")]
+        if offline and NETNS_AVAILABLE:
+            cmd = ["unshare", "-rn"] + cmd
         return subprocess.run(
-            [str(tools / BUILD_SCRIPT.name), str(tmp / "out.so")],
-            capture_output=True, text=True, check=False, timeout=300,
+            cmd, capture_output=True, text=True, check=False, timeout=300,
         )
 
     def valid_lock(self):
         return json.loads((BUILD_SCRIPT.parent / "grammar.lock.json").read_text())
 
-    def assert_refused(self, result, because):
+    def assert_refused(self, result, because, diagnostic=None):
         self.assertNotEqual(
             result.returncode, 0,
             f"build exited 0 with {because}; an unverified parser was built.\n"
@@ -285,12 +307,26 @@ class TestChecksumGateFailsClosed(unittest.TestCase):
             "==> compiling", result.stdout,
             f"build reached the compile step with {because}",
         )
+        # Assert the specific rejection, not merely a non-zero exit: without
+        # this a control would also "pass" on a network failure, an interpreter
+        # error, or any other incidental crash.
+        self.assertNotIn(
+            "==> fetching", result.stdout,
+            f"build fetched before rejecting {because}; validation must "
+            "precede the download so the gate does not depend on the network",
+        )
+        if diagnostic is not None:
+            self.assertIn(
+                diagnostic, result.stderr,
+                f"expected the {because} rejection to say {diagnostic!r}",
+            )
 
     def test_missing_sourceSha256_aborts(self):
         """The reported bypass: no checksum list at all."""
         lock = self.valid_lock()
         del lock["grammar"]["sourceSha256"]
-        self.assert_refused(self.run_with_lock(lock), "sourceSha256 removed")
+        self.assert_refused(self.run_with_lock(lock), "sourceSha256 removed",
+                            "unreadable lockfile")
 
     def test_partial_sourceSha256_aborts(self):
         """A lockfile covering parser.c but not scanner.c.
@@ -301,23 +337,27 @@ class TestChecksumGateFailsClosed(unittest.TestCase):
         """
         lock = self.valid_lock()
         lock["grammar"]["sourceSha256"].pop("src/scanner.c")
-        self.assert_refused(self.run_with_lock(lock), "scanner.c entry omitted")
+        self.assert_refused(self.run_with_lock(lock), "scanner.c entry omitted",
+                            "sourceSha256 has no entry for: src/scanner.c")
 
     def test_empty_sourceSha256_aborts(self):
         lock = self.valid_lock()
         lock["grammar"]["sourceSha256"] = {}
-        self.assert_refused(self.run_with_lock(lock), "an empty checksum map")
+        self.assert_refused(self.run_with_lock(lock), "an empty checksum map",
+                            "sourceSha256 must be a non-empty object")
 
     def test_wrong_typed_sourceSha256_aborts(self):
         lock = self.valid_lock()
         lock["grammar"]["sourceSha256"] = ["src/parser.c"]
-        self.assert_refused(self.run_with_lock(lock), "a list instead of a map")
+        self.assert_refused(self.run_with_lock(lock), "a list instead of a map",
+                            "sourceSha256 must be a non-empty object")
 
     def test_malformed_digest_aborts(self):
         """A digest that is not a sha256 cannot silently compare unequal."""
         lock = self.valid_lock()
         lock["grammar"]["sourceSha256"]["src/parser.c"] = "not-a-digest"
-        self.assert_refused(self.run_with_lock(lock), "a malformed digest")
+        self.assert_refused(self.run_with_lock(lock), "a malformed digest",
+                            "is not a sha256 digest")
 
     def test_unparsable_lockfile_aborts(self):
         tmp = Path(tempfile.mkdtemp())
@@ -326,11 +366,73 @@ class TestChecksumGateFailsClosed(unittest.TestCase):
         tools.mkdir(parents=True)
         shutil.copy(BUILD_SCRIPT, tools / BUILD_SCRIPT.name)
         (tools / "grammar.lock.json").write_text("{ this is not json")
+        cmd = [str(tools / BUILD_SCRIPT.name), str(tmp / "out.so")]
+        if NETNS_AVAILABLE:
+            cmd = ["unshare", "-rn"] + cmd
         result = subprocess.run(
-            [str(tools / BUILD_SCRIPT.name), str(tmp / "out.so")],
-            capture_output=True, text=True, check=False, timeout=300,
+            cmd, capture_output=True, text=True, check=False, timeout=300,
         )
-        self.assert_refused(result, "an unparsable lockfile")
+        self.assert_refused(result, "an unparsable lockfile", "unreadable lockfile")
+
+    def test_digest_for_a_non_compiled_file_aborts(self):
+        """A digest with no matching source verifies a file nobody compiles."""
+        lock = self.valid_lock()
+        lock["grammar"]["sourceSha256"]["src/ghost.c"] = "0" * 64
+        self.assert_refused(
+            self.run_with_lock(lock), "a digest for a non-compiled file",
+            "entries for non-compiled files",
+        )
+
+
+class TestCompiledSetMatchesVerifiedSet(unittest.TestCase):
+    """Every C source the archive ships must be verified and compiled.
+
+    The controls above keep the lockfile internally consistent. That is not
+    sufficient: a lockfile can agree with itself and still be wrong about the
+    grammar. Dropping scanner.c from both `sources` and `sourceSha256` passes
+    every internal-consistency check, and the parser then gets built without
+    its external lexer -- hand-written C, and the most attractive part of a
+    Tree-sitter grammar to tamper with.
+
+    This control needs the network, because the invariant is about the
+    extracted archive rather than the lockfile alone.
+    """
+
+    def test_lockfile_omitting_a_shipped_source_aborts(self):
+        lock = json.loads(
+            (BUILD_SCRIPT.parent / "grammar.lock.json").read_text()
+        )
+        lock["grammar"]["sources"] = ["src/parser.c"]
+        lock["grammar"]["sourceSha256"].pop("src/scanner.c")
+
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        tools = tmp / "tools" / "powershell"
+        tools.mkdir(parents=True)
+        shutil.copy(BUILD_SCRIPT, tools / BUILD_SCRIPT.name)
+        (tools / "grammar.lock.json").write_text(json.dumps(lock))
+
+        out = tmp / "out.so"
+        result = subprocess.run(
+            [str(tools / BUILD_SCRIPT.name), str(out)],
+            capture_output=True, text=True, check=False, timeout=600,
+        )
+        if "==> fetching" in result.stdout and result.returncode != 0 \
+                and "refusing to build" not in result.stderr:
+            self.skipTest(f"could not fetch the grammar: {result.stderr[:200]}")
+
+        self.assertNotEqual(
+            result.returncode, 0,
+            "build exited 0 with scanner.c dropped from the lockfile; "
+            "the external lexer was compiled without ever being verified.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}",
+        )
+        self.assertNotIn("==> compiling", result.stdout)
+        self.assertIn(
+            "pinned sources do not match the C sources in the archive",
+            result.stderr,
+        )
+        self.assertFalse(out.exists(), "an unverified library was produced")
 
 
 class TestSkipCannotMasqueradeAsPass(unittest.TestCase):
