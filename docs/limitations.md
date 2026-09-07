@@ -1467,7 +1467,24 @@ rejected and is recorded in `rejected-candidates.md`.
   `powershell` token in the `command_name` field. It also treats
   `cmd /c dir $path` as argument passing rather than a command string, which is
   correct for the common case but wrong where the invoked program itself
-  re-parses its argument.
+  re-parses its argument. The decidable part of that residual is covered by
+  `powershell-native-shell-nested-shell-argument`; the rest stays uncovered on
+  purpose.
+- `powershell-native-shell-nested-shell-argument` is bounded by its CALLEE
+  anchor, and the anchor is immediate. It reports a trailing dynamic value only
+  when the program the execution switch invokes is literally `cmd`,
+  `powershell` or `pwsh` (with or without `.exe`, any casing) in the slot
+  directly after that switch. So `cmd /c cmd /c $x` is reported, while
+  `cmd /c wrapper.bat cmd /c $x` is not: whether `wrapper.bat` passes its
+  arguments on to a shell is a property of that program, not of the PowerShell
+  source, and that is precisely the undecidable residual the general
+  `cmd /c dir $path` candidate was rejected for. The same name-only matching
+  limitation as its sibling applies to the nested position too — a full path
+  such as `cmd /c C:\Windows\System32\cmd.exe /c $x`, or a nested shell
+  reached through a call operator, carries the same risk and is not matched.
+  A dynamic value that PRECEDES the nested shell name (`cmd /c $x cmd /c dir`)
+  is also out: there the shell name is data in the outer command line rather
+  than the program a second parser runs.
 - `powershell-native-shell-dynamic-command` enumerates the PowerShell hosts'
   own documented switch abbreviations, not cmdlet parameter prefixes. The hosts
   do not use cmdlet binding for their own command line: `about_Pwsh` documents

@@ -1,0 +1,84 @@
+id: powershell-native-shell-nested-shell-argument
+valid:
+# THE TWICE-REFUTED SHAPE. A dynamic value in a later argument of a NON-shell
+# callee is ordinary separate-argument passing: dir, type and git receive their
+# argument as argv data and never re-parse it as a command line. This is
+# precisely the remedy both native-shell rules recommend, so reporting it would
+# make the recommended fix a finding. It is recorded as the rejected candidate
+# `powershell-cmd-argument-passing` in docs/rejected-candidates.md and must
+# stay out.
+- 'cmd /c dir $path'
+- 'cmd /c type $file'
+- 'cmd /c git log $ref'
+- 'cmd /c notepad $f'
+- 'cmd.exe /k robocopy $src $dst'
+- 'powershell -Command git log $ref'
+# A nested shell with a CONSTANT command line. There is no value the source
+# under review fails to determine, so there is nothing to inject.
+- 'cmd /c cmd /c dir'
+- 'cmd /c cmd /k "dir C:\Windows"'
+- 'cmd /c powershell -Command "Get-Date"'
+- 'cmd /c pwsh -c Get-Date'
+- 'powershell -Command cmd /c dir'
+# The callee anchor is IMMEDIATE by design. When something else occupies the
+# slot the execution switch invokes, what that program does with a later
+# `cmd /c $x` is not determined by this source -- wrapper.bat may pass its
+# arguments as data, or not, and the lens cannot tell.
+- 'cmd /c wrapper.bat cmd /c $x'
+- 'cmd /c foo bar cmd /c $x'
+# The dynamic value PRECEDES the nested shell name, so the shell name is data
+# in the outer command line rather than the program a second parser runs.
+- 'cmd /c $x cmd /c dir'
+# No execution switch at all: nothing establishes that the outer program parses
+# what follows as a command line.
+- 'cmd cmd $x'
+- 'powershell -File cmd /c $x'
+# A program whose name merely begins with a matched shell name.
+- 'cmd /c cmdkey /list $target'
+- 'cmd /c pwshx -c $cmd'
+- 'cmdkey /c cmd /c $x'
+# A SCRIPT BLOCK argument is not interpolated by the parent: the child receives
+# fixed script text and evaluates any variable in its own scope, where the
+# parent's binding does not exist. Same exclusion, and same reason, as
+# powershell-native-shell-dynamic-command.
+- 'cmd /c { cmd /c $x }'
+- 'pwsh -Command { pwsh -c $x }'
+# The safe alternative the message recommends: the real target invoked
+# directly, with each value its own argument.
+- '& $exe $arg1 $arg2'
+- 'Start-Process -FilePath $exe -ArgumentList @($a, $b)'
+# Sink shape only in a comment or a string.
+- '# cmd /c cmd /c $x'
+- '$s = "cmd /c cmd /c $x"'
+- "$s = 'cmd /c powershell -Command $cmd'"
+# Parser-error control.
+- 'cmd /c cmd /c $x {'
+invalid:
+# Nested cmd, both switches, both name spellings, both casings.
+- 'cmd /c cmd /c $x'
+- 'cmd /c cmd.exe /c $x'
+- 'cmd.exe /k cmd /k $x'
+- 'cmd /C CMD.EXE /C $x'
+- 'CMD /c cmd /c "dir $path"'
+# Nested PowerShell hosts reached through cmd, full switch and abbreviation.
+- 'cmd /c powershell -Command $x'
+- 'cmd /c powershell.exe -Command "Get-Item $path"'
+- 'cmd /c pwsh -c $x'
+- 'cmd /c pwsh -EncodedCommand $enc'
+- 'cmd /k PWSH -C $x'
+# A PowerShell host as the OUTER shell, re-invoking a shell.
+- 'powershell -Command cmd /c $x'
+- 'pwsh -c pwsh -c $x'
+- 'powershell.exe -EncodedCommand cmd /k $x'
+# The dynamic value anywhere after the nested shell name, not only directly
+# after it: the outer shell parses the whole remaining line either way.
+- 'cmd /c cmd /c dir $path'
+- 'cmd /c powershell -NoProfile -Command $x'
+- 'cmd /c cmd $x'
+# Subexpression and parenthesised producers in the nested command line.
+- 'cmd /c cmd /c "del $($target.FullName)"'
+- 'cmd /c cmd /c (Get-Content cmdline.txt)'
+- 'cmd /c powershell -Command ("Get-Item " + $p)'
+- 'cmd /c cmd /c "$env:PAYLOAD"'
+# Splatting into the nested shell's command line.
+- 'cmd /c cmd /c @splat'
