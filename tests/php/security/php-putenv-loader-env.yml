@@ -5,6 +5,9 @@ valid:
 - <?php putenv("LD_PRELOAD=");
 - <?php putenv("LD_AUDIT=");
 - <?php putenv('LD_PRELOAD=');
+# Unix environment names are case-sensitive: this names an unrelated variable.
+- <?php putenv("ld_library_path=/opt/app");
+- <?php putenv("Ld_Preload=/tmp/x.so");
 - <?php putenv("TZ=UTC");
 - <?php putenv("MY_LD_PRELOAD=/tmp/x.so");
 - <?php putenv("PATH_INFO=/x");

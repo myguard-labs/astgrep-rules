@@ -46,7 +46,11 @@ rule:
                 has:
                   kind: string_content
                   nthChild: 1
-                  regex: '(?i)^(LD_PRELOAD|LD_LIBRARY_PATH|LD_AUDIT|LD_DEBUG_OUTPUT|GCONV_PATH)='
+                  # Case-SENSITIVE: Unix environment names are, so
+                  # "ld_preload=" names an unrelated variable the loader ignores.
+                  # The (?i) on the function name above stays: PHP function
+                  # names are case-insensitive.
+                  regex: '^(LD_PRELOAD|LD_LIBRARY_PATH|LD_AUDIT|LD_DEBUG_OUTPUT|GCONV_PATH)='
             # An assignment with nothing after the "=" CLEARS the variable,
             # which is environment sanitization before spawning a subprocess,
             # not a loader injection. Anchored to the whole literal so an
@@ -57,4 +61,4 @@ rule:
                   any:
                     - kind: string
                     - kind: encapsed_string
-                  regex: '(?i)^[''"](LD_PRELOAD|LD_LIBRARY_PATH|LD_AUDIT|LD_DEBUG_OUTPUT|GCONV_PATH)=[''"]$'
+                  regex: '^[''"](LD_PRELOAD|LD_LIBRARY_PATH|LD_AUDIT|LD_DEBUG_OUTPUT|GCONV_PATH)=[''"]$'
