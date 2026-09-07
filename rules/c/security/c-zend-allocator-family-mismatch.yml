@@ -17,7 +17,9 @@ note: >-
   the same name to both families — a pointer reused across an emalloc and a
   malloc, or two sibling scopes each declaring their own p — is deliberately not
   judged, because identifier text alone cannot say which allocation a given
-  release belongs to. A project whose emalloc is a macro over
+  release belongs to. A rebinding from anything that is not a recognized
+  allocator — p = NULL, p = other, p = helper(...) — likewise ends the chain and
+  is not judged. A project whose emalloc is a macro over
   malloc, or one that deliberately transfers ownership between the two heaps, is
   the routine dismissal.
 utils:
@@ -41,6 +43,18 @@ utils:
         all:
           - has: {field: left, kind: identifier, pattern: $P}
           - has: {field: right, matches: zend-alloc-call}
+  # A rebinding from anything that is not a recognized allocator ends the
+  # ownership chain: p = NULL, p = other, p = helper(...) all leave the block
+  # with no allocation this release can be paired against.
+  rebound-from-non-allocator:
+    any:
+      - kind: assignment_expression
+        all:
+          - has: {field: left, kind: identifier, pattern: $P}
+          - not: {has: {field: right, matches: zend-alloc-call}}
+          - not: {has: {field: right, matches: libc-alloc-call}}
+      - kind: update_expression
+        has: {field: argument, kind: identifier, pattern: $P}
   bound-to-libc-alloc:
     any:
       - kind: init_declarator
@@ -73,6 +87,10 @@ rule:
                   has:
                     stopBy: end
                     matches: bound-to-libc-alloc
+              - not:
+                  has:
+                    stopBy: end
+                    matches: rebound-from-non-allocator
     # libc-owned block released by the Zend allocator.
     - all:
         - has: {field: function, regex: '^efree$'}
@@ -90,3 +108,7 @@ rule:
                   has:
                     stopBy: end
                     matches: bound-to-zend-alloc
+              - not:
+                  has:
+                    stopBy: end
+                    matches: rebound-from-non-allocator

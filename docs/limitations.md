@@ -1248,10 +1248,12 @@ Eight rules from the upstream Snuffleupagus commit history; one candidate was
 rejected and is recorded in `rejected-candidates.md`.
 
 - `c-snprintf-size-missing-nul` pairs the measuring call and the allocation by
-  identifier text inside one enclosing block. Any other binding of that name in
-  the block suppresses the finding — a size corrected on a later line, or an
-  unrelated variable of the same name in a sibling scope — because identifier
-  text cannot say which binding the allocation reads. A length copied into a
+  identifier text inside one enclosing block, and only where that name occupies
+  the size position, which is the first argument of every allocator listed. Any
+  other binding of the name in the block suppresses the finding — a size
+  corrected on a later line by assignment or by `++n`/`n++`, or an unrelated
+  variable of the same name in a sibling scope — because identifier text cannot
+  say which binding the allocation reads. A length copied into a
   second variable and an allocator wrapper that reserves the terminating byte
   itself are also missed. Any arithmetic at the allocation site takes the site
   out of scope, so a wrong adjustment such as `n + 2` is not reported either.
@@ -1260,7 +1262,9 @@ rejected and is recorded in `rejected-candidates.md`.
   another function, are outside the shape. A block binding the same name to both
   families — a pointer reused across an `emalloc` and a `malloc`, or two sibling
   scopes each declaring their own `p` — is deliberately not judged, for the same
-  reason: identifier text cannot say which allocation a release belongs to. The
+  reason: identifier text cannot say which allocation a release belongs to. A
+  rebinding from anything that is not a recognized allocator, such as
+  `p = NULL` after a correct release, ends the chain for the same reason. The
   `pemalloc`/`pefree` pair is excluded entirely, because which counterpart is
   correct depends on the runtime value of the `persistent` argument, so neither
   `pemalloc(n, 0); free(p);` nor `malloc(n); pefree(p, 1);` is judged.

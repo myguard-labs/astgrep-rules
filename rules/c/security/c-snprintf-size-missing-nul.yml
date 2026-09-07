@@ -15,9 +15,11 @@ note: >-
   identifier argument of the allocation. Any arithmetic on the size at the
   allocation site — n + 1, (size_t)n + 1, 1 + n — takes the site out of scope,
   which is the intended near miss. So does any other binding of that name in the
-  block — a size corrected on a later line, or an unrelated variable of the same
-  name in a sibling scope — because identifier text alone cannot say which
-  binding the allocation reads. It cannot see a length rebuilt into a different
+  block — a size corrected on a later line with an assignment or an increment, or
+  an unrelated variable of the same name in a sibling scope — because identifier
+  text alone cannot say which binding the allocation reads. The measured name
+  must also occupy the size position, which is the first argument of every
+  allocator listed. It cannot see a length rebuilt into a different
   variable, or an allocator wrapper that adds the byte itself; a wrapper that
   reserves the terminator is the routine dismissal.
 utils:
@@ -54,6 +56,9 @@ utils:
         all:
           - has: {field: left, kind: identifier, pattern: $LEN}
           - not: {has: {field: right, matches: measuring-snprintf}}
+      # ++n / n++ reserves the terminator just as n = n + 1 does.
+      - kind: update_expression
+        has: {field: argument, kind: identifier, pattern: $LEN}
 rule:
   kind: call_expression
   all:
@@ -62,7 +67,7 @@ rule:
         regex: '^(malloc|emalloc|pemalloc|xmalloc|alloca)$'
     - has:
         field: arguments
-        has: {kind: identifier, pattern: $LEN}
+        has: {kind: identifier, pattern: $LEN, nthChild: 1}
     - inside:
         stopBy: end
         kind: compound_statement
