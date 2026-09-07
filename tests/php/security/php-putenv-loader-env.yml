@@ -1,5 +1,10 @@
 id: php-putenv-loader-env
 valid:
+# Clearing the variable is environment sanitization before spawning a
+# subprocess: no shared object is supplied.
+- <?php putenv("LD_PRELOAD=");
+- <?php putenv("LD_AUDIT=");
+- <?php putenv('LD_PRELOAD=');
 - <?php putenv("TZ=UTC");
 - <?php putenv("MY_LD_PRELOAD=/tmp/x.so");
 - <?php putenv("PATH_INFO=/x");

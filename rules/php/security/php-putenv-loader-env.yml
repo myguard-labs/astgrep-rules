@@ -35,13 +35,10 @@ rule:
                     - nthChild: 1
                     - not: {has: {field: name, kind: name}}
                 - has: {field: name, kind: name, regex: '^(assignment|setting)$'}
-            # Inspect the string value node, not the argument text: a regex over
-            # the whole argument can be satisfied by an unrelated named-argument
-            # label or by the tail of a wider expression.
-            # Inspect the literal text node, not the argument or string text: a
-            # regex over a wider node can be satisfied by an unrelated
-            # named-argument label or by an interpolated tail. nthChild pins the
-            # name to the start of the literal, so "$x/LD_PRELOAD=" cannot match.
+            # Inspect the literal's first text node so an unrelated
+            # named-argument label or a wider expression's tail cannot satisfy
+            # the regex; nthChild pins the name to the start of the literal, so
+            # "$x/LD_PRELOAD=" does not match.
             - has:
                 any:
                   - kind: string
@@ -50,3 +47,14 @@ rule:
                   kind: string_content
                   nthChild: 1
                   regex: '(?i)^(LD_PRELOAD|LD_LIBRARY_PATH|LD_AUDIT|LD_DEBUG_OUTPUT|GCONV_PATH)='
+            # An assignment with nothing after the "=" CLEARS the variable,
+            # which is environment sanitization before spawning a subprocess,
+            # not a loader injection. Anchored to the whole literal so an
+            # interpolated value still matches: "LD_PRELOAD={$x}" is the payload
+            # case and must keep firing.
+            - not:
+                has:
+                  any:
+                    - kind: string
+                    - kind: encapsed_string
+                  regex: '(?i)^[''"](LD_PRELOAD|LD_LIBRARY_PATH|LD_AUDIT|LD_DEBUG_OUTPUT|GCONV_PATH)=[''"]$'

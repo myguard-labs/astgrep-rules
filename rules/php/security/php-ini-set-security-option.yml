@@ -45,3 +45,29 @@ rule:
                   - kind: string
                   - kind: encapsed_string
                 regex: '(?i)^[''"](open_basedir|include_path|disable_functions|disable_classes|assert\.active|zend\.assertions)[''"]$'
+    # Enabling the assertion options is hardening, not a weakening: the defect
+    # this rule names is turning them OFF. Anchored to a literal enabling value,
+    # so a dynamic or non-literal value stays reportable.
+    - not:
+        all:
+          - has:
+              field: arguments
+              has:
+                kind: argument
+                nthChild: 1
+                has:
+                  any:
+                    - kind: string
+                    - kind: encapsed_string
+                  regex: '(?i)^[''"](assert\.active|zend\.assertions)[''"]$'
+          - has:
+              field: arguments
+              has:
+                kind: argument
+                nthChild: 2
+                has:
+                  any:
+                    - kind: string
+                    - kind: encapsed_string
+                    - kind: integer
+                  regex: '(?i)^([''"]?(1|on|true)[''"]?)$'

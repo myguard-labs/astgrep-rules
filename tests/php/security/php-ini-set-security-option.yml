@@ -8,6 +8,13 @@ valid:
 # A trailing interpolation makes the option name dynamic; the constant
 # prefix does not establish which option is being set.
 - <?php ini_set("open_basedir{$suffix}", "/tmp");
+# Enabling the assertion options is hardening; the defect is turning them off.
+- <?php ini_set("zend.assertions", "1");
+- <?php ini_set("assert.active", 1);
+- <?php ini_set("zend.assertions", "on");
+# Single-quoted spellings are a different node kind than double-quoted ones.
+- <?php ini_set('zend.assertions', '1');
+- <?php ini_set('assert.active', 'true');
 - <?php ini_set("open_basedir$suffix", "/tmp");
 - <?php ini_set($option, "/tmp");
 - <?php ini_get("open_basedir");
