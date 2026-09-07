@@ -14,3 +14,4 @@ invalid:
 - void f(void) { char *p = alloca(64); }
 - void f(int n) { char buf[n]; }
 - void f(int len) { char buf[len]; }
+- void f(int rows, int cols) { int m[rows][cols]; }

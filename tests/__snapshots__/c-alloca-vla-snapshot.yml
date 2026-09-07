@@ -20,6 +20,16 @@ snapshots:
       style: secondary
       start: 25
       end: 26
+  void f(int rows, int cols) { int m[rows][cols]; }:
+    labels:
+    - source: m[rows][cols]
+      style: primary
+      start: 33
+      end: 46
+    - source: cols
+      style: secondary
+      start: 41
+      end: 45
   void f(void) { alloca(n); }:
     labels:
     - source: alloca(n)
