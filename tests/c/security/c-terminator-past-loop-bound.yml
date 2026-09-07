@@ -43,7 +43,11 @@ valid:
   - 'void f(char *c, size_t n) { for (size_t i = 0; i < n - 1; i++) { c[i] = 42; } c[n] += 0; }'
   # Near miss: an equality test is not an assignment at all.
   - 'void f(char *c, size_t n) { for (size_t i = 0; i < n - 1; i++) { c[i] = 42; } if (c[n] == 0) { return; } }'
+  # Near miss: a non-zero character literal is not a terminator.
+  - "void f(char *c, size_t n) { for (size_t i = 0; i < n - 1; i++) { c[i] = 42; } c[n] = 'x'; }"
 invalid:
+  # The conventional C spelling of the terminator, same defect.
+  - "void f(char *c, size_t n) { for (size_t i = 0; i < n - 1; i++) { c[i] = 42; } c[n] = '\\0'; }"
   # The upstream shape: sanitize to n - 1, terminate at n.
   - 'void f(char *c, size_t n) { for (size_t i = 0; i < n - 1; i++) { if (c[i] < 32) { c[i] = 42; } } c[n] = 0; }'
   # != is the same ascending shape spelled differently.

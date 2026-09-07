@@ -37,8 +37,10 @@ rule:
             - has: {field: index, kind: identifier, pattern: $N}
       - has:
           field: right
-          kind: number_literal
-          regex: '^0$'
+          any:
+            - {kind: number_literal, regex: '^0$'}
+            # The conventional C spelling of the same terminator.
+            - {kind: char_literal, regex: "^'\\\\0'$"}
   follows:
     kind: for_statement
     all:

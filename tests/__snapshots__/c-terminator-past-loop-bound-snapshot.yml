@@ -58,6 +58,64 @@ snapshots:
       style: secondary
       start: 28
       end: 78
+  void f(char *c, size_t n) { for (size_t i = 0; i < n - 1; i++) { c[i] = 42; } c[n] = '\0'; }:
+    labels:
+    - source: c[n] = '\0';
+      style: primary
+      start: 78
+      end: 90
+    - source: c
+      style: secondary
+      start: 78
+      end: 79
+    - source: n
+      style: secondary
+      start: 80
+      end: 81
+    - source: c[n]
+      style: secondary
+      start: 78
+      end: 82
+    - source: '''\0'''
+      style: secondary
+      start: 85
+      end: 89
+    - source: c[n] = '\0'
+      style: secondary
+      start: 78
+      end: 89
+    - source: n
+      style: secondary
+      start: 51
+      end: 52
+    - source: '1'
+      style: secondary
+      start: 55
+      end: 56
+    - source: n - 1
+      style: secondary
+      start: 51
+      end: 56
+    - source: i < n - 1
+      style: secondary
+      start: 47
+      end: 56
+    - source: c
+      style: secondary
+      start: 65
+      end: 66
+    - source: i
+      style: secondary
+      start: 67
+      end: 68
+    - source: c[i]
+      style: secondary
+      start: 65
+      end: 69
+    - source: for (size_t i = 0; i < n - 1; i++) { c[i] = 42; }
+      style: secondary
+      start: 28
+      end: 77
   void f(char *c, size_t n) { for (size_t i = 0; i < n - 1; i++) { if (c[i] < 32) { c[i] = 42; } } c[n] = 0; }:
     labels:
     - source: c[n] = 0;
