@@ -110,6 +110,50 @@ snapshots:
       style: secondary
       start: 14
       end: 31
+  <?php ini_set("zend.assertions", "on");:
+    labels:
+    - source: ini_set("zend.assertions", "on")
+      style: primary
+      start: 6
+      end: 38
+    - source: ini_set
+      style: secondary
+      start: 6
+      end: 13
+    - source: '"zend.assertions"'
+      style: secondary
+      start: 14
+      end: 31
+    - source: '"zend.assertions"'
+      style: secondary
+      start: 14
+      end: 31
+    - source: '"zend.assertions"'
+      style: secondary
+      start: 14
+      end: 31
+  <?php ini_set("zend.assertions", "true");:
+    labels:
+    - source: ini_set("zend.assertions", "true")
+      style: primary
+      start: 6
+      end: 40
+    - source: ini_set
+      style: secondary
+      start: 6
+      end: 13
+    - source: '"zend.assertions"'
+      style: secondary
+      start: 14
+      end: 31
+    - source: '"zend.assertions"'
+      style: secondary
+      start: 14
+      end: 31
+    - source: '"zend.assertions"'
+      style: secondary
+      start: 14
+      end: 31
   <?php ini_set('include_path', '/tmp');:
     labels:
     - source: ini_set('include_path', '/tmp')

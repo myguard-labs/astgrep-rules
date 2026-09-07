@@ -23,6 +23,12 @@ valid:
 # A double-quoted enabling value is encapsed_string, not string.
 - <?php ini_set("assert.active", "on");
 - <?php ini_set("zend.assertions", "1");
+- <?php ini_set("zend.assertions", 1);
+# The unquoted boolean casts to 1 and does enable assertions.
+- <?php ini_set("zend.assertions", true);
+# Named-argument and single-quoted spellings of the same exemption.
+- '<?php ini_set(value: 1, option: "zend.assertions");'
+- <?php ini_set('zend.assertions', '1');
 - <?php ini_set("open_basedir$suffix", "/tmp");
 - <?php ini_set($option, "/tmp");
 - <?php ini_get("open_basedir");
@@ -33,6 +39,10 @@ invalid:
 # Disabling assertions succeeds when they were enabled at startup, which is
 # exactly the configuration where they were doing work.
 - <?php ini_set("zend.assertions", "0");
+# zend.assertions parses as an integer: these strings evaluate to 0 and
+# DISABLE assertions, unlike the boolean assert.active directive.
+- <?php ini_set("zend.assertions", "on");
+- <?php ini_set("zend.assertions", "true");
 - '<?php ini_set(value: 0, option: "zend.assertions");'
 - <?php ini_set("open_basedir", "..");
 - <?php ini_set('include_path', '/tmp');
