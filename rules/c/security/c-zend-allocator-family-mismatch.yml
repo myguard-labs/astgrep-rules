@@ -18,8 +18,10 @@ note: >-
   malloc, or two sibling scopes each declaring their own p — is deliberately not
   judged, because identifier text alone cannot say which allocation a given
   release belongs to. A rebinding from anything that is not a recognized
-  allocator — p = NULL, p = other, p = helper(...) — likewise ends the chain and
-  is not judged. A project whose emalloc is a macro over
+  allocator — p = NULL, p = other, p = helper(...), or an inner scope shadowing
+  the name with its own declaration — likewise ends the chain and is not judged.
+  The allocation must also appear in an earlier statement than the release: an
+  allocation made after a release does not own the block that release read. A project whose emalloc is a macro over
   malloc, or one that deliberately transfers ownership between the two heaps, is
   the routine dismissal.
 utils:
@@ -85,9 +87,6 @@ rule:
             stopBy: end
             kind: compound_statement
             all:
-              - has:
-                  stopBy: end
-                  matches: bound-to-zend-alloc
               # Both families bound to this name in one block: the pairing is
               # ambiguous, so decline rather than guess.
               - not:
@@ -98,6 +97,14 @@ rule:
                   has:
                     stopBy: end
                     matches: rebound-from-non-allocator
+        # The allocation must precede the release; a later one does not own it.
+        - inside:
+            stopBy: end
+            follows:
+              stopBy: end
+              has:
+                stopBy: end
+                matches: bound-to-zend-alloc
     # libc-owned block released by the Zend allocator.
     - all:
         - has: {field: function, regex: '^efree$'}
@@ -108,9 +115,6 @@ rule:
             stopBy: end
             kind: compound_statement
             all:
-              - has:
-                  stopBy: end
-                  matches: bound-to-libc-alloc
               - not:
                   has:
                     stopBy: end
@@ -119,3 +123,10 @@ rule:
                   has:
                     stopBy: end
                     matches: rebound-from-non-allocator
+        - inside:
+            stopBy: end
+            follows:
+              stopBy: end
+              has:
+                stopBy: end
+                matches: bound-to-libc-alloc

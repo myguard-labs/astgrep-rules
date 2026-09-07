@@ -84,6 +84,24 @@ snapshots:
       style: secondary
       start: 21
       end: 23
+  '<?php array_keys($a, $v, strict: $flag ? false : true);':
+    labels:
+    - source: 'array_keys($a, $v, strict: $flag ? false : true)'
+      style: primary
+      start: 6
+      end: 54
+    - source: array_keys
+      style: secondary
+      start: 6
+      end: 16
+    - source: $v
+      style: secondary
+      start: 21
+      end: 23
+    - source: $v
+      style: secondary
+      start: 21
+      end: 23
   '<?php array_keys(array: $a, filter_value: $v);':
     labels:
     - source: 'array_keys(array: $a, filter_value: $v)'
@@ -136,6 +154,16 @@ snapshots:
       style: secondary
       start: 6
       end: 14
+  '<?php in_array($n, $l, $flag ? false : true);':
+    labels:
+    - source: 'in_array($n, $l, $flag ? false : true)'
+      style: primary
+      start: 6
+      end: 44
+    - source: in_array
+      style: secondary
+      start: 6
+      end: 14
   <?php in_array($n, $l, $strict);:
     labels:
     - source: in_array($n, $l, $strict)
@@ -152,6 +180,26 @@ snapshots:
       style: primary
       start: 6
       end: 29
+    - source: in_array
+      style: secondary
+      start: 6
+      end: 14
+  '<?php in_array($n, $l, strict: $flag ? false : true);':
+    labels:
+    - source: 'in_array($n, $l, strict: $flag ? false : true)'
+      style: primary
+      start: 6
+      end: 52
+    - source: in_array
+      style: secondary
+      start: 6
+      end: 14
+  '<?php in_array($n, $l, strict: strict_default());':
+    labels:
+    - source: 'in_array($n, $l, strict: strict_default())'
+      style: primary
+      start: 6
+      end: 48
     - source: in_array
       style: secondary
       start: 6

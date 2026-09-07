@@ -9,6 +9,8 @@ valid:
   - 'void f(void) { char *p = emalloc(10); efree(p); p = malloc(20); free(p); }'
   - 'void f(void) { char *p = emalloc(10); efree(p); p = NULL; free(p); }'
   - 'void f(void) { char *p = emalloc(10); { char *p = NULL; free(p); } efree(p); }'
+  - 'void f(char *p) { free(p); p = emalloc(10); efree(p); }'
+  - 'void f(char *p) { efree(p); p = malloc(10); free(p); }'
   - 'void f(char *o) { char *p = emalloc(10); efree(p); p = o; free(p); }'
   - 'void f(void) { { char *p = emalloc(10); efree(p); } { char *p = malloc(10); free(p); } }'
   - 'void f(void) { char *p = malloc(10); pefree(p, 1); }'

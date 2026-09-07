@@ -1287,7 +1287,10 @@ rejected and is recorded in `rejected-candidates.md`.
   outright, so neither behaviour weakens verification.
 - `php-loose-array-membership` is a call-shape claim, not a reachability one.
   The `strict` parameter is declared `bool`, so a literal `1` coerces to `true`
-  and is accepted alongside it. `array_keys` is judged only when a search value
+  and is accepted alongside it, but only as the whole value: a ternary, a
+  variable or a call in the strict position is not a literal and does not
+  suppress, because its false branch may be reachable. `array_keys` is judged
+  only when a search value
   is actually supplied — a second positional argument, or a named
   `filter_value` — so a call passing only other options by name compares nothing
   and is not reported. It matches a strictness flag held in a variable because it

@@ -158,6 +158,10 @@ snapshots:
       style: secondary
       start: 26
       end: 37
+    - source: '511'
+      style: secondary
+      start: 39
+      end: 42
     - source: 'permissions: 511'
       style: secondary
       start: 26
@@ -180,6 +184,10 @@ snapshots:
       style: secondary
       start: 12
       end: 23
+    - source: '0666'
+      style: secondary
+      start: 25
+      end: 29
     - source: 'permissions: 0666'
       style: secondary
       start: 12
@@ -202,6 +210,10 @@ snapshots:
       style: secondary
       start: 12
       end: 23
+    - source: '0777'
+      style: secondary
+      start: 25
+      end: 29
     - source: 'permissions: 0777'
       style: secondary
       start: 12

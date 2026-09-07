@@ -33,3 +33,7 @@ invalid:
 - '<?php array_keys($a, $v, false);'
 - '<?php ARRAY_KEYS($a, $v);'
 - '<?php in_array(needle: $n, haystack: $l, strict: $flag);'
+- '<?php in_array($n, $l, strict: $flag ? false : true);'
+- '<?php array_keys($a, $v, strict: $flag ? false : true);'
+- '<?php in_array($n, $l, $flag ? false : true);'
+- '<?php in_array($n, $l, strict: strict_default());'

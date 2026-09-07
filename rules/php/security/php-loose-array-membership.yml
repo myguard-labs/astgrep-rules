@@ -20,17 +20,29 @@ note: >-
   A haystack of uniform, non-attacker-controlled values where juggling cannot
   change the answer is the routine dismissal.
 utils:
+  # Only a literal true or 1 as the WHOLE value suppresses. A ternary, a
+  # variable or a call is not a literal, and its false branch may be reachable.
+  literal-true:
+    any:
+      - kind: boolean
+        regex: '(?i)^true$'
+      - kind: integer
+        regex: '^1$'
   strict-positional-true:
     kind: argument
-    nthChild: 3
-    regex: '(?i)^(true|1)$'
+    all:
+      - nthChild: 3
+      - not: {has: {field: name, kind: name}}
+      - has: {matches: literal-true}
+      - not: {has: {not: {matches: literal-true}}}
   strict-named-true:
     kind: argument
     all:
       - has:
           field: name
+          kind: name
           regex: '^strict$'
-      - regex: '(?i):\s*(true|1)$'
+      - has: {matches: literal-true}
   not-strict:
     all:
       - not:

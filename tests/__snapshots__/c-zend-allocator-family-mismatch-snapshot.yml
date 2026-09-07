@@ -18,6 +18,10 @@ snapshots:
       style: secondary
       start: 50
       end: 51
+    - source: '{ char *p = erealloc(o, 20); free(p); }'
+      style: secondary
+      start: 16
+      end: 55
     - source: p
       style: secondary
       start: 24
@@ -34,10 +38,14 @@ snapshots:
       style: secondary
       start: 23
       end: 43
-    - source: '{ char *p = erealloc(o, 20); free(p); }'
+    - source: '*p = erealloc(o, 20)'
       style: secondary
-      start: 16
-      end: 55
+      start: 23
+      end: 43
+    - source: '*p = erealloc(o, 20)'
+      style: secondary
+      start: 23
+      end: 43
   void f(char *o) { char *p = realloc(o, 20); efree(p); }:
     labels:
     - source: efree(p)
@@ -56,6 +64,10 @@ snapshots:
       style: secondary
       start: 50
       end: 51
+    - source: '{ char *p = realloc(o, 20); efree(p); }'
+      style: secondary
+      start: 16
+      end: 55
     - source: p
       style: secondary
       start: 24
@@ -72,10 +84,14 @@ snapshots:
       style: secondary
       start: 23
       end: 42
-    - source: '{ char *p = realloc(o, 20); efree(p); }'
+    - source: '*p = realloc(o, 20)'
       style: secondary
-      start: 16
-      end: 55
+      start: 23
+      end: 42
+    - source: '*p = realloc(o, 20)'
+      style: secondary
+      start: 23
+      end: 42
   void f(void) { char *p = calloc(1, 10); efree(p); }:
     labels:
     - source: efree(p)
@@ -94,6 +110,10 @@ snapshots:
       style: secondary
       start: 46
       end: 47
+    - source: '{ char *p = calloc(1, 10); efree(p); }'
+      style: secondary
+      start: 13
+      end: 51
     - source: p
       style: secondary
       start: 21
@@ -110,10 +130,14 @@ snapshots:
       style: secondary
       start: 20
       end: 38
-    - source: '{ char *p = calloc(1, 10); efree(p); }'
+    - source: '*p = calloc(1, 10)'
       style: secondary
-      start: 13
-      end: 51
+      start: 20
+      end: 38
+    - source: '*p = calloc(1, 10)'
+      style: secondary
+      start: 20
+      end: 38
   void f(void) { char *p = ecalloc(1, 10); free(p); }:
     labels:
     - source: free(p)
@@ -132,6 +156,10 @@ snapshots:
       style: secondary
       start: 46
       end: 47
+    - source: '{ char *p = ecalloc(1, 10); free(p); }'
+      style: secondary
+      start: 13
+      end: 51
     - source: p
       style: secondary
       start: 21
@@ -148,10 +176,14 @@ snapshots:
       style: secondary
       start: 20
       end: 39
-    - source: '{ char *p = ecalloc(1, 10); free(p); }'
+    - source: '*p = ecalloc(1, 10)'
       style: secondary
-      start: 13
-      end: 51
+      start: 20
+      end: 39
+    - source: '*p = ecalloc(1, 10)'
+      style: secondary
+      start: 20
+      end: 39
   void f(void) { char *p = emalloc(10); free(p); }:
     labels:
     - source: free(p)
@@ -170,6 +202,10 @@ snapshots:
       style: secondary
       start: 43
       end: 44
+    - source: '{ char *p = emalloc(10); free(p); }'
+      style: secondary
+      start: 13
+      end: 48
     - source: p
       style: secondary
       start: 21
@@ -186,10 +222,14 @@ snapshots:
       style: secondary
       start: 20
       end: 36
-    - source: '{ char *p = emalloc(10); free(p); }'
+    - source: '*p = emalloc(10)'
       style: secondary
-      start: 13
-      end: 48
+      start: 20
+      end: 36
+    - source: '*p = emalloc(10)'
+      style: secondary
+      start: 20
+      end: 36
   void f(void) { char *p = estrdup(s); free(p); }:
     labels:
     - source: free(p)
@@ -208,6 +248,10 @@ snapshots:
       style: secondary
       start: 42
       end: 43
+    - source: '{ char *p = estrdup(s); free(p); }'
+      style: secondary
+      start: 13
+      end: 47
     - source: p
       style: secondary
       start: 21
@@ -224,10 +268,14 @@ snapshots:
       style: secondary
       start: 20
       end: 35
-    - source: '{ char *p = estrdup(s); free(p); }'
+    - source: '*p = estrdup(s)'
       style: secondary
-      start: 13
-      end: 47
+      start: 20
+      end: 35
+    - source: '*p = estrdup(s)'
+      style: secondary
+      start: 20
+      end: 35
   void f(void) { char *p = estrndup(s, 4); free(p); }:
     labels:
     - source: free(p)
@@ -246,6 +294,10 @@ snapshots:
       style: secondary
       start: 46
       end: 47
+    - source: '{ char *p = estrndup(s, 4); free(p); }'
+      style: secondary
+      start: 13
+      end: 51
     - source: p
       style: secondary
       start: 21
@@ -262,10 +314,14 @@ snapshots:
       style: secondary
       start: 20
       end: 39
-    - source: '{ char *p = estrndup(s, 4); free(p); }'
+    - source: '*p = estrndup(s, 4)'
       style: secondary
-      start: 13
-      end: 51
+      start: 20
+      end: 39
+    - source: '*p = estrndup(s, 4)'
+      style: secondary
+      start: 20
+      end: 39
   void f(void) { char *p = malloc(10); efree(p); }:
     labels:
     - source: efree(p)
@@ -284,6 +340,10 @@ snapshots:
       style: secondary
       start: 43
       end: 44
+    - source: '{ char *p = malloc(10); efree(p); }'
+      style: secondary
+      start: 13
+      end: 48
     - source: p
       style: secondary
       start: 21
@@ -300,10 +360,14 @@ snapshots:
       style: secondary
       start: 20
       end: 35
-    - source: '{ char *p = malloc(10); efree(p); }'
+    - source: '*p = malloc(10)'
       style: secondary
-      start: 13
-      end: 48
+      start: 20
+      end: 35
+    - source: '*p = malloc(10)'
+      style: secondary
+      start: 20
+      end: 35
   void f(void) { char *p = safe_emalloc(2, 4, 0); free(p); }:
     labels:
     - source: free(p)
@@ -322,6 +386,10 @@ snapshots:
       style: secondary
       start: 53
       end: 54
+    - source: '{ char *p = safe_emalloc(2, 4, 0); free(p); }'
+      style: secondary
+      start: 13
+      end: 58
     - source: p
       style: secondary
       start: 21
@@ -338,10 +406,14 @@ snapshots:
       style: secondary
       start: 20
       end: 46
-    - source: '{ char *p = safe_emalloc(2, 4, 0); free(p); }'
+    - source: '*p = safe_emalloc(2, 4, 0)'
       style: secondary
-      start: 13
-      end: 58
+      start: 20
+      end: 46
+    - source: '*p = safe_emalloc(2, 4, 0)'
+      style: secondary
+      start: 20
+      end: 46
   void f(void) { char *p = strdup(s); efree(p); }:
     labels:
     - source: efree(p)
@@ -360,6 +432,10 @@ snapshots:
       style: secondary
       start: 42
       end: 43
+    - source: '{ char *p = strdup(s); efree(p); }'
+      style: secondary
+      start: 13
+      end: 47
     - source: p
       style: secondary
       start: 21
@@ -376,10 +452,14 @@ snapshots:
       style: secondary
       start: 20
       end: 34
-    - source: '{ char *p = strdup(s); efree(p); }'
+    - source: '*p = strdup(s)'
       style: secondary
-      start: 13
-      end: 47
+      start: 20
+      end: 34
+    - source: '*p = strdup(s)'
+      style: secondary
+      start: 20
+      end: 34
   void f(void) { char *p = strndup(s, 4); efree(p); }:
     labels:
     - source: efree(p)
@@ -398,6 +478,10 @@ snapshots:
       style: secondary
       start: 46
       end: 47
+    - source: '{ char *p = strndup(s, 4); efree(p); }'
+      style: secondary
+      start: 13
+      end: 51
     - source: p
       style: secondary
       start: 21
@@ -414,10 +498,14 @@ snapshots:
       style: secondary
       start: 20
       end: 38
-    - source: '{ char *p = strndup(s, 4); efree(p); }'
+    - source: '*p = strndup(s, 4)'
       style: secondary
-      start: 13
-      end: 51
+      start: 20
+      end: 38
+    - source: '*p = strndup(s, 4)'
+      style: secondary
+      start: 20
+      end: 38
   void f(void) { char *p; p = emalloc(10); free(p); }:
     labels:
     - source: free(p)
@@ -436,6 +524,10 @@ snapshots:
       style: secondary
       start: 46
       end: 47
+    - source: '{ char *p; p = emalloc(10); free(p); }'
+      style: secondary
+      start: 13
+      end: 51
     - source: p
       style: secondary
       start: 24
@@ -452,10 +544,14 @@ snapshots:
       style: secondary
       start: 24
       end: 39
-    - source: '{ char *p; p = emalloc(10); free(p); }'
+    - source: p = emalloc(10)
       style: secondary
-      start: 13
-      end: 51
+      start: 24
+      end: 39
+    - source: p = emalloc(10)
+      style: secondary
+      start: 24
+      end: 39
   void f(void) { char *p; p = malloc(10); efree(p); }:
     labels:
     - source: efree(p)
@@ -474,6 +570,10 @@ snapshots:
       style: secondary
       start: 46
       end: 47
+    - source: '{ char *p; p = malloc(10); efree(p); }'
+      style: secondary
+      start: 13
+      end: 51
     - source: p
       style: secondary
       start: 24
@@ -490,7 +590,11 @@ snapshots:
       style: secondary
       start: 24
       end: 38
-    - source: '{ char *p; p = malloc(10); efree(p); }'
+    - source: p = malloc(10)
       style: secondary
-      start: 13
-      end: 51
+      start: 24
+      end: 38
+    - source: p = malloc(10)
+      style: secondary
+      start: 24
+      end: 38
