@@ -86,6 +86,24 @@ invalid:
 # A PowerShell host as the OUTER shell, re-invoking a shell.
 - 'powershell -Command cmd /c $x'
 - 'pwsh -c pwsh -c $x'
+# Value-taking host options BEFORE the execution switch. `Bypass` is the value
+# of -ExecutionPolicy, not the invoked program, so it does not close the outer
+# switch slot. -ExecutionPolicy Bypass -Command is one of the most common
+# shapes in real malicious PowerShell invocations, and it was a false negative
+# until the switch-slot guard learned the documented value-consuming options.
+- 'powershell -ExecutionPolicy Bypass -Command cmd /c $x'
+- 'powershell -ExecutionPolicy Bypass -NoProfile -Command cmd /c $x'
+- 'powershell -NoProfile -ExecutionPolicy Bypass -Command cmd /c $x'
+- 'powershell -ep bypass -Command cmd /c $x'
+- 'pwsh -WorkingDirectory C:\Temp -c pwsh -c $x'
+- 'powershell -InputFormat Text -OutputFormat Text -Command cmd /c $x'
+# The option value is ITSELF a shell name. It is still a value, not an invoked
+# program -- `cmd` here is the working directory argument of -WorkingDirectory,
+# and the program the outer -Command invokes is the following `cmd`. Treating
+# the value as an invoked program would reintroduce the false negative for
+# every attacker who picks a shell-shaped value, so the value reading is both
+# the correct one and the conservative one.
+- 'powershell -WorkingDirectory cmd -Command cmd /c $x'
 # The dynamic value anywhere after the nested shell name, not only directly
 # after it: the outer shell parses the whole remaining line either way.
 - 'cmd /c cmd /c dir $path'

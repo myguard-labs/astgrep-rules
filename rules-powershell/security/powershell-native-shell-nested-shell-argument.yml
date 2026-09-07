@@ -41,7 +41,18 @@ note: >-
   anchor a later /c cmd pair could stand in for the outer one and
   cmd /c wrapper.bat cmd /c cmd /c $x would match on the SECOND pair. Once a
   bare token occupies the invoked-program slot, every switch after it belongs
-  to that program's command line. The outer switch table is also narrower than
+  to that program's command line. A bare token that is merely the VALUE of a
+  preceding value-consuming host option does not occupy that slot: the guard
+  carries an explicit table of the documented value-taking options from
+  about_Pwsh and about_PowerShell_exe (-ExecutionPolicy, -ConfigurationName,
+  -ConfigurationFile, -CustomPipeName, -WorkingDirectory, -SettingsFile,
+  -InputFormat, -OutputFormat, -WindowStyle, -PSConsoleFile, -Version, with the
+  7.x abbreviations), so
+  powershell -ExecutionPolicy Bypass -Command cmd /c $x is reported. The
+  payload-consuming switches -Command, -EncodedCommand, -EncodedArguments,
+  -CommandWithArgs and -File are excluded from that table on purpose: what
+  follows them belongs to the payload, not to the host, so a bare token after
+  one of them must still close the slot. The outer switch table is also narrower than
   the sibling's: it carries /c, /k and -Command with its abbreviations, but not
   the -EncodedCommand spellings, because that switch consumes a base64-encoded
   script and can never be followed by a literal shell name and its arguments.
@@ -152,3 +163,44 @@ rule:
                                   - kind: command_parameter
                                   - kind: generic_token
                                     regex: '^[-/]'
+                                  # A bare token that is the VALUE of a
+                                  # preceding value-taking host option is not
+                                  # the invoked program, so it must not close
+                                  # the switch slot. `Bypass` in
+                                  # `powershell -ExecutionPolicy Bypass
+                                  # -Command cmd /c $x` is such a value, and
+                                  # without this alternative that common
+                                  # malicious shape was a false negative. The
+                                  # table below is the documented
+                                  # value-consuming host options from
+                                  # about_Pwsh (7.x) and about_PowerShell_exe
+                                  # (5.1), spelled out rather than written as
+                                  # a nested-optional regex so the boundary
+                                  # stays reviewable, and restricted to
+                                  # options that consume an OPTION VALUE.
+                                  # -Command, -EncodedCommand,
+                                  # -EncodedArguments, -CommandWithArgs and
+                                  # -File are excluded on purpose: they
+                                  # consume a script or command payload, after
+                                  # which the rest of the line belongs to that
+                                  # payload rather than to the host, so a bare
+                                  # token following one of them must keep
+                                  # closing the slot.
+                                  - kind: generic_token
+                                    follows:
+                                      kind: command_argument_sep
+                                      follows:
+                                        kind: command_parameter
+                                        # 7.x abbreviations come from the
+                                        # about_Pwsh headings (-ex|-ep,
+                                        # -inp|-if, -o|-of, -w, -wd|-wo,
+                                        # -config, -settings); 5.1 documents
+                                        # no abbreviations. -Version is
+                                        # listed because 5.1 documents it as
+                                        # taking a version value, even though
+                                        # 7.x makes it a pure switch; the
+                                        # permissive reading only affects
+                                        # `powershell -Version <token>`, where
+                                        # 7.x ignores everything after it
+                                        # anyway.
+                                        regex: '(?i)^-(executionpolicy|ex|ep|configurationname|config|configurationfile|custompipename|workingdirectory|wd|wo|settingsfile|settings|inputformat|inp|if|outputformat|of|o|windowstyle|w|psconsolefile|version)$'

@@ -1491,6 +1491,29 @@ rejected and is recorded in `rejected-candidates.md`.
   and cannot stand in for the outer one. `cmd /c wrapper.bat cmd /c cmd /c $x`
   and `cmd /c wrapper.bat powershell -Command cmd /c $x` therefore stay out for
   the same reason the single-wrapper form does.
+- That switch-slot guard distinguishes an invoked program from an OPTION VALUE
+  by an explicit table of the value-consuming host options documented in
+  `about_Pwsh` (7.x) and `about_PowerShell_exe` (5.1): `-ExecutionPolicy`,
+  `-ConfigurationName`, `-ConfigurationFile`, `-CustomPipeName`,
+  `-WorkingDirectory`, `-SettingsFile`, `-InputFormat`, `-OutputFormat`,
+  `-WindowStyle`, `-PSConsoleFile` and `-Version`, together with the
+  abbreviations the 7.x page documents (`-ex`, `-ep`, `-config`, `-settings`,
+  `-inp`, `-if`, `-of`, `-o`, `-w`, `-wd`, `-wo`). A bare token immediately
+  following one of these is that option's value and does not close the outer
+  switch slot, so `powershell -ExecutionPolicy Bypass -Command cmd /c $x` — one
+  of the most common shapes in real malicious invocations — is reported rather
+  than silently dropped. The value reading applies even when the value is
+  itself a shell name (`powershell -WorkingDirectory cmd -Command cmd /c $x`
+  reports), because reading a shell-shaped option value as an invoked program
+  would hand every attacker a one-token bypass. The payload-consuming switches
+  `-Command`, `-EncodedCommand`, `-EncodedArguments`, `-CommandWithArgs` and
+  `-File` are deliberately absent from the table: everything after them belongs
+  to the payload rather than to the host, so a bare token there still closes
+  the slot and keeps `cmd /c wrapper.bat powershell -Command cmd /c $x` out.
+  `-Version` is listed because 5.1 documents it as taking a version value,
+  though 7.x makes it a pure switch that ignores the rest of the line. The
+  table is fixed text, so a value-taking switch a future host version adds is
+  not covered until it is added here.
 - The OUTER anchor of `powershell-native-shell-nested-shell-argument` accepts
   only the command-string switches — `/c`, `/k` and `-Command` with its
   documented abbreviations — and deliberately omits the `-EncodedCommand`
