@@ -59,13 +59,17 @@ valid:
 - 'Get-AddType $code'
 # Parser-error control.
 - 'Add-Type -TypeDefinition $code {'
-# A LITERAL script block bound to a source parameter. Nothing in it is decided
-# at runtime, so it must not match; an unanchored `kind: command` alternative
-# used to report it because `stopBy: end` descended into the block and matched
-# the ordinary command node of the statement inside.
+# A SCRIPT BLOCK bound to a source parameter, with or without variables in it.
+# A script block is not interpolated where it is written: it carries fixed
+# script text, and any variable inside it is resolved wherever the block is
+# later evaluated, not by the caller binding it. So nothing in these is decided
+# by the parent's state, and reporting any of them is a false positive. (A
+# script block is not valid C# either, so Add-Type would reject it at runtime --
+# but that is a type error, not the dynamic-source risk this rule reports.)
 - 'Add-Type -TypeDefinition { public class X {} }'
 - 'Add-Type -MemberDefinition { Get-Thing } -Name W -Namespace N'
 - 'Add-Type { public class X {} }'
+- 'Add-Type -TypeDefinition { public class X { $body } }'
 invalid:
 # Bare variable bound to -TypeDefinition, and the positional source form.
 - 'Add-Type -TypeDefinition $code'
@@ -88,9 +92,6 @@ invalid:
 - 'Add-Type -TypeDefinition ($prefix + $suffix)'
 - 'Add-Type -TypeDefinition (Get-Content src.cs)'
 - 'Add-Type -MemberDefinition (Get-Sig) -Name W -Namespace N'
-# A script block that INTERPOLATES: the value is expanded before it is bound,
-# so the compiled text is decided at runtime. It matches through `variable`.
-- 'Add-Type -TypeDefinition { public class X { $body } }'
 - 'Add-Type $(Get-Source)'
 # Splatted arguments parse as a variable in the positional slot.
 - 'Add-Type @splat'

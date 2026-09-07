@@ -51,9 +51,17 @@ note: >-
   expandable here-string counts as dynamic only when it actually interpolates
   something, because the parser gives a purely literal one no variable child.
   The parenthesised invocation counts because its OUTPUT becomes the compiled
-  text; a command that is merely literal script text inside a script block does
-  not, so Add-Type -TypeDefinition { public class X {} } is not reported. A
-  script block that interpolates is reported, through its variable.
+  text. A SCRIPT BLOCK argument never counts, whatever it contains: a script
+  block is not interpolated where it is written -- it carries fixed script text,
+  and any variable inside it is resolved wherever the block is later evaluated,
+  not by the caller binding it -- so neither
+  Add-Type -TypeDefinition { public class X {} } nor
+  Add-Type -TypeDefinition { public class X { $body } } is reported. Only a
+  STRING argument interpolates at the binding site, which is what
+  Add-Type -TypeDefinition "public class X { $body }" matches on. The residual
+  is that this rule reports no script block at all; a caller who BUILDS one at
+  runtime does so through [scriptblock]::Create, which
+  powershell-dynamic-scriptblock-api reports.
   The test applies to those arguments alone. A CONSTANT path -- Add-Type -Path
   C:\src\Thing.cs -- names a fixed file under review and is not reported.
   -AssemblyName is excluded in every form, dynamic or not: it names a prebuilt
@@ -129,6 +137,28 @@ rule:
                       # because PSPath's own prefixes collide with PassThru at
                       # -P and the alias is vanishingly rare in real scripts.
                       regex: '(?i)^-(t|ty|typ|type|typed|typede|typedef|typedefi|typedefin|typedefini|typedefinit|typedefiniti|typedefinitio|typedefinition|m|me|mem|memb|membe|member|memberd|memberde|memberdef|memberdefi|memberdefin|memberdefini|memberdefinit|memberdefiniti|memberdefinitio|memberdefinition|pat|path|li|lit|lite|liter|litera|literal|literalp|literalpa|literalpat|literalpath|lp)$'
+            # The dynamic test does not apply to a SCRIPT BLOCK argument. A
+            # script block bound to -Command is NOT interpolated by the parent:
+            # the child receives fixed script text and evaluates any variable in
+            # its OWN scope, where the parent's binding does not exist. Verified
+            # on pwsh 7:
+            #   $path = "PARENT-VALUE"; pwsh -Command { Write-Output "[$path]" }
+            #   -> child prints "[]"
+            # while the STRING form interpolates in the parent and prints
+            # "[PARENT-VALUE]". A subexpression inside the block behaves the
+            # same. So a script-block argument is script text fully determined by
+            # the source under review, and reporting it -- with or without
+            # variables inside -- is a false positive. The argument element is a
+            # `unary_expression` whose direct child is `script_block_expression`
+            # for exactly this shape, so excluding that child is the honest
+            # structural discriminator; it also stops `variable` and
+            # `sub_expression` from reaching inside the block under `stopBy:
+            # end`. A caller who BUILDS a block at runtime does so through
+            # [scriptblock]::Create, which powershell-dynamic-scriptblock-api
+            # reports.
+            - not:
+                has:
+                  kind: script_block_expression
             # Matching `variable` and `sub_expression` rather than the enclosing
             # string node is what keeps constant arguments out: a
             # non-interpolating double-quoted string, a single-quoted string, a
@@ -147,14 +177,9 @@ rule:
                   # ancestor for the same reason as in the native-shell rule.
                   # It exists for `Add-Type -TypeDefinition (Get-Content
                   # src.cs)`, whose OUTPUT becomes the compiled text; unanchored
-                  # under `stopBy: end` it also matched every ordinary command
-                  # node inside a literal script block, so
-                  # `Add-Type -TypeDefinition { public class X {} }` -- whose
-                  # text is fixed by the source under review -- was reported.
-                  # The grammar separates the two shapes: the producing
-                  # invocation has a `parenthesized_expression` ancestor within
-                  # the argument, a script block's statements have only
-                  # `script_block`.
+                  # under `stopBy: end` it also matches every ordinary command
+                  # node inside a script block. The anchor keeps the alternative
+                  # honest independently of the script-block exclusion above.
                   - kind: command
                     inside:
                       stopBy: end

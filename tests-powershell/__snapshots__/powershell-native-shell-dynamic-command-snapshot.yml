@@ -424,36 +424,6 @@ snapshots:
       style: secondary
       start: 20
       end: 22
-  powershell -Command { Remove-Item $target }:
-    labels:
-    - source: powershell -Command { Remove-Item $target }
-      style: primary
-      start: 0
-      end: 43
-    - source: powershell
-      style: secondary
-      start: 0
-      end: 10
-    - source: -Command
-      style: secondary
-      start: 11
-      end: 19
-    - source: ' '
-      style: secondary
-      start: 19
-      end: 20
-    - source: $target
-      style: secondary
-      start: 34
-      end: 41
-    - source: '{ Remove-Item $target }'
-      style: secondary
-      start: 20
-      end: 43
-    - source: '{ Remove-Item $target }'
-      style: secondary
-      start: 20
-      end: 43
   powershell -EncodedCommand (Get-Blob):
     labels:
     - source: powershell -EncodedCommand (Get-Blob)
@@ -822,36 +792,6 @@ snapshots:
       style: secondary
       start: 14
       end: 27
-  pwsh -Command { Get-Item $path }:
-    labels:
-    - source: pwsh -Command { Get-Item $path }
-      style: primary
-      start: 0
-      end: 32
-    - source: pwsh
-      style: secondary
-      start: 0
-      end: 4
-    - source: -Command
-      style: secondary
-      start: 5
-      end: 13
-    - source: ' '
-      style: secondary
-      start: 13
-      end: 14
-    - source: $path
-      style: secondary
-      start: 25
-      end: 30
-    - source: '{ Get-Item $path }'
-      style: secondary
-      start: 14
-      end: 32
-    - source: '{ Get-Item $path }'
-      style: secondary
-      start: 14
-      end: 32
   pwsh -c "$x":
     labels:
     - source: pwsh -c "$x"
@@ -882,36 +822,6 @@ snapshots:
       style: secondary
       start: 8
       end: 12
-  pwsh -c { Get-Item $($n.Name) }:
-    labels:
-    - source: pwsh -c { Get-Item $($n.Name) }
-      style: primary
-      start: 0
-      end: 31
-    - source: pwsh
-      style: secondary
-      start: 0
-      end: 4
-    - source: -c
-      style: secondary
-      start: 5
-      end: 7
-    - source: ' '
-      style: secondary
-      start: 7
-      end: 8
-    - source: $($n.Name)
-      style: secondary
-      start: 19
-      end: 29
-    - source: '{ Get-Item $($n.Name) }'
-      style: secondary
-      start: 8
-      end: 31
-    - source: '{ Get-Item $($n.Name) }'
-      style: secondary
-      start: 8
-      end: 31
   pwsh -e $x:
     labels:
     - source: pwsh -e $x

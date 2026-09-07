@@ -942,36 +942,6 @@ snapshots:
       style: secondary
       start: 25
       end: 55
-  Add-Type -TypeDefinition { public class X { $body } }:
-    labels:
-    - source: Add-Type -TypeDefinition { public class X { $body } }
-      style: primary
-      start: 0
-      end: 53
-    - source: Add-Type
-      style: secondary
-      start: 0
-      end: 8
-    - source: -TypeDefinition
-      style: secondary
-      start: 9
-      end: 24
-    - source: ' '
-      style: secondary
-      start: 24
-      end: 25
-    - source: $body
-      style: secondary
-      start: 44
-      end: 49
-    - source: '{ public class X { $body } }'
-      style: secondary
-      start: 25
-      end: 53
-    - source: '{ public class X { $body } }'
-      style: secondary
-      start: 25
-      end: 53
   Add-Type -memberdefinition $sig -Name W:
     labels:
     - source: Add-Type -memberdefinition $sig -Name W

@@ -1418,20 +1418,28 @@ rejected and is recorded in `rejected-candidates.md`.
   cmdlet. The rule therefore treats an argument following any parameter as that
   parameter's value.
 - Both `powershell-native-shell-dynamic-command` and
-  `powershell-add-type-dynamic-source` treat a **literal script block** bound to
-  the sink argument as constant. `pwsh -Command { Get-Date }` and
-  `Add-Type -TypeDefinition { public class X {} }` are not reported: the text is
-  fixed by the source under review, and for the native-shell rule the script
-  block is the form the message recommends over a built-up string. A script
-  block that INTERPOLATES is still reported, through the `variable` or
-  `sub_expression` inside it -- `pwsh -Command { Get-Item $path }` matches,
-  because the parent expands the value and stringifies the block before the
-  child parses it. The discriminator is structural rather than an exclusion: the
-  `command` alternative that catches a producing invocation
-  (`cmd /c (Get-Payload)`, `Add-Type -TypeDefinition (Get-Content src.cs)`) is
-  anchored to a `parenthesized_expression` ancestor, which a script block's
-  statements do not have. The consequence is that a producing invocation reached
-  without parentheses -- were the grammar to admit one -- would be missed.
+  `powershell-add-type-dynamic-source` treat **any script block** bound to the
+  sink argument as constant, whether or not it contains variables. A script
+  block passed to `-Command` is fixed script text evaluated in the child's own
+  scope -- the parent does not interpolate it. On pwsh 7,
+  `$path = "PARENT-VALUE"; pwsh -Command { Write-Output "[$path]" }` prints
+  `[]`, while the string form
+  `pwsh -Command "Write-Output '[$path]'"` prints `[PARENT-VALUE]`; a `$( ... )`
+  inside the block behaves like the bare variable. So `pwsh -Command { Get-Date
+  }`, `pwsh -Command { Get-Item $path }` and
+  `Add-Type -TypeDefinition { public class X { $body } }` are all determined by
+  the source under review and none is reported. Only a **string** argument
+  interpolates in the parent, and that is where these rules find their dynamic
+  content. Implemented by excluding an argument whose direct child is
+  `script_block_expression`, so the `variable` and `sub_expression`
+  alternatives cannot reach inside a block under `stopBy: end`; the `command`
+  alternative that catches a producing invocation (`cmd /c (Get-Payload)`,
+  `Add-Type -TypeDefinition (Get-Content src.cs)`) stays anchored to a
+  `parenthesized_expression` ancestor. Two residuals follow: these rules report
+  no script block at all -- a caller who builds one dynamically does so through
+  `[ScriptBlock]::Create`, which `powershell-dynamic-scriptblock-api` reports --
+  and a producing invocation reached without parentheses, were the grammar to
+  admit one, would be missed.
 - `powershell-native-shell-dynamic-command` matches the invoked shell by
   command name only. `& $exe /c $cmd`, a full path such as
   `C:\Windows\System32\cmd.exe /c $cmd`, and a shell reached through
