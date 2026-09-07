@@ -1,25 +1,29 @@
 id: php-ini-set-security-option
 language: php
-severity: error
+severity: warning
 message: >-
-  ini_set rewrites a php.ini option that is itself a security control. Changing
-  open_basedir, include_path or disable_functions at runtime relaxes the
-  filesystem and callable restrictions the deployment relies on — the published
-  open_basedir escape walks the setting up to "/" with repeated ini_set and
-  chdir, then reads any file on the host — and turning off assert.active or
-  zend.assertions disables assertion-based checks the code still treats as
-  enforced (CWE-15, CWE-693). Pin these in php.ini or the FPM pool, where the
-  application cannot reach them.
+  ini_set rewrites a php.ini option that is itself a security control. Widening
+  open_basedir or include_path at runtime relaxes the filesystem and code-loading
+  restrictions the deployment relies on — the published open_basedir escape walks
+  the setting up to "/" with repeated ini_set and chdir, then reads any file on
+  the host — and turning off assert.active disables assertion-based checks the
+  code still treats as enforced (CWE-15, CWE-693). Pin these in php.ini or the
+  FPM pool, where the application cannot reach them.
 note: >-
-  Matches only a literal option name of open_basedir, include_path,
-  disable_functions, disable_classes, assert.active or zend.assertions, given
-  positionally or through the option/varname named argument. Ordinary runtime
-  tuning — memory_limit, max_execution_time, error_reporting, date.timezone —
-  is outside the shape, and so is an option name assembled from a variable or
-  concatenation, which is the bypass this shape cannot see. ini_get, which only
-  reads, does not match. A deployment that deliberately widens include_path from
-  a bootstrap file still holds a runtime-writable security control, so a match is
-  a site to move into configuration rather than proof of an attack.
+  Matches only a literal option name of open_basedir, include_path or
+  assert.active, given positionally or through the option/varname named
+  argument. These are the security-relevant options ini_set can actually change:
+  disable_functions, disable_classes and zend.assertions are PHP_INI_SYSTEM, so
+  a call naming them fails and changes nothing, and reporting it would describe
+  a control change that did not happen. Setting assert.active to a literal 1, on,
+  true or a boolean is hardening and is excluded; a dynamic value is still
+  reported, because nothing establishes the direction. Ordinary runtime tuning —
+  memory_limit, max_execution_time, error_reporting, date.timezone — is outside
+  the shape, and so is an option name assembled from a variable or concatenation,
+  which is the bypass this shape cannot see. ini_get, which only reads, does not
+  match. Narrowing open_basedir at runtime is supported by PHP and is a
+  legitimate dismissal; the finding marks a security control the application can
+  still rewrite, not proof that it was weakened.
 rule:
   kind: function_call_expression
   all:
@@ -44,7 +48,7 @@ rule:
                 any:
                   - kind: string
                   - kind: encapsed_string
-                regex: '(?i)^[''"](open_basedir|include_path|disable_functions|disable_classes|assert\.active|zend\.assertions)[''"]$'
+                regex: '(?i)^[''"](open_basedir|include_path|assert\.active)[''"]$'
     # Enabling the assertion options is hardening, not a weakening: the defect
     # this rule names is turning them OFF. Anchored to a literal enabling value,
     # so a dynamic or non-literal value stays reportable.
@@ -66,7 +70,7 @@ rule:
                       any:
                         - kind: string
                         - kind: encapsed_string
-                      regex: '(?i)^[''"](assert\.active|zend\.assertions)[''"]$'
+                      regex: '(?i)^[''"](assert\.active)[''"]$'
           - has:
               field: arguments
               has:

@@ -66,50 +66,6 @@ snapshots:
       style: secondary
       start: 14
       end: 29
-  <?php ini_set("disable_classes", "");:
-    labels:
-    - source: ini_set("disable_classes", "")
-      style: primary
-      start: 6
-      end: 36
-    - source: ini_set
-      style: secondary
-      start: 6
-      end: 13
-    - source: '"disable_classes"'
-      style: secondary
-      start: 14
-      end: 31
-    - source: '"disable_classes"'
-      style: secondary
-      start: 14
-      end: 31
-    - source: '"disable_classes"'
-      style: secondary
-      start: 14
-      end: 31
-  <?php ini_set("disable_functions", "");:
-    labels:
-    - source: ini_set("disable_functions", "")
-      style: primary
-      start: 6
-      end: 38
-    - source: ini_set
-      style: secondary
-      start: 6
-      end: 13
-    - source: '"disable_functions"'
-      style: secondary
-      start: 14
-      end: 33
-    - source: '"disable_functions"'
-      style: secondary
-      start: 14
-      end: 33
-    - source: '"disable_functions"'
-      style: secondary
-      start: 14
-      end: 33
   <?php ini_set("open_basedir", "..");:
     labels:
     - source: ini_set("open_basedir", "..")
@@ -132,28 +88,6 @@ snapshots:
       style: secondary
       start: 14
       end: 28
-  <?php ini_set("zend.assertions", "-1");:
-    labels:
-    - source: ini_set("zend.assertions", "-1")
-      style: primary
-      start: 6
-      end: 38
-    - source: ini_set
-      style: secondary
-      start: 6
-      end: 13
-    - source: '"zend.assertions"'
-      style: secondary
-      start: 14
-      end: 31
-    - source: '"zend.assertions"'
-      style: secondary
-      start: 14
-      end: 31
-    - source: '"zend.assertions"'
-      style: secondary
-      start: 14
-      end: 31
   <?php ini_set('include_path', '/tmp');:
     labels:
     - source: ini_set('include_path', '/tmp')
@@ -176,58 +110,6 @@ snapshots:
       style: secondary
       start: 14
       end: 28
-  '<?php ini_set(option: "disable_functions", value: "");':
-    labels:
-    - source: 'ini_set(option: "disable_functions", value: "")'
-      style: primary
-      start: 6
-      end: 53
-    - source: ini_set
-      style: secondary
-      start: 6
-      end: 13
-    - source: option
-      style: secondary
-      start: 14
-      end: 20
-    - source: '"disable_functions"'
-      style: secondary
-      start: 22
-      end: 41
-    - source: 'option: "disable_functions"'
-      style: secondary
-      start: 14
-      end: 41
-    - source: 'option: "disable_functions"'
-      style: secondary
-      start: 14
-      end: 41
-  '<?php ini_set(value: 0, option: "zend.assertions");':
-    labels:
-    - source: 'ini_set(value: 0, option: "zend.assertions")'
-      style: primary
-      start: 6
-      end: 50
-    - source: ini_set
-      style: secondary
-      start: 6
-      end: 13
-    - source: option
-      style: secondary
-      start: 24
-      end: 30
-    - source: '"zend.assertions"'
-      style: secondary
-      start: 32
-      end: 49
-    - source: 'option: "zend.assertions"'
-      style: secondary
-      start: 24
-      end: 49
-    - source: 'option: "zend.assertions"'
-      style: secondary
-      start: 24
-      end: 49
   '<?php ini_set(varname: "open_basedir", newvalue: "/");':
     labels:
     - source: 'ini_set(varname: "open_basedir", newvalue: "/")'
