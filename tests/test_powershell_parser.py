@@ -18,7 +18,6 @@ the PowerShell grammar has ever been built.
 """
 
 import json
-import os
 import platform
 import shutil
 import subprocess
@@ -198,7 +197,10 @@ class TestFailsClosed(PowerShellHarness):
         # readable, so only real loading -- not a stat() -- can reject it.
         header = bytearray(b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 8)
         header += (3).to_bytes(2, "little")  # ET_DYN
-        machine = 183 if os.uname().machine in ("x86_64", "AMD64") else 62
+        # platform.machine(), not os.uname(): the latter does not exist on
+        # native Windows Python and would raise AttributeError before this
+        # control ever reached the loader it is meant to exercise.
+        machine = 183 if platform.machine() in ("x86_64", "AMD64") else 62
         header += machine.to_bytes(2, "little")
         header += b"\x00" * 64
         bogus.write_bytes(bytes(header))
@@ -238,6 +240,97 @@ class TestFailsClosed(PowerShellHarness):
             len(findings), 0,
             "malformed PowerShell produced no ERROR node; parse failures would be invisible",
         )
+
+
+class TestChecksumGateFailsClosed(unittest.TestCase):
+    """A malformed lockfile must abort the build, never verify nothing.
+
+    The provenance gate is the security boundary this whole integration rests
+    on: ast-grep loads the built library as native code, so a substituted
+    grammar silently changes which findings are reported. The dangerous failure
+    is not a checksum *mismatch* -- that path was always correct -- but a
+    lockfile whose checksum list cannot be read or does not cover every
+    compiled source. Historically that made the extractor fail inside a process
+    substitution whose exit status `set -e` could not observe, so zero
+    checksums were compared and the script compiled anyway, exiting 0.
+
+    These controls run the real script against doctored lockfiles and require a
+    non-zero exit. They are offline: each case must be rejected before the
+    script ever fetches anything.
+    """
+
+    def run_with_lock(self, lock_data):
+        """Run the build script against a doctored copy of the lockfile."""
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        tools = tmp / "tools" / "powershell"
+        tools.mkdir(parents=True)
+        shutil.copy(BUILD_SCRIPT, tools / BUILD_SCRIPT.name)
+        (tools / "grammar.lock.json").write_text(json.dumps(lock_data))
+        return subprocess.run(
+            [str(tools / BUILD_SCRIPT.name), str(tmp / "out.so")],
+            capture_output=True, text=True, check=False, timeout=300,
+        )
+
+    def valid_lock(self):
+        return json.loads((BUILD_SCRIPT.parent / "grammar.lock.json").read_text())
+
+    def assert_refused(self, result, because):
+        self.assertNotEqual(
+            result.returncode, 0,
+            f"build exited 0 with {because}; an unverified parser was built.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}",
+        )
+        self.assertNotIn(
+            "==> compiling", result.stdout,
+            f"build reached the compile step with {because}",
+        )
+
+    def test_missing_sourceSha256_aborts(self):
+        """The reported bypass: no checksum list at all."""
+        lock = self.valid_lock()
+        del lock["grammar"]["sourceSha256"]
+        self.assert_refused(self.run_with_lock(lock), "sourceSha256 removed")
+
+    def test_partial_sourceSha256_aborts(self):
+        """A lockfile covering parser.c but not scanner.c.
+
+        Verifying only the entries that happen to be present would let an
+        attacker skip verification of a file by omitting its entry, while the
+        build still reported checksums as "ok".
+        """
+        lock = self.valid_lock()
+        lock["grammar"]["sourceSha256"].pop("src/scanner.c")
+        self.assert_refused(self.run_with_lock(lock), "scanner.c entry omitted")
+
+    def test_empty_sourceSha256_aborts(self):
+        lock = self.valid_lock()
+        lock["grammar"]["sourceSha256"] = {}
+        self.assert_refused(self.run_with_lock(lock), "an empty checksum map")
+
+    def test_wrong_typed_sourceSha256_aborts(self):
+        lock = self.valid_lock()
+        lock["grammar"]["sourceSha256"] = ["src/parser.c"]
+        self.assert_refused(self.run_with_lock(lock), "a list instead of a map")
+
+    def test_malformed_digest_aborts(self):
+        """A digest that is not a sha256 cannot silently compare unequal."""
+        lock = self.valid_lock()
+        lock["grammar"]["sourceSha256"]["src/parser.c"] = "not-a-digest"
+        self.assert_refused(self.run_with_lock(lock), "a malformed digest")
+
+    def test_unparsable_lockfile_aborts(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        tools = tmp / "tools" / "powershell"
+        tools.mkdir(parents=True)
+        shutil.copy(BUILD_SCRIPT, tools / BUILD_SCRIPT.name)
+        (tools / "grammar.lock.json").write_text("{ this is not json")
+        result = subprocess.run(
+            [str(tools / BUILD_SCRIPT.name), str(tmp / "out.so")],
+            capture_output=True, text=True, check=False, timeout=300,
+        )
+        self.assert_refused(result, "an unparsable lockfile")
 
 
 class TestSkipCannotMasqueradeAsPass(unittest.TestCase):

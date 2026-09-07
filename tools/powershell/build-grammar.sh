@@ -59,6 +59,58 @@ sha_of() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
   else shasum -a 256 "$1" | cut -d' ' -f1; fi
 }
+
+# Extract and validate the checksum list in a CHECKED command, before the loop.
+#
+# This must not be a `done < <(python3 ...)` process substitution: that runs the
+# generator in a subshell whose exit status is discarded, so `set -e` cannot see
+# it. A lockfile missing or renaming `sourceSha256`, or giving it an unexpected
+# type, would kill python, leave the loop body unexecuted, compare zero
+# checksums, and fall through to the compile step having verified nothing --
+# silently downgrading the build from verified to unverified. Capturing into a
+# variable makes that failure abort.
+#
+# The generator also asserts that every source we are about to compile has an
+# entry, so a tampered lockfile cannot skip verification of a file simply by
+# omitting it.
+if ! checksums="$(python3 -c '
+import json, sys
+
+try:
+    lock = json.load(open(sys.argv[1]))
+    grammar = lock["grammar"]
+    sources = grammar["sources"]
+    digests = grammar["sourceSha256"]
+except (OSError, ValueError, KeyError, TypeError) as exc:
+    raise SystemExit("unreadable lockfile: %s" % exc)
+
+if not isinstance(digests, dict) or not digests:
+    raise SystemExit("sourceSha256 must be a non-empty object")
+
+# Every file that gets compiled must be covered. Checking only the entries that
+# happen to be present would let an omitted entry pass as verified.
+missing = [s for s in sources if s not in digests]
+if missing:
+    raise SystemExit("sourceSha256 has no entry for: " + ", ".join(missing))
+
+for name in sources:
+    digest = digests[name]
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise SystemExit("sourceSha256[%s] is not a sha256 digest" % name)
+    print(name + "|" + digest)
+' "$lock")"; then
+  echo "error: cannot read pinned checksums from $lock" >&2
+  echo "refusing to build an unverified parser" >&2
+  exit 1
+fi
+
+if [ -z "$checksums" ]; then
+  echo "error: no pinned checksums found in $lock" >&2
+  echo "refusing to build an unverified parser" >&2
+  exit 1
+fi
+
+verified=0
 while IFS='|' read -r rel want; do
   [ -n "$rel" ] || continue
   if [ ! -f "$src/$rel" ]; then
@@ -74,12 +126,23 @@ while IFS='|' read -r rel want; do
     exit 1
   fi
   echo "    ok $rel"
-done < <(python3 -c "
-import json,sys
-d=json.load(open(sys.argv[1]))['grammar']['sourceSha256']
-for k,v in d.items(): print(k+'|'+v)
-" "$lock")
+  verified=$((verified + 1))
+done <<EOF_CHECKSUMS
+$checksums
+EOF_CHECKSUMS
 
+# Belt and braces: the loop above runs in this shell, but assert the count
+# anyway so a future refactor that reintroduces a subshell is caught here
+# rather than by shipping an unverified parser.
+source_count="$(python3 -c '
+import json, sys
+print(len(json.load(open(sys.argv[1]))["grammar"]["sources"]))
+' "$lock")"
+if [ "$verified" -ne "$source_count" ]; then
+  echo "error: verified $verified of $source_count pinned sources" >&2
+  echo "refusing to build an unverified parser" >&2
+  exit 1
+fi
 
 echo "==> compiling $out"
 cc_bin="${CC:-cc}"
