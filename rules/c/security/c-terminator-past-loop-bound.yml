@@ -25,6 +25,9 @@ rule:
   kind: expression_statement
   has:
     kind: assignment_expression
+    # Plain `=` only. A compound assignment such as `c[n] += 0` preserves the
+    # element instead of writing a terminator.
+    regex: '^[^=!<>+\-*/%&|^]*=[^=]'
     all:
       - has:
           field: left
