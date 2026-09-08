@@ -35,6 +35,8 @@ Reply schemas (validated on ingest; anything else is rejected and listed):
              "supporting": [shorts], "overlaps": [rule ids], "rationale"}]}
 Labels must match the corpus language hint. Proposal IDs must be globally
 unique across replies; reconcile duplicate replies before ingesting again.
+Cluster emission revalidates current label replies against the manifest and
+cached labels; edited replies require another label-ingest before clustering.
 Exit: 0 when every reply present is valid; 1 when any reply was rejected or a
 packet has no reply (listed on stderr), so a grind loop can gate on it.
 Side effects: writes only under WORK. No network, no model calls: dispatching
@@ -193,15 +195,12 @@ def validate_label(reply: dict, packet_id: str) -> str | None:
     return None
 
 
-def label_ingest(args) -> int:
-    corpus = {c["short"]: c for c in read_jsonl(args.corpus)}
-    if not packet_state(args.work / "label", label_packets(corpus.values()),
-                        LABEL_PROMPT % ", ".join(TAXONOMY)):
-        return 1
-    packets = sorted((args.work / "label" / "packets").glob("*.json"))
+def collect_labels(stage, corpus):
+    """Derive validated labels from the current replies without writing state."""
+    packets = sorted((stage / "packets").glob("*.json"))
     labels, bad, missing, agree = [], [], [], 0
     for p in packets:
-        reply_path = args.work / "label" / "replies" / p.name
+        reply_path = stage / "replies" / p.name
         if not reply_path.exists():
             missing.append(p.stem)
             continue
@@ -226,6 +225,15 @@ def label_ingest(args) -> int:
         agree += agreed
         labels.append({**reply, "agreed": agreed, "signals": c["signals"],
                        "density": c["density"], "repo": c["repo"], "url": c["url"]})
+    return labels, bad, missing, agree
+
+
+def label_ingest(args) -> int:
+    corpus = {c["short"]: c for c in read_jsonl(args.corpus)}
+    if not packet_state(args.work / "label", label_packets(corpus.values()),
+                        LABEL_PROMPT % ", ".join(TAXONOMY)):
+        return 1
+    labels, bad, missing, agree = collect_labels(args.work / "label", corpus)
     write_jsonl(args.work / "label" / "labels.jsonl", labels)
     hist: dict[str, int] = defaultdict(int)
     for lb in labels:
@@ -295,6 +303,10 @@ def cluster_labels(args, corpus):
     labels = read_jsonl(args.work / "label" / "labels.jsonl")
     if not packet_state(args.work / "label", label_packets(corpus.values()),
                         LABEL_PROMPT % ", ".join(TAXONOMY)):
+        return None
+    current, bad, missing, _ = collect_labels(args.work / "label", corpus)
+    if bad or missing or labels != current:
+        print("label replies changed or are invalid; run label-ingest first", file=sys.stderr)
         return None
     if {label["id"] for label in labels} != corpus.keys():
         print("labels do not cover current corpus; run label-ingest first", file=sys.stderr)

@@ -35,6 +35,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import NamedTuple
+from urllib.parse import urlsplit
 
 # Commits whose subject matches these are fixes worth reading. Kept broad on
 # purpose: precision comes from the diff filters below, not from commit prose,
@@ -115,7 +116,8 @@ def diff_body(repo: Path, sha: str, paths: list[str]) -> str:
 def is_cosmetic(before: str, after: str) -> bool:
     """Compare complete files, preserving statement order and token boundaries.
 
-    Only outer indentation and blank lines are ignored. Literal, comment and
+    Only outer indentation is ignored; blank-line positions can affect line
+    macros even when their definitions come from another file. Literal, comment and
     continuation syntax makes equivalence
     uncertain without a lexer, so those files remain candidates. Whole-file
     context is essential: a raw-string delimiter can be far outside a hunk.
@@ -125,8 +127,7 @@ def is_cosmetic(before: str, after: str) -> bool:
         return False
 
     def lines(source):
-        return [line.strip() for line in source.splitlines()
-                if line.strip()]
+        return [line.strip() for line in source.splitlines()]
 
     return lines(before) == lines(after)
 
@@ -172,12 +173,21 @@ def signal_terms(diff: str, subject: str) -> list[str]:
 
 
 def commit_url_prefix(repo: Path, fallback: str | None) -> str | None:
-    """Derive https://host/owner/name/commit/ from origin, else use the fallback."""
+    """Derive a credential-free HTTPS commit URL from origin, else use fallback."""
     try:
         origin = run(repo, "remote", "get-url", "origin").strip()
     except subprocess.CalledProcessError:
         origin = ""
-    m = re.match(r"(?:git@|https?://)([^:/]+)[:/](.+?)(?:\.git)?/?$", origin)
+    if origin.startswith(("http://", "https://")):
+        try:
+            parsed = urlsplit(origin)
+        except ValueError:
+            return fallback
+        path = parsed.path.rstrip("/").removesuffix(".git")
+        if parsed.hostname and path:
+            return f"https://{parsed.netloc.rsplit('@', 1)[-1]}{path}/commit/"
+        return fallback
+    m = re.match(r"git@([^:/]+)[:/](.+?)(?:\.git)?/?$", origin)
     if m and not origin.startswith("/"):
         return f"https://{m.group(1)}/{m.group(2)}/commit/"
     return fallback

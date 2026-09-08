@@ -32,6 +32,35 @@ SCAFFOLD = load_tool("rule-scaffold")
 
 
 class HistoryTests(unittest.TestCase):
+    def test_origin_userinfo_never_reaches_published_urls(self):
+        # Inert markers exercise URL credential forms; assertions never print them.
+        for userinfo in ("fixture-token", "fixture-user:fixture-password",
+                         "fixture-user:fixture%40password", ":fixture-password"):
+            with self.subTest(form="password" if ":" in userinfo else "token"):
+                with patch.object(HISTORY, "run", return_value=(
+                        "https://" + userinfo + "@example.test/owner/project.git")):
+                    prefix = HISTORY.commit_url_prefix(ROOT, None)
+                candidate = {"short": "abc", "repo": "sample", "subject": "fix",
+                             "churn": 1, "density": 1, "signals": [], "url": prefix + "abc"}
+                with tempfile.TemporaryDirectory() as directory:
+                    index = Path(directory) / "index.md"
+                    HISTORY.write_index(index, [candidate])
+                    for rendered in (json.dumps(candidate), index.read_text()):
+                        self.assertFalse(userinfo in rendered, "origin userinfo reached output")
+                        self.assertTrue(
+                            "https://example.test/owner/project/commit/abc" in rendered,
+                            "published commit URL must use only host and repository path")
+
+    def test_blank_line_changes_preserve_line_sensitive_semantics(self):
+        for source in ("int line = __LINE__;\n", "#define SITE __LINE__\nint line = SITE;\n",
+                       "int line = __builtin_LINE();\n", "int line = EXTERNAL_LINE_MACRO;\n"):
+            with self.subTest(source=source):
+                self.assertFalse(HISTORY.is_cosmetic(source, "\n" + source))
+        # Moving a blank line keeps the line count but still changes __LINE__.
+        self.assertFalse(HISTORY.is_cosmetic("\nint line = __LINE__;\nint x;\n",
+                                             "int line = __LINE__;\n\nint x;\n"))
+        self.assertTrue(HISTORY.is_cosmetic(" int line = __LINE__;\n", "\tint line = __LINE__;\n"))
+
     def test_diff_paths_are_literal_git_filenames(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -162,6 +191,43 @@ class HistoryTests(unittest.TestCase):
 
 
 class ReplyTests(unittest.TestCase):
+    def test_cluster_emit_requires_current_validated_label_replies(self):
+        for mutation in ("class", "summary", "language", "deleted", "malformed", "labels"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory, \
+                    contextlib.redirect_stderr(io.StringIO()):
+                root = Path(directory)
+                args = SimpleNamespace(work=root, corpus=root / "corpus.jsonl",
+                                       chunk=12, min_size=1)
+                PACKETS.write_jsonl(args.corpus, [{"short": "abc", "repo": "sample",
+                    "subject": "fix", "files": ["x.go"], "diff": "+x[i]",
+                    "signals": ["bounds"], "density": 1, "url": ""}])
+                self.assertEqual(PACKETS.label_emit(args), 0)
+                reply_path = root / "label/replies/abc.json"
+                reply_path.write_text(json.dumps(self.label()))
+                self.assertEqual(PACKETS.label_ingest(args), 0)
+                labels_path = root / "label/labels.jsonl"
+                originals = {p: p.read_bytes() for p in (reply_path, labels_path)}
+                if mutation == "deleted":
+                    reply_path.unlink()
+                elif mutation == "malformed":
+                    reply_path.write_text("{")
+                elif mutation == "labels":
+                    labels = PACKETS.read_jsonl(labels_path)
+                    labels[0]["summary"] = "edited aggregate"
+                    PACKETS.write_jsonl(labels_path, labels)
+                else:
+                    reply = self.label()
+                    reply[mutation] = {"class": "logic", "summary": "edited reply",
+                                       "language": "c"}[mutation]
+                    reply_path.write_text(json.dumps(reply))
+                before = labels_path.read_bytes()
+                self.assertEqual(PACKETS.cluster_emit(args), 1)
+                self.assertFalse((root / "cluster").exists())
+                self.assertEqual(labels_path.read_bytes(), before)
+                for path, content in originals.items():
+                    path.write_bytes(content)
+                self.assertEqual(PACKETS.cluster_emit(args), 0)
+
     def test_prompt_bytes_survive_platform_text_defaults(self):
         original_open = Path.open
 
