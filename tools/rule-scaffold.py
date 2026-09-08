@@ -80,7 +80,7 @@ def bump_count(dry_run: bool) -> tuple[int, int]:
     together.
     """
     test = ROOT / "tests" / "test_diagnostics.py"
-    text = test.read_text()
+    text = test.read_text(encoding="utf-8")
     pattern = re.compile(r"(self\.assertEqual\((?:len\(rules\)|checked), )(\d+)")
     counts = {int(m.group(2)) for m in pattern.finditer(text)}
     if len(counts) != 1:
@@ -90,8 +90,8 @@ def bump_count(dry_run: bool) -> tuple[int, int]:
     if not dry_run:
         temporary = None
         try:
-            with tempfile.NamedTemporaryFile(mode="w", dir=test.parent, delete=False,
-                                             prefix=".rule-count-") as output:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=test.parent,
+                                             delete=False, prefix=".rule-count-") as output:
                 temporary = Path(output.name)
                 output.write(pattern.sub(lambda m: m.group(1) + str(new), text))
             temporary.chmod(test.stat().st_mode)

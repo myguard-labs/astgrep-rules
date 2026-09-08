@@ -31,7 +31,281 @@ PROBE = load_tool("rule-probe")
 SCAFFOLD = load_tool("rule-scaffold")
 
 
+@contextlib.contextmanager
+def ascii_text_defaults():
+    """Exercise implicit encodings independently of the developer's UTF-8 locale."""
+    original_open = Path.open
+    original_temporary = tempfile.NamedTemporaryFile
+
+    def open_path(path, mode="r", buffering=-1, encoding=None, errors=None, newline=None):
+        if "b" not in mode and encoding in (None, "locale"):
+            encoding = "ascii"
+        return original_open(path, mode, buffering, encoding, errors, newline)
+
+    def temporary(*args, **kwargs):
+        if "b" not in kwargs.get("mode", "w+b"):
+            kwargs.setdefault("encoding", "ascii")
+        return original_temporary(*args, **kwargs)
+
+    with patch.object(Path, "open", open_path), \
+            patch.object(tempfile, "NamedTemporaryFile", temporary):
+        yield
+
+
+@contextlib.contextmanager
+def coverage_cases(cases):
+    """Provide actual witness JSON without changing the shared JSON decoder."""
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / "tests").mkdir()
+        (root / "tests/arm_coverage.json").write_text(
+            json.dumps({"cases": cases}), encoding="utf-8")
+        with patch.object(PROBE, "ROOT", root):
+            yield
+
+
 class HistoryTests(unittest.TestCase):
+    def test_dedupe_sha_aliases_preserve_first_repo_and_packet_uniqueness(self):
+        for phase in ("show", "patch-id"):
+            for order in (("fast", "slow"), ("slow", "fast"), ("fast", "alias", "slow")):
+                with self.subTest(phase=phase, order=order):
+                    candidates = [{"repo": repo,
+                                   "sha": ("a" if repo == "fast" and len(order) == 3
+                                           else "b") * 40,
+                                   "short": ("a" if repo == "fast" and len(order) == 3
+                                             else "b") * 12,
+                                   "subject": "fix bounds", "files": ["x.c"],
+                                   "diff": "-old\n+new"} for repo in order]
+
+                    def show(repo, *_args, target=phase):
+                        if repo.name == "slow" and target == "show":
+                            raise subprocess.TimeoutExpired(["git", "show"], 60)
+                        return repo.name
+
+                    def patch_id(command, *, target=phase, **kwargs):
+                        if kwargs["input"] == b"slow" and target == "patch-id":
+                            raise subprocess.TimeoutExpired(command, 60)
+                        return subprocess.CompletedProcess(command, 0, b"same-patch\n")
+
+                    with patch.object(HISTORY, "run", side_effect=show), \
+                            patch.object(HISTORY.subprocess, "run", side_effect=patch_id), \
+                            contextlib.redirect_stderr(io.StringIO()):
+                        result = HISTORY.dedupe_by_patch_id(ROOT, candidates)
+                    self.assertEqual(len(result), 1)
+                    self.assertIs(result[0], candidates[0])
+                    self.assertEqual(result[0]["repo"], order[0])
+                    self.assertEqual(result[0]["also_in"], list(order[1:]))
+                    packets = PACKETS.label_packets(result)
+                    self.assertEqual(len(packets), 1)
+                    self.assertEqual(next(iter(packets.values()))["repo"], order[0])
+
+    def test_dedupe_timeouts_preserve_candidates_with_sha_identity(self):
+        for phase in ("show", "patch-id"):
+            with self.subTest(phase=phase):
+                candidates = [{"repo": repo, "sha": sha * 40}
+                              for repo, sha in (("first", "a"), ("slow", "b"),
+                                                ("last", "c"), ("fork", "b"))]
+
+                def show(repo, *_args, target=phase):
+                    if repo.name in ("slow", "fork") and target == "show":
+                        raise subprocess.TimeoutExpired(["git", "show"], 60)
+                    return repo.name
+
+                def patch_id(command, *, target=phase, **kwargs):
+                    if kwargs["input"] in (b"slow", b"fork") and target == "patch-id":
+                        raise subprocess.TimeoutExpired(command, 60)
+                    return subprocess.CompletedProcess(command, 0, kwargs["input"] + b"\n")
+
+                with patch.object(HISTORY, "run", side_effect=show), \
+                        patch.object(HISTORY.subprocess, "run", side_effect=patch_id), \
+                        contextlib.redirect_stderr(io.StringIO()) as stderr:
+                    result = HISTORY.dedupe_by_patch_id(ROOT, candidates)
+                self.assertEqual([row["repo"] for row in result], ["first", "slow", "last"])
+                self.assertIs(result[1], candidates[1])
+                self.assertEqual(result[1]["also_in"], ["fork"])
+                self.assertIn("using SHA fallback", stderr.getvalue())
+                # The fork's known SHA bypasses a second identity lookup and timeout.
+                self.assertIn("timed-out-candidates=1", stderr.getvalue())
+
+    def test_history_listing_timeout_reports_incomplete_corpus(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("first", "slow", "last"):
+                (root / name / ".git").mkdir(parents=True)
+
+            def history(repo, *_args):
+                if repo.name == "slow":
+                    raise subprocess.TimeoutExpired(["git", "log"], 60)
+                sha = "a" * 40 if repo.name == "first" else "c" * 40
+                return sha + "\x1ffix bounds\x1f2026-09-08"
+
+            with patch.object(HISTORY, "commit_url_prefix", return_value=None), \
+                    patch.object(HISTORY, "run", side_effect=history), \
+                    patch.object(HISTORY, "changed_source_files", return_value=[
+                        HISTORY.SourceChange("x.c", 1, 1)]), \
+                    patch.object(HISTORY, "diff_body", return_value="-old\n+new"), \
+                    patch.object(HISTORY, "cosmetic_commit", return_value=False), \
+                    patch.object(HISTORY, "dedupe_by_patch_id", side_effect=lambda _, rows: rows), \
+                    patch("sys.argv", ["harvest", "--root", str(root), "--repos",
+                                       "first", "slow", "last"]), \
+                    contextlib.redirect_stdout(io.StringIO()) as stdout, \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr:
+                self.assertEqual(HISTORY.main(), 1)
+            self.assertEqual([json.loads(line)["repo"]
+                              for line in stdout.getvalue().splitlines()], ["first", "last"])
+            self.assertIn("incomplete harvest", stderr.getvalue())
+            self.assertIn("timed-out-repos=1", stderr.getvalue())
+            self.assertIn("skip slow", stderr.getvalue())
+            self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_per_commit_timeouts_preserve_same_repo_neighbors(self):
+        history = "\n".join(char * 40 + "\x1ffix bounds\x1f2026-09-08" for char in "abc")
+        for phase in ("source-files", "diff", "file-content"):
+            with self.subTest(phase=phase):
+                def source_files(_repo, sha, target=phase):
+                    if sha == "b" * 40 and target == "source-files":
+                        raise subprocess.TimeoutExpired(["git", "show", "--numstat"], 60)
+                    return [HISTORY.SourceChange("x.c", 1, 1)]
+
+                def diff(_repo, sha, _paths, target=phase):
+                    if sha == "b" * 40 and target == "diff":
+                        raise subprocess.TimeoutExpired(["git", "show"], 60)
+                    return "-old\n+new"
+
+                def cosmetic(_repo, sha, _changes, target=phase):
+                    if sha == "b" * 40 and target == "file-content":
+                        raise subprocess.TimeoutExpired(["git", "show", "revision:x.c"], 60)
+                    return False
+
+                with patch.object(HISTORY, "commit_url_prefix", return_value=None), \
+                        patch.object(HISTORY, "run", return_value=history), \
+                        patch.object(HISTORY, "changed_source_files", side_effect=source_files), \
+                        patch.object(HISTORY, "diff_body", side_effect=diff), \
+                        patch.object(HISTORY, "cosmetic_commit", side_effect=cosmetic), \
+                        contextlib.redirect_stderr(io.StringIO()) as stderr:
+                    rows = HISTORY.harvest(ROOT, "sample", 3, 60, None)
+                self.assertEqual([row["sha"] for row in rows], ["a" * 40, "c" * 40])
+                self.assertRegex(stderr.getvalue(), r"timed-out-commits=\s*1")
+                self.assertIn("skip sample:" + "b" * 40, stderr.getvalue())
+
+    def test_timeouts_retain_candidates_and_report_incomplete_repos(self):
+        for phase in ("harvest", "show", "patch-id"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for name in ("first", "slow", "last"):
+                    (root / name / ".git").mkdir(parents=True)
+
+                def harvest(_repo, name, *_args, target=phase):
+                    if name == "slow" and target == "harvest":
+                        raise subprocess.TimeoutExpired(["git", "log"], 60)
+                    return [{"repo": name, "sha": name, "signals": [], "churn": 1}]
+
+                def show(repo, *_args, target=phase):
+                    if repo.name == "slow" and target == "show":
+                        raise subprocess.TimeoutExpired(["git", "show"], 60)
+                    return repo.name
+
+                def patch_id(command, *, target=phase, **kwargs):
+                    if kwargs["input"] == b"slow" and target == "patch-id":
+                        raise subprocess.TimeoutExpired(command, 60)
+                    return subprocess.CompletedProcess(command, 0, kwargs["input"] + b"\n")
+
+                with patch.object(HISTORY, "harvest", side_effect=harvest), \
+                        patch.object(HISTORY, "run", side_effect=show), \
+                        patch.object(HISTORY.subprocess, "run", side_effect=patch_id), \
+                        patch("sys.argv", ["harvest", "--root", str(root), "--repos",
+                                           "first", "slow", "last"]), \
+                        contextlib.redirect_stdout(io.StringIO()) as stdout, \
+                        contextlib.redirect_stderr(io.StringIO()) as stderr:
+                    self.assertEqual(HISTORY.main(), int(phase == "harvest"))
+                self.assertEqual([json.loads(line)["repo"]
+                                  for line in stdout.getvalue().splitlines()],
+                                 ["first", "last"] if phase == "harvest"
+                                 else ["first", "slow", "last"])
+                counter = "repos" if phase == "harvest" else "candidates"
+                self.assertIn(f"timed-out-{counter}=1", stderr.getvalue())
+                self.assertIn("skip slow" if phase == "harvest" else "retain slow",
+                              stderr.getvalue())
+                self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_output_stages_preserve_legacy_subject_bytes(self):
+        raw_subject = "fix café ".encode() + b"\xff"
+        candidate = {"short": "abc", "sha": "a" * 40, "repo": "sample",
+                     "subject": raw_subject.decode("utf-8", "surrogateescape"),
+                     "churn": 1, "signals": [], "url": "", "diff": "+new\udcfe\n"}
+        for file_output in (False, True):
+            with self.subTest(file_output=file_output), \
+                    tempfile.TemporaryDirectory() as directory, \
+                    io.TextIOWrapper(io.BytesIO(), encoding="ascii", errors="strict") as stdout:
+                root = Path(directory)
+                (root / "sample/.git").mkdir(parents=True)
+                index, output = root / "index.md", root / "corpus.jsonl"
+                argv = ["harvest", "--root", str(root), "--repos", "sample", "--index", str(index)]
+                if file_output:
+                    argv += ["--out", str(output)]
+                with patch.object(HISTORY, "harvest", return_value=[dict(candidate)]), \
+                        patch.object(HISTORY, "dedupe_by_patch_id",
+                                     side_effect=lambda _, rows: rows), \
+                        patch("sys.argv", argv), ascii_text_defaults(), \
+                        contextlib.redirect_stdout(stdout), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(UnicodeEncodeError):
+                        stdout.write("☃")
+                    self.assertEqual(HISTORY.main(), 0)
+                stdout.flush()
+                payload = (output.read_bytes().decode("ascii") if file_output
+                           else stdout.buffer.getvalue().decode("ascii"))
+                row = json.loads(payload)
+                self.assertEqual(row["subject"].encode("utf-8", "surrogateescape"), raw_subject)
+                self.assertEqual(row["diff"], candidate["diff"])
+                self.assertIn(raw_subject, index.read_bytes())
+
+    def test_git_subprocesses_have_bounded_timeouts(self):
+        def timeout(command, **kwargs):
+            self.assertGreater(kwargs.get("timeout", 0), 0, "Git invocation must be bounded")
+            self.assertLessEqual(kwargs["timeout"], 60)
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+        with self.subTest(command="git"), \
+                patch.object(HISTORY.subprocess, "run", side_effect=timeout), \
+                self.assertRaises(subprocess.TimeoutExpired):
+            HISTORY.run(ROOT, "log")
+        with self.subTest(command="patch-id"), \
+                patch.object(HISTORY, "run", return_value="diff"), \
+                patch.object(HISTORY.subprocess, "run", side_effect=timeout), \
+                contextlib.redirect_stderr(io.StringIO()) as stderr:
+            self.assertEqual(HISTORY.dedupe_by_patch_id(
+                ROOT, [{"repo": "sample", "sha": "a" * 40}]),
+                [{"repo": "sample", "sha": "a" * 40}])
+            self.assertIn("timed-out-candidates=1", stderr.getvalue())
+
+    def test_unattributable_commit_does_not_abort_other_commits_or_repos(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("first", "second"):
+                (root / name / ".git").mkdir(parents=True)
+
+            def log(repo, *_args):
+                shas = ("a" * 40, "b" * 40) if repo.name == "first" else ("c" * 40,)
+                return "\n".join(sha + "\x1ffix bounds\x1f2026-09-08" for sha in shas)
+
+            with patch.object(HISTORY, "run", side_effect=log), \
+                    patch.object(HISTORY, "commit_url_prefix", return_value=None), \
+                    patch.object(HISTORY, "changed_source_files", return_value=[
+                        HISTORY.SourceChange("x.c", 1, 1)]), \
+                    patch.object(HISTORY, "cosmetic_commit", return_value=False), \
+                    patch.object(HISTORY, "diff_body", side_effect=("", "-a\n+b", "-b\n+c")), \
+                    patch.object(HISTORY, "dedupe_by_patch_id", side_effect=lambda _, rows: rows), \
+                    patch("sys.argv", ["harvest", "--root", str(root),
+                                       "--repos", "first", "second"]), \
+                    contextlib.redirect_stdout(io.StringIO()) as stdout, \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr:
+                self.assertEqual(HISTORY.main(), 0)
+            rows = [json.loads(line) for line in stdout.getvalue().splitlines()]
+            self.assertEqual([(row["repo"], row["sha"]) for row in rows],
+                             [("first", "b" * 40), ("second", "c" * 40)])
+            self.assertRegex(stderr.getvalue(), r"no-diff-skipped=\s*1")
+
     def test_origin_userinfo_never_reaches_published_urls(self):
         # Inert markers exercise URL credential forms; assertions never print them.
         for userinfo in ("fixture-token", "fixture-user:fixture-password",
@@ -191,6 +465,15 @@ class HistoryTests(unittest.TestCase):
 
 
 class ReplyTests(unittest.TestCase):
+    def test_proposals_require_at_least_one_supporting_commit(self):
+        proposal = self.proposal()
+        proposal["supporting"] = []
+        self.assertIn("supporting", PACKETS.validate_proposal(proposal, {"abc"}) or "")
+        proposal["supporting"] = ["abc"]
+        self.assertIsNone(PACKETS.validate_proposal(proposal, {"abc"}))
+        self.assertEqual(PACKETS.validate_cluster(
+            {"cluster": "go-bounds", "proposals": []}, "go-bounds", {"abc"}, "go"), (None, []))
+
     def test_cluster_emit_requires_current_validated_label_replies(self):
         for mutation in ("class", "summary", "language", "deleted", "malformed", "labels"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory, \
@@ -485,6 +768,35 @@ class ReplyTests(unittest.TestCase):
 
 
 class ProbeTests(unittest.TestCase):
+    def test_unknown_discovery_extension_returns_explicit_json_failure(self):
+        with patch.object(PROBE, "EXTENSIONS", {}), \
+                patch("sys.argv", ["probe", "go-tls-min-version", "--json"]), \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(PROBE.main(), 1)
+        report = json.loads(output.getvalue())
+        discovery = next(check for check in report["checks"] if check["name"] == "discovery")
+        self.assertFalse(discovery["ok"])
+        self.assertIn("unsupported discovery language", discovery["detail"])
+        self.assertNotIn("positive.None", discovery["detail"])
+
+    def test_nonstring_diagnostics_return_failed_json_checks(self):
+        rule_path, fixture_path = PROBE.find_rule("go-tls-min-version")
+        rule = yaml.safe_load(rule_path.read_text())
+        fixture = yaml.safe_load(fixture_path.read_text())
+        for field in ("message", "note"):
+            for value in (42, True, ["text"], {"text": "value"}):
+                with self.subTest(field=field, value=value):
+                    with patch.object(PROBE, "load_inputs", return_value=(
+                            {**rule, field: value}, fixture["valid"], fixture["invalid"])), \
+                            patch("sys.argv", ["probe", "go-tls-min-version", "--json"]), \
+                            contextlib.redirect_stdout(io.StringIO()) as output:
+                        self.assertEqual(PROBE.main(), 1)
+                    report = json.loads(output.getvalue())
+                    self.assertFalse(report["ok"])
+                    diagnostic = next(check for check in report["checks"]
+                                      if check["name"] == f"{field}-literal")
+                    self.assertFalse(diagnostic["ok"])
+
     def test_subprocess_timeouts_return_failed_json_checks(self):
         original_run = subprocess.run
         phases = (("fixture-counts", []), ("fixture-run", []), ("arm-kills", []),
@@ -713,12 +1025,13 @@ class ProbeTests(unittest.TestCase):
         for duplicate in (dict(case), {**case, "expected": 99}):
             for cases in ([case, duplicate], [duplicate, case]):
                 with self.subTest(cases=cases), \
-                        patch.object(PROBE.json, "loads", return_value={"cases": cases}), \
+                        coverage_cases(cases), \
                         self.assertRaisesRegex(ValueError, "duplicate witness"):
+                    self.assertEqual(json.loads('{"control": true}'), {"control": True})
                     PROBE.arm_witnesses({"id": "test-rule"})
         cases = [case, {**case, "rule": "other-rule"}, {**case, "path": "other/any"},
                  {**case, "index": 1}, {"rule": "test-rule", "classification": "equivalent"}]
-        with patch.object(PROBE.json, "loads", return_value={"cases": cases}):
+        with coverage_cases(cases):
             self.assertEqual(set(PROBE.arm_witnesses({"id": "test-rule"})),
                              {("any", 0), ("other/any", 0), ("any", 1)})
 
@@ -734,8 +1047,9 @@ class ProbeTests(unittest.TestCase):
                                  ([(None, "failed"), (2, "")] * 2, False),
                                  ([(1, ""), (None, "failed")] * 2, False)):
             with self.subTest(counts=counts), \
-                    patch.object(PROBE.json, "loads", return_value={"cases": cases}), \
+                    coverage_cases(cases), \
                     patch.object(PROBE, "scan_stdin", side_effect=counts):
+                self.assertEqual(json.loads('{"control": true}'), {"control": True})
                 self.assertEqual(PROBE.check_arms(iso, rule)[0], expected)
 
     def test_snapshot_refresh_and_missing_output(self):
@@ -866,6 +1180,20 @@ class ProbeTests(unittest.TestCase):
 
 
 class ScaffoldTests(unittest.TestCase):
+    def test_count_update_preserves_utf8_source_under_ascii_defaults(self):
+        original = ("# café 🧪\nself.assertEqual(len(rules), 3)\n"
+                    "self.assertEqual(checked, 3)\n").encode()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "tests/test_diagnostics.py"
+            path.parent.mkdir()
+            path.write_bytes(original)
+            with patch.object(SCAFFOLD, "ROOT", root), ascii_text_defaults():
+                self.assertEqual(SCAFFOLD.bump_count(True), (3, 4))
+                self.assertEqual(path.read_bytes(), original)
+                self.assertEqual(SCAFFOLD.bump_count(False), (3, 4))
+            self.assertEqual(path.read_bytes(), original.replace(b", 3)", b", 4)"))
+
     def test_missing_matcher_is_controlled_refusal(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(SCAFFOLD, "ROOT", Path(directory)):
             root = Path(directory)

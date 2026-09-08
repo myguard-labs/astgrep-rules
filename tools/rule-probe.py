@@ -238,6 +238,8 @@ def check_arms(iso, rule):
 def discover(rule_path, language, source):
     """Check discovery using a real source extension and a one-rule config."""
     ext = EXTENSIONS.get(language)
+    if ext is None:
+        return False, f"unsupported discovery language {language!r}; extend EXTENSIONS"
     with tempfile.TemporaryDirectory(prefix="rule-probe-disc-", dir=ROOT) as name:
         directory = Path(name)
         (directory / "rules").mkdir()
@@ -382,6 +384,11 @@ def update_snapshot(rule, report, check):
     check("snapshot-update", False, detail)
 
 
+def literal_diagnostic(value):
+    """Require nonempty text before checking literal diagnostic placeholders."""
+    return isinstance(value, str) and bool(value) and not META.search(value)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n", maxsplit=1)[0])
     ap.add_argument("rule_id")
@@ -411,8 +418,7 @@ def main() -> int:
 
     # 2. literal diagnostics -- test_diagnostics compares emitted text to the YAML
     for field in ("message", "note"):
-        text = rule.get(field) or ""
-        check(f"{field}-literal", bool(text) and not META.search(text),
+        check(f"{field}-literal", literal_diagnostic(rule.get(field)),
               "present and no $METAVAR interpolation (snapshots do not store it)")
     check("severity", rule.get("severity") in ("error", "warning", "info"),
           str(rule.get("severity")))

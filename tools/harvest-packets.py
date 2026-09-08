@@ -35,6 +35,7 @@ Reply schemas (validated on ingest; anything else is rejected and listed):
              "supporting": [shorts], "overlaps": [rule ids], "rationale"}]}
 Labels must match the corpus language hint. Proposal IDs must be globally
 unique across replies; reconcile duplicate replies before ingesting again.
+Each proposal must cite at least one supporting commit from its cluster.
 Cluster emission revalidates current label replies against the manifest and
 cached labels; edited replies require another label-ingest before clustering.
 Exit: 0 when every reply present is valid; 1 when any reply was rejected or a
@@ -393,8 +394,8 @@ def validate_proposal(proposal: dict, members: set[str]) -> str | None:
         return "language and id prefix disagree"
     if proposal["classification"] not in ("syntactic", "taint", "cross-function", "noise"):
         return "bad classification"
-    if not set(proposal["supporting"]) <= members:
-        return "supporting cites commits outside the cluster"
+    if not proposal["supporting"] or not set(proposal["supporting"]) <= members:
+        return "supporting must cite at least one commit and only commits from the cluster"
     if proposal["positive"].strip() == proposal["near_miss"].strip():
         return "positive equals near_miss"
     if len(proposal["rationale"]) > 300:

@@ -19,8 +19,15 @@ Outputs: JSONL (one candidate per line, with the full diff) to --out or stdout;
          optional Markdown reading-order index to --index; summary on stderr.
          Fork duplicates are collapsed by `git patch-id --stable`; the earlier
          repo in --repos order wins and later ones are listed in `also_in`.
-Exit:    0; a repo without .git is reported and skipped.
-Side effects: none beyond the files named above. No network.
+Exit:    0 normally; 1 when an initial repository read times out. Completed
+         repositories still emit, but diagnostics mark that corpus incomplete.
+         A repo without .git is reported and skipped.
+Side effects: none beyond the files named above. No network. Git subprocesses
+         have a 60-second timeout. Per-commit timeouts skip only that commit;
+         initial repository reads make the run incomplete. Patch-id timeouts
+         retain harvested candidates using their SHA identity. Commits without
+         attributable diffs are counted and skipped. Index output preserves
+         legacy bytes with UTF-8/surrogateescape.
 Limits:  Go and C only (SOURCE_SUFFIX). Ranking is a reading order, not a
          quality score: a one-line fix carries little vocabulary and can rank
          low while being the best candidate. Downstream reads the whole corpus.
@@ -72,7 +79,7 @@ def run(repo: Path, *args: str) -> str:
     """Decode Git losslessly; JSON escapes legacy bytes and patch-id restores them."""
     return subprocess.run(
         ["git", "-C", str(repo), *args],
-        capture_output=True, check=True,
+        capture_output=True, check=True, timeout=60,
     ).stdout.decode("utf-8", "surrogateescape")
 
 
@@ -198,7 +205,8 @@ def harvest(repo: Path, name: str, max_files: int, max_lines: int,
     prefix = commit_url_prefix(repo, url_prefix)
     shas = run(repo, "log", "--format=%H\x1f%s\x1f%ci", "--no-merges").splitlines()
     candidates = []
-    stats = {"total": 0, "subject": 0, "source": 0, "sized": 0, "cosmetic": 0}
+    stats = {"total": 0, "subject": 0, "source": 0, "sized": 0,
+             "cosmetic": 0, "no_diff": 0, "timed_out": 0}
 
     for line in shas:
         sha, rest = line.split("\x1f", 1)
@@ -208,23 +216,30 @@ def harvest(repo: Path, name: str, max_files: int, max_lines: int,
             continue
         stats["subject"] += 1
 
-        files = changed_source_files(repo, sha)
-        if not files:
-            continue
-        stats["source"] += 1
+        try:
+            files = changed_source_files(repo, sha)
+            if not files:
+                continue
+            stats["source"] += 1
 
-        churn = sum(change.added + change.deleted for change in files)
-        if len(files) > max_files or churn > max_lines:
-            continue
-        stats["sized"] += 1
+            churn = sum(change.added + change.deleted for change in files)
+            if len(files) > max_files or churn > max_lines:
+                continue
+            stats["sized"] += 1
 
-        paths = list(dict.fromkeys(path for change in files
-                                   for path in (change.old_path, change.path) if path is not None))
-        diff = diff_body(repo, sha, paths)
-        if not diff.strip():
-            raise ValueError(f"no attributable diff for {sha}: {paths!r}")
-        if cosmetic_commit(repo, sha, files):
-            stats["cosmetic"] += 1
+            paths = list(dict.fromkeys(path for change in files
+                                       for path in (change.old_path, change.path)
+                                       if path is not None))
+            diff = diff_body(repo, sha, paths)
+            if not diff.strip():
+                stats["no_diff"] += 1
+                continue
+            if cosmetic_commit(repo, sha, files):
+                stats["cosmetic"] += 1
+                continue
+        except subprocess.TimeoutExpired as error:
+            stats["timed_out"] += 1
+            print(f"skip {name}:{sha}: Git timed out after {error.timeout}s", file=sys.stderr)
             continue
 
         candidates.append({
@@ -244,6 +259,8 @@ def harvest(repo: Path, name: str, max_files: int, max_lines: int,
         f"{name:18s} commits={stats['total']:5d} "
         f"fix-subject={stats['subject']:4d} touches-source={stats['source']:4d} "
         f"in-size={stats['sized']:4d} cosmetic-dropped={stats['cosmetic']:3d} "
+        f"no-diff-skipped={stats['no_diff']:3d} "
+        f"timed-out-commits={stats['timed_out']:3d} "
         f"=> candidates={len(candidates):3d}",
         file=sys.stderr,
     )
@@ -253,18 +270,36 @@ def harvest(repo: Path, name: str, max_files: int, max_lines: int,
 def dedupe_by_patch_id(root: Path, candidates: list[dict]) -> list[dict]:
     """Collapse the same change seen through a fork; first repo in order wins."""
     seen: dict[str, dict] = {}
+    sha_aliases: dict[str, dict] = {}
     out = []
+    timed_out = 0
     for c in candidates:
-        show = run(root / c["repo"], "show", c["sha"])
-        pid = subprocess.run(["git", "patch-id", "--stable"],
-                             input=show.encode("utf-8", "surrogateescape"),
-                             capture_output=True, check=True).stdout.decode("ascii").split()
-        key = pid[0] if pid else c["sha"]
+        if c["sha"] in sha_aliases:
+            sha_aliases[c["sha"]].setdefault("also_in", []).append(c["repo"])
+            continue
+        try:
+            show = run(root / c["repo"], "show", c["sha"])
+            pid = subprocess.run(["git", "patch-id", "--stable"],
+                                 input=show.encode("utf-8", "surrogateescape"),
+                                 capture_output=True, check=True, timeout=60)
+        except subprocess.TimeoutExpired as error:
+            timed_out += 1
+            print(f"retain {c['repo']}:{c['sha']}: "
+                  f"patch identity timed out after {error.timeout}s; "
+                  "using SHA fallback", file=sys.stderr)
+            key = c["sha"]
+        else:
+            patch_ids = pid.stdout.decode("ascii").split()
+            key = patch_ids[0] if patch_ids else c["sha"]
         if key in seen:
+            sha_aliases[c["sha"]] = seen[key]
             seen[key].setdefault("also_in", []).append(c["repo"])
             continue
         seen[key] = c
+        sha_aliases[c["sha"]] = c
         out.append(c)
+    if timed_out:
+        print(f"dedupe timed-out-candidates={timed_out}", file=sys.stderr)
     return out
 
 
@@ -291,7 +326,8 @@ def write_index(path: Path, candidates: list[dict]) -> None:
         lines.append(f"| {i} | {c['density']:.3f} | {c['repo']} | {link} | {c['churn']} | "
                      f"{','.join(c['signals'])} | {subj} |")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8",
+                    errors="surrogateescape", newline="\n")
 
 
 def main() -> int:
@@ -307,13 +343,22 @@ def main() -> int:
     args = ap.parse_args()
 
     all_candidates = []
+    timed_out = 0
     for name in args.repos:
         repo = args.root / name
         if not (repo / ".git").exists():
             print(f"skip {name}: not a git checkout", file=sys.stderr)
             continue
-        all_candidates.extend(harvest(repo, name, args.max_files, args.max_lines,
-                                      args.url_prefix))
+        try:
+            all_candidates.extend(harvest(repo, name, args.max_files, args.max_lines,
+                                          args.url_prefix))
+        except subprocess.TimeoutExpired as error:
+            timed_out += 1
+            print(f"skip {name}: Git timed out after {error.timeout}s", file=sys.stderr)
+
+    if timed_out:
+        print(f"incomplete harvest: timed-out-repos={timed_out}; emitted corpus is partial",
+              file=sys.stderr)
 
     all_candidates = dedupe_by_patch_id(args.root, all_candidates)
 
@@ -340,7 +385,7 @@ def main() -> int:
             hist[s] = hist.get(s, 0) + 1
     for term, n in sorted(hist.items(), key=lambda kv: -kv[1]):
         print(f"  {term:16s} {n}", file=sys.stderr)
-    return 0
+    return int(timed_out > 0)
 
 
 if __name__ == "__main__":
