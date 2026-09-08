@@ -41,3 +41,4 @@ invalid:
 - void f(void) { char buf[get_len()]; }
 - void f(struct h *h) { char buf[h->len]; }
 - void f(int n) { char buf[get_len() + n]; }
+- void f(int n) { char buf[ARRAY_SIZE(x) - n]; }

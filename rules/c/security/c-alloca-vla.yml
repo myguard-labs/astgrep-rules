@@ -17,9 +17,12 @@ note: >-
   uppercase-letter identifiers is treated as fixed-size, and the same
   uppercase exemption applies to the callee of a call size and to the object of
   a field-access size, so the conventional fixed-size macros `buf[ARRAY_SIZE(x)]`
-  and `buf[CFG.MAX]` are skipped. An uppercase call anywhere in an
-  arithmetic size exempts the whole size, so `buf[ARRAY_SIZE(x) - 1]` is also
-  skipped. That is a naming/shape heuristic, not constant-expression analysis --
+  and `buf[CFG.MAX]` are skipped. The exemption is per identifier, not per
+  size: within an arithmetic size each lowercase identifier is skipped only
+  when it sits inside `sizeof` or inside a call whose callee is uppercase. So
+  `buf[ARRAY_SIZE(x) - 1]` is skipped because its only lowercase identifier is
+  the macro argument, while `buf[ARRAY_SIZE(x) - n]` still reports on `n`,
+  which is correct -- that size really is variable-length. That is a naming/shape heuristic, not constant-expression analysis --
   a lowercase macro or lowercase `static const` used as or inside a size still
   reports as a false positive. The four size shapes are recognised only at the
   top level of the size, so a parenthesized size `buf[(len + 1)]`, a unary size

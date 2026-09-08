@@ -24,6 +24,20 @@ snapshots:
       style: secondary
       start: 27
       end: 30
+  void f(int n) { char buf[ARRAY_SIZE(x) - n]; }:
+    labels:
+    - source: buf[ARRAY_SIZE(x) - n]
+      style: primary
+      start: 21
+      end: 43
+    - source: n
+      style: secondary
+      start: 41
+      end: 42
+    - source: ARRAY_SIZE(x) - n
+      style: secondary
+      start: 25
+      end: 42
   void f(int n) { char buf[get_len() + n]; }:
     labels:
     - source: buf[get_len() + n]
