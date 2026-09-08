@@ -14,6 +14,10 @@ valid:
 - void f(void) { char buf[MAX_LEN + 1]; }
 - void f(void) { char buf[sizeof(x) + 4]; }
 - void f(void) { char buf[sizeof(x)/sizeof(x[0])]; }
+- void f(void) { char buf[ARRAY_SIZE(x)]; }
+- void f(void) { char buf[NELEMS(a)]; }
+- void f(void) { char buf[MAX(A, B)]; }
+- void f(void) { char buf[CFG.MAX]; }
 invalid:
 - void f(void) { alloca(n); }
 - void f(void) { char *p = alloca(64); }
