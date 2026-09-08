@@ -1427,6 +1427,18 @@ class ProbeTests(unittest.TestCase):
 
 
 class ScaffoldTests(unittest.TestCase):
+    @staticmethod
+    def make_scaffold_case(root):
+        guard = root / "tests/test_diagnostics.py"
+        guard.parent.mkdir()
+        guard.write_text("self.assertEqual(len(rules), 3)\nself.assertEqual(checked, 3)\n")
+        matcher = root / "matcher.yml"
+        matcher.write_text("pattern: bad($X)\n")
+        argv = ["rule-scaffold", "--id", "go-test-rule", "--language", "go",
+                "--category", "security", "--positive", "bad(x)",
+                "--near-miss", "good(x)", "--claim", "Check call", "--matcher", str(matcher)]
+        return guard, argv
+
     def test_trailing_newline_id_is_refused(self):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(SCAFFOLD, "ROOT", Path(directory)):
@@ -1500,14 +1512,7 @@ class ScaffoldTests(unittest.TestCase):
     def test_scaffold_dry_run_write_and_overwrite_refusal(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(SCAFFOLD, "ROOT", Path(directory)):
             root = Path(directory)
-            guard = root / "tests/test_diagnostics.py"
-            guard.parent.mkdir()
-            guard.write_text("self.assertEqual(len(rules), 3)\nself.assertEqual(checked, 3)\n")
-            matcher = root / "matcher.yml"
-            matcher.write_text("pattern: bad($X)\n")
-            argv = ["rule-scaffold", "--id", "go-test-rule", "--language", "go",
-                    "--category", "security", "--positive", "bad(x)", "--near-miss", "good(x)",
-                    "--claim", "Check call", "--matcher", str(matcher)]
+            guard, argv = self.make_scaffold_case(root)
             with contextlib.redirect_stdout(io.StringIO()):
                 with patch("sys.argv", [*argv, "--dry-run"]):
                     self.assertEqual(SCAFFOLD.main(), 0)
@@ -1543,6 +1548,8 @@ class ScaffoldTests(unittest.TestCase):
                         SCAFFOLD.main()
                     self.assertFalse((root / "rules/go/security/go-test-rule.yml").exists())
                     self.assertFalse((root / "tests/go/security/go-test-rule.yml").exists())
+                    self.assertFalse((root / "rules").exists())
+                    self.assertFalse((root / "tests/go").exists())
                     self.assertEqual(guard.read_text().count(", 3)"), 2)
 
                 def fail_fixture_encoding(path, *values, **kwargs):
@@ -1556,7 +1563,10 @@ class ScaffoldTests(unittest.TestCase):
                     SCAFFOLD.main()
                 self.assertFalse((root / "rules/go/security/go-test-rule.yml").exists())
                 self.assertFalse((root / "tests/go/security/go-test-rule.yml").exists())
+                self.assertFalse((root / "rules").exists())
+                self.assertFalse((root / "tests/go").exists())
                 self.assertEqual(guard.read_text().count(", 3)"), 2)
+
                 with patch("sys.argv", argv):
                     self.assertEqual(SCAFFOLD.main(), 0)
                 with patch("sys.argv", argv), self.assertRaisesRegex(SystemExit, "refusing to overwrite"):
@@ -1566,6 +1576,69 @@ class ScaffoldTests(unittest.TestCase):
             self.assertEqual(rule["rule"], {"pattern": "bad($X)"})
             self.assertEqual(fixture, {"id": "go-test-rule", "valid": ["good(x)"], "invalid": ["bad(x)"]})
             self.assertEqual(guard.read_text().count(", 4)"), 2)
+
+    def test_directory_creation_failure_rolls_back_owned_directories(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            _, argv = self.make_scaffold_case(root)
+            original_mkdir = Path.mkdir
+
+            def fail_fixture_mkdir(path, *values, **kwargs):
+                if path == root / "tests/go":
+                    raise PermissionError("injected directory failure")
+                return original_mkdir(path, *values, **kwargs)
+
+            with patch("sys.argv", argv), patch.object(Path, "mkdir", fail_fixture_mkdir), \
+                    self.assertRaisesRegex(PermissionError, "injected directory failure"):
+                SCAFFOLD.main()
+            self.assertFalse((root / "rules").exists())
+            self.assertFalse((root / "tests/go").exists())
+
+    def test_concurrently_created_parent_is_not_removed(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            _, argv = self.make_scaffold_case(root)
+            original_mkdir = Path.mkdir
+            original_open = Path.open
+
+            def race_rules_mkdir(path, *values, **kwargs):
+                if path == root / "rules" and not path.exists():
+                    original_mkdir(path)
+                    raise FileExistsError("injected concurrent directory")
+                return original_mkdir(path, *values, **kwargs)
+
+            def fail_rule_write(path, *values, **kwargs):
+                mode = values[0] if values else kwargs.get("mode", "r")
+                if path.name == "go-test-rule.yml" and mode == "x":
+                    raise OSError("injected output failure")
+                return original_open(path, *values, **kwargs)
+
+            with patch("sys.argv", argv), patch.object(Path, "mkdir", race_rules_mkdir), \
+                    patch.object(Path, "open", fail_rule_write), self.assertRaises(OSError):
+                SCAFFOLD.main()
+            self.assertTrue((root / "rules").is_dir())
+            self.assertFalse((root / "rules/go").exists())
+            self.assertFalse((root / "tests/go").exists())
+
+    def test_success_reports_written_count(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            guard, argv = self.make_scaffold_case(root)
+            original_bump = SCAFFOLD.bump_count
+
+            def change_count_after_preflight(dry_run):
+                if not dry_run:
+                    guard.write_text(guard.read_text().replace(", 3)", ", 7)"))
+                return original_bump(dry_run)
+
+            with patch("sys.argv", argv), \
+                    patch.object(SCAFFOLD, "bump_count", change_count_after_preflight), \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(SCAFFOLD.main(), 0)
+            self.assertIn("rule count 7 -> 8", output.getvalue())
 
     def test_scaffold_writes_utf8_under_ascii_defaults(self):
         with tempfile.TemporaryDirectory() as directory, \

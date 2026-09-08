@@ -173,6 +173,24 @@ def render_scaffold(args, prop, language, positive, near_miss, claim):
     return rule_text, fixture_text
 
 
+def create_parent_dirs(directories: tuple[Path, ...], created_dirs: list[Path]) -> None:
+    """Create missing ancestors, recording only directories this process owns."""
+    for directory in directories:
+        missing = []
+        cursor = directory
+        while not cursor.exists():
+            missing.append(cursor)
+            cursor = cursor.parent
+        for path in reversed(missing):
+            try:
+                path.mkdir()
+            except FileExistsError:
+                if not path.is_dir():
+                    raise
+            else:
+                created_dirs.append(path)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n", maxsplit=1)[0])
     ap.add_argument("--id", required=True)
@@ -194,18 +212,23 @@ def main() -> int:
         print(f"--- {fixture_path.relative_to(ROOT)}\n{fixture_text}")
         print(f"--- tests/test_diagnostics.py: rule count {old} -> {new}")
         return 0
-    rule_path.parent.mkdir(parents=True, exist_ok=True)
-    fixture_path.parent.mkdir(parents=True, exist_ok=True)
-    created = []
+    created_dirs: list[Path] = []
+    created: list[Path] = []
     try:
+        create_parent_dirs((rule_path.parent, fixture_path.parent), created_dirs)
         for path, text in ((rule_path, rule_text), (fixture_path, fixture_text)):
             with path.open("x", encoding="utf-8", newline="") as output:
                 created.append(path)
                 output.write(text)
-        bump_count(False)
+        old, new = bump_count(False)
     except (OSError, UnicodeError, SystemExit):
         for path in reversed(created):
             path.unlink(missing_ok=True)
+        for directory in reversed(created_dirs):
+            try:
+                directory.rmdir()
+            except OSError:
+                continue
         raise
     print(f"wrote {rule_path.relative_to(ROOT)}, {fixture_path.relative_to(ROOT)}; "
           f"rule count {old} -> {new}. Next: tools/rule-probe.py {args.id}")
