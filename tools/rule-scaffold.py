@@ -38,6 +38,7 @@ import tempfile
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from time import monotonic, sleep
+from typing import Literal
 
 import yaml
 
@@ -48,6 +49,7 @@ WINDOWS_LOCK_RETRY_ERRNOS = {
 POSIX_LOCK_RETRY_ERRNOS = {errno.EACCES, errno.EAGAIN}
 LOCK_TIMEOUT_SECONDS = 60
 LOCK_POLL_SECONDS = 0.1
+CLEANUP_INTERRUPT_RETRIES = 3
 
 ROOT = Path(__file__).resolve().parents[1]
 CATEGORIES = ("security", "correctness")
@@ -204,6 +206,80 @@ def create_parent_dirs(directories: tuple[Path, ...], created_dirs: list[Path]) 
                 created_dirs.append(path)
 
 
+def remove_created_path(path: Path, *, directory: bool = False) -> bool:
+    """Best-effort rollback that does not let a repeated Ctrl-C mask the first failure."""
+    interrupts = 0
+    while True:
+        try:
+            path.rmdir() if directory else path.unlink(missing_ok=True)
+        except KeyboardInterrupt:
+            interrupts += 1
+            if interrupts >= CLEANUP_INTERRUPT_RETRIES:
+                return False
+            continue
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False
+        return True
+
+
+def warn_retained_paths(
+        paths: list[Path], *, outcome: Literal["rollback", "unknown", "committed"] = "rollback",
+) -> None:
+    """Report preserved paths without allowing warning failure to mask the cause."""
+    if not paths:
+        return
+    rendered: list[str] = []
+    for path in paths:
+        try:
+            rendered.append(str(path.relative_to(ROOT)))
+        except BaseException:  # noqa: BLE001
+            try:
+                rendered.append(str(path))
+            except BaseException:  # noqa: BLE001
+                rendered.append("<unprintable path>")
+    if outcome == "unknown":
+        message = ("warning: scaffold transaction state is unknown; kept paths: "
+                   f"{', '.join(rendered)}; verify the count and tree before deleting")
+    elif outcome == "committed":
+        message = ("notice: scaffold outputs and count were committed before the interrupt: "
+                   f"{', '.join(rendered)}")
+    else:
+        message = ("warning: scaffold rollback was incomplete; inspect retained paths "
+                   f"(created parent directories may also remain): {', '.join(rendered)}")
+    try:
+        print(message, file=sys.stderr)
+    except BaseException:  # noqa: BLE001
+        return
+
+
+def recover_scaffold(old: int, new: int, created: list[Path], created_dirs: list[Path]) -> None:
+    """Reconcile outputs with the atomic count after an interrupted scaffold."""
+    try:
+        current, _ = bump_count(dry_run=True)
+    except BaseException:  # noqa: BLE001
+        # Preserve outputs when the count state is unknowable: deleting them
+        # could leave an already committed count ahead of the tree.
+        current = None
+    retained: list[Path] = []
+    if current == old:
+        for path in reversed(created):
+            if not remove_created_path(path):
+                retained.append(path)
+        for directory in reversed(created_dirs):
+            if any(directory == path or directory in path.parents for path in retained):
+                continue
+            if not remove_created_path(directory, directory=True):
+                retained.append(directory)
+    elif current != new:
+        retained.extend((*created, *created_dirs))
+    if current == new:
+        warn_retained_paths(created, outcome="committed")
+    else:
+        warn_retained_paths(retained, outcome="unknown" if current != old else "rollback")
+
+
 def repository_lock_path() -> Path:
     """Keep the persistent lock outside tracked files when Git metadata exists."""
     metadata = ROOT / ".git"
@@ -295,7 +371,7 @@ def main() -> int:
         return 0
     with cli_scaffold_lock():
         rule_path, fixture_path, (rule_text, fixture_text) = prepare_scaffold(args)
-        bump_count(dry_run=True)
+        old, new = bump_count(dry_run=True)
         created_dirs: list[Path] = []
         created: list[Path] = []
         try:
@@ -305,14 +381,8 @@ def main() -> int:
                     created.append(path)
                     output.write(text)
             old, new = bump_count(dry_run=False)
-        except (OSError, UnicodeError, SystemExit):
-            for path in reversed(created):
-                path.unlink(missing_ok=True)
-            for directory in reversed(created_dirs):
-                try:
-                    directory.rmdir()
-                except OSError:
-                    continue
+        except (OSError, UnicodeError, SystemExit, KeyboardInterrupt):
+            recover_scaffold(old, new, created, created_dirs)
             raise
     print(f"wrote {rule_path.relative_to(ROOT)}, {fixture_path.relative_to(ROOT)}; "
           f"rule count {old} -> {new}. Next: tools/rule-probe.py {args.id}")

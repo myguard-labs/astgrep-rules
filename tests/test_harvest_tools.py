@@ -1872,6 +1872,286 @@ class ScaffoldTests(unittest.TestCase):
             self.assertFalse((root / "rules").exists())
             self.assertFalse((root / "tests/go").exists())
 
+    def test_interrupt_rollback_depends_on_atomic_count_commit(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            guard, argv = self.make_scaffold_case(root)
+            original_replace = Path.replace
+
+            with patch("sys.argv", argv), \
+                    patch.object(Path, "replace", side_effect=KeyboardInterrupt), \
+                    self.assertRaises(KeyboardInterrupt):
+                SCAFFOLD.main()
+            self.assertFalse((root / "rules/go/security/go-test-rule.yml").exists())
+            self.assertFalse((root / "tests/go/security/go-test-rule.yml").exists())
+            self.assertEqual(guard.read_text(encoding="utf-8").count(", 3)"), 2)
+
+            def replace_then_interrupt(source, target):
+                original_replace(source, target)
+                raise KeyboardInterrupt
+
+            with patch("sys.argv", argv), patch.object(Path, "replace", replace_then_interrupt), \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr, \
+                    self.assertRaises(KeyboardInterrupt):
+                SCAFFOLD.main()
+            self.assertTrue((root / "rules/go/security/go-test-rule.yml").exists())
+            self.assertTrue((root / "tests/go/security/go-test-rule.yml").exists())
+            self.assertEqual(guard.read_text(encoding="utf-8").count(", 4)"), 2)
+            self.assertIn("outputs and count were committed before the interrupt", stderr.getvalue())
+            self.assertIn("rules/go/security/go-test-rule.yml", stderr.getvalue())
+            self.assertIn("tests/go/security/go-test-rule.yml", stderr.getvalue())
+
+    def test_interrupt_preserves_committed_outputs_when_count_reread_fails(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            guard, argv = self.make_scaffold_case(root)
+            args = SimpleNamespace(
+                id="go-test-rule", proposal=None, language="go", category="security",
+                positive="bad(x)", near_miss="good(x)", claim="Check call",
+                matcher=root / "matcher.yml", severity="warning", dry_run=False)
+            rule_path, fixture_path, expected = SCAFFOLD.prepare_scaffold(args)
+            original_bump = SCAFFOLD.bump_count
+            committed = False
+
+            def interrupt_then_hide_count(dry_run):
+                nonlocal committed
+                if dry_run and committed:
+                    raise SystemExit("injected unreadable count")
+                result = original_bump(dry_run)
+                if not dry_run:
+                    committed = True
+                    raise KeyboardInterrupt
+                return result
+
+            with patch("sys.argv", argv), \
+                    patch.object(SCAFFOLD, "bump_count", side_effect=interrupt_then_hide_count), \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr, \
+                    self.assertRaises(KeyboardInterrupt):
+                SCAFFOLD.main()
+            self.assertEqual(rule_path.read_bytes(), expected[0].encode("utf-8"))
+            self.assertEqual(fixture_path.read_bytes(), expected[1].encode("utf-8"))
+            self.assertEqual(guard.read_text(encoding="utf-8").count(", 4)"), 2)
+            self.assertIn("transaction state is unknown", stderr.getvalue())
+            self.assertIn("verify the count and tree before deleting", stderr.getvalue())
+            self.assertIn("rules/go/security/go-test-rule.yml", stderr.getvalue())
+            self.assertIn("tests/go/security/go-test-rule.yml", stderr.getvalue())
+
+    def test_repeated_interrupt_during_recovery_preserves_original(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            guard, argv = self.make_scaffold_case(root)
+            original_bump = SCAFFOLD.bump_count
+            failed = False
+
+            def interrupt_twice(dry_run):
+                nonlocal failed
+                if failed:
+                    raise KeyboardInterrupt("recovery interrupt")
+                if dry_run:
+                    return original_bump(dry_run)
+                failed = True
+                raise KeyboardInterrupt("original interrupt")
+
+            with patch("sys.argv", argv), \
+                    patch.object(SCAFFOLD, "bump_count", side_effect=interrupt_twice), \
+                    contextlib.redirect_stderr(io.StringIO()), \
+                    self.assertRaisesRegex(KeyboardInterrupt, "original interrupt"):
+                SCAFFOLD.main()
+            self.assertEqual(guard.read_text(encoding="utf-8").count(", 3)"), 2)
+            self.assertTrue((root / "rules/go/security/go-test-rule.yml").exists())
+            self.assertTrue((root / "tests/go/security/go-test-rule.yml").exists())
+
+    def test_unexpected_recovery_error_does_not_mask_original(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            _, argv = self.make_scaffold_case(root)
+            original_bump = SCAFFOLD.bump_count
+            failed = False
+
+            def fail_recovery(dry_run):
+                nonlocal failed
+                if failed:
+                    raise ValueError("unexpected recovery failure")
+                if dry_run:
+                    return original_bump(dry_run)
+                failed = True
+                raise KeyboardInterrupt("original interrupt")
+
+            with patch("sys.argv", argv), \
+                    patch.object(SCAFFOLD, "bump_count", side_effect=fail_recovery), \
+                    patch("builtins.print", side_effect=BrokenPipeError("closed stderr")), \
+                    self.assertRaisesRegex(KeyboardInterrupt, "original interrupt"):
+                SCAFFOLD.main()
+            self.assertTrue((root / "rules/go/security/go-test-rule.yml").exists())
+            self.assertTrue((root / "tests/go/security/go-test-rule.yml").exists())
+
+    def test_cleanup_stops_retrying_repeated_interrupts(self):
+        path = Path("inert")
+        with patch.object(Path, "unlink", side_effect=KeyboardInterrupt) as unlink:
+            SCAFFOLD.remove_created_path(path)
+        self.assertEqual(unlink.call_count, SCAFFOLD.CLEANUP_INTERRUPT_RETRIES)
+
+    def test_cleanup_retry_treats_already_removed_directory_as_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "created"
+            path.mkdir()
+            original_rmdir = Path.rmdir
+            interrupted = False
+
+            def remove_then_interrupt(target):
+                nonlocal interrupted
+                if not interrupted:
+                    interrupted = True
+                    original_rmdir(target)
+                    raise KeyboardInterrupt
+                return original_rmdir(target)
+
+            with patch.object(Path, "rmdir", remove_then_interrupt):
+                self.assertTrue(SCAFFOLD.remove_created_path(path, directory=True))
+            self.assertFalse(path.exists())
+
+    def test_interrupt_during_cleanup_is_retried_without_masking_original(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            guard, argv = self.make_scaffold_case(root)
+            fixture = root / "tests/go/security/go-test-rule.yml"
+            original_unlink = Path.unlink
+            interrupted = False
+
+            def interrupt_fixture_unlink(path, *args, **kwargs):
+                nonlocal interrupted
+                if path == fixture and not interrupted:
+                    interrupted = True
+                    raise KeyboardInterrupt("cleanup interrupt")
+                return original_unlink(path, *args, **kwargs)
+
+            with patch("sys.argv", argv), \
+                    patch.object(Path, "replace",
+                                 side_effect=KeyboardInterrupt("original interrupt")), \
+                    patch.object(Path, "unlink", interrupt_fixture_unlink), \
+                    self.assertRaisesRegex(KeyboardInterrupt, "original interrupt"):
+                SCAFFOLD.main()
+            self.assertTrue(interrupted)
+            self.assertFalse((root / "rules/go/security/go-test-rule.yml").exists())
+            self.assertFalse(fixture.exists())
+            self.assertEqual(guard.read_text(encoding="utf-8").count(", 3)"), 2)
+
+    def test_cleanup_permission_error_does_not_mask_original_or_stop_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            guard, argv = self.make_scaffold_case(root)
+            rule = root / "rules/go/security/go-test-rule.yml"
+            fixture = root / "tests/go/security/go-test-rule.yml"
+            original_unlink = Path.unlink
+
+            def refuse_fixture_unlink(path, *args, **kwargs):
+                if path == fixture:
+                    raise PermissionError("injected cleanup refusal")
+                return original_unlink(path, *args, **kwargs)
+
+            with patch("sys.argv", argv), \
+                    patch.object(Path, "replace",
+                                 side_effect=KeyboardInterrupt("original interrupt")), \
+                    patch.object(Path, "unlink", refuse_fixture_unlink), \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr, \
+                    self.assertRaisesRegex(KeyboardInterrupt, "original interrupt"):
+                SCAFFOLD.main()
+            self.assertFalse(rule.exists())
+            self.assertTrue(fixture.exists())
+            self.assertEqual(guard.read_text(encoding="utf-8").count(", 3)"), 2)
+            self.assertIn("rollback was incomplete", stderr.getvalue())
+            self.assertIn("tests/go/security/go-test-rule.yml", stderr.getvalue())
+            self.assertNotIn("tests/go/security,", stderr.getvalue())
+
+    def test_retained_path_warning_falls_back_for_path_outside_root(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)), \
+                contextlib.redirect_stderr(io.StringIO()) as stderr:
+            outside = Path(directory).parent / "outside-rule.yml"
+            SCAFFOLD.warn_retained_paths([Path(directory) / "inside-rule.yml", outside])
+        warning = stderr.getvalue()
+        self.assertIn("inside-rule.yml", warning)
+        self.assertIn(str(outside), warning)
+
+    def test_retained_path_warning_continues_after_unprintable_path(self):
+        class UnprintablePath:
+            def relative_to(self, _root):
+                raise ValueError("outside root")
+
+            def __str__(self):
+                raise ValueError("cannot render")
+
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)), \
+                contextlib.redirect_stderr(io.StringIO()) as stderr:
+            valid = Path(directory) / "later-rule.yml"
+            SCAFFOLD.warn_retained_paths([UnprintablePath(), valid])
+        warning = stderr.getvalue()
+        self.assertIn("<unprintable path>", warning)
+        self.assertIn("later-rule.yml", warning)
+
+    def test_unknown_count_warning_includes_created_directories_without_files(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            _, argv = self.make_scaffold_case(root)
+            original_create = SCAFFOLD.create_parent_dirs
+            original_bump = SCAFFOLD.bump_count
+            failed = False
+
+            def create_then_fail(directories, created_dirs):
+                nonlocal failed
+                original_create(directories, created_dirs)
+                failed = True
+                raise OSError("injected failure after directory creation")
+
+            def hide_count_after_failure(dry_run):
+                if failed:
+                    raise SystemExit("injected unreadable count")
+                return original_bump(dry_run)
+
+            with patch("sys.argv", argv), \
+                    patch.object(SCAFFOLD, "create_parent_dirs", side_effect=create_then_fail), \
+                    patch.object(SCAFFOLD, "bump_count", side_effect=hide_count_after_failure), \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr, \
+                    self.assertRaisesRegex(OSError, "directory creation"):
+                SCAFFOLD.main()
+            self.assertIn("rules/go/security", stderr.getvalue())
+            self.assertIn("tests/go/security", stderr.getvalue())
+
+    def test_unexpected_count_change_preserves_outputs_and_original_error(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            _, argv = self.make_scaffold_case(root)
+            original_bump = SCAFFOLD.bump_count
+            failed = False
+
+            def fail_then_report_unexpected_count(dry_run):
+                nonlocal failed
+                if failed:
+                    return 99, 100
+                if not dry_run:
+                    failed = True
+                    raise OSError("original count failure")
+                return original_bump(dry_run)
+
+            with patch("sys.argv", argv), \
+                    patch.object(SCAFFOLD, "bump_count",
+                                 side_effect=fail_then_report_unexpected_count), \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr, \
+                    self.assertRaisesRegex(OSError, "original count failure"):
+                SCAFFOLD.main()
+            self.assertTrue((root / "rules/go/security/go-test-rule.yml").exists())
+            self.assertTrue((root / "tests/go/security/go-test-rule.yml").exists())
+            self.assertIn("transaction state is unknown", stderr.getvalue())
+
     def test_concurrently_created_parent_is_not_removed(self):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(SCAFFOLD, "ROOT", Path(directory)):
