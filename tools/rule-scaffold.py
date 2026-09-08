@@ -58,8 +58,8 @@ yaml.add_representer(LiteralStr, _repr_literal)
 
 def load_proposal(path: Path, rule_id: str) -> dict:
     try:
-        text = path.read_text()
-    except OSError as error:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
         sys.exit(f"cannot read proposals file {path}: {error}")
     for line in text.splitlines():
         if line.strip():
@@ -143,7 +143,7 @@ def render_scaffold(args, prop, language, positive, near_miss, claim):
 
     if args.matcher:
         try:
-            matcher = yaml.safe_load(args.matcher.read_text())
+            matcher = yaml.safe_load(args.matcher.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, yaml.YAMLError) as error:
             sys.exit(f"cannot read --matcher {args.matcher}: {error}; "
                      "provide a readable YAML rule body")

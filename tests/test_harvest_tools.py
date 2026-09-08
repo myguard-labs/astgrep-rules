@@ -1572,9 +1572,12 @@ class ScaffoldTests(unittest.TestCase):
             guard.parent.mkdir()
             guard.write_text("self.assertEqual(len(rules), 3)\nself.assertEqual(checked, 3)\n",
                              encoding="utf-8")
+            matcher = root / "matcher.yml"
+            matcher.write_text("pattern: 'café($X)'\n", encoding="utf-8")
             argv = ["rule-scaffold", "--id", "go-unicode-test", "--language", "go",
                     "--category", "correctness", "--positive", 'fmt.Println("café 🧪")',
-                    "--near-miss", 'fmt.Println("cafe")', "--claim", "Reject mojibaké"]
+                    "--near-miss", 'fmt.Println("cafe")', "--claim", "Reject mojibaké",
+                    "--matcher", str(matcher)]
             with patch("sys.argv", argv), ascii_text_defaults(), \
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(SCAFFOLD.main(), 0)
@@ -1583,6 +1586,7 @@ class ScaffoldTests(unittest.TestCase):
             rule = rule_path.read_text(encoding="utf-8")
             fixture = fixture_path.read_text(encoding="utf-8")
             self.assertIn("mojibaké", rule)
+            self.assertIn("café($X)", rule)
             self.assertIn("café 🧪", fixture)
             self.assertEqual(guard.read_text(encoding="utf-8").count(", 4)"), 2)
 
@@ -1612,3 +1616,10 @@ class ScaffoldTests(unittest.TestCase):
                 path.write_text(text)
                 with self.assertRaises(SystemExit):
                     SCAFFOLD.load_proposal(path, "go-index-check")
+            proposal = {"id": "go-index-check", "claim": "Reject mojibaké"}
+            path.write_text(json.dumps(proposal, ensure_ascii=False), encoding="utf-8")
+            with ascii_text_defaults():
+                self.assertEqual(SCAFFOLD.load_proposal(path, "go-index-check"), proposal)
+            path.write_bytes(b'{"id":"go-index-check","claim":"\xff"}')
+            with self.assertRaisesRegex(SystemExit, "cannot read proposals"):
+                SCAFFOLD.load_proposal(path, "go-index-check")
