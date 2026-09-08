@@ -6,6 +6,7 @@ import io
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,8 @@ from unittest.mock import patch
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+NODE = shutil.which("node")
+CI = os.environ.get("CI", "").lower() in ("1", "true", "yes", "on")
 
 
 def load_tool(name):
@@ -68,7 +71,19 @@ def coverage_cases(cases):
             yield
 
 
+def copy_relative_files(root, sources):
+    """Copy repository files under the same relative paths in a test root."""
+    for source in sources:
+        target = root / source.relative_to(ROOT)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(source.read_bytes())
+
+
 class HistoryTests(unittest.TestCase):
+    def test_node_available_for_ci_url_checks(self):
+        if CI:
+            self.assertIsNotNone(NODE, "Node.js is required for WHATWG URL security checks")
+
     def test_legacy_url_parser_receives_normalized_fallback(self):
         original = HISTORY.urlsplit
         userinfo = "fixture-user:fixture-password"
@@ -97,6 +112,7 @@ class HistoryTests(unittest.TestCase):
                     for rendered in (json.dumps(candidate), index.read_text()):
                         self.assertFalse(userinfo in rendered, "legacy parser leaked userinfo")
 
+    @unittest.skipUnless(NODE, "Node.js required for WHATWG URL cross-check")
     def test_nonspecial_opaque_authorities_preserve_encoded_host(self):
         cases = [("custom://host%2fname/commit/", "custom://host%2fname/commit/"),
                  ("custom://host%40name/commit/", "custom://host%40name/commit/"),
@@ -119,6 +135,7 @@ process.stdout.write(JSON.stringify({
                 self.assertEqual(json.loads(parsed.stdout),
                                  {"host": HISTORY.urlsplit(expected).hostname, "userinfo": False})
 
+    @unittest.skipUnless(NODE, "Node.js required for WHATWG URL cross-check")
     def test_file_fallbacks_without_userinfo_are_preserved(self):
         urls = ["file:///tmp/project/", "file:///C:/project/", "file://localhost/tmp/project/"]
         javascript = """
@@ -144,6 +161,7 @@ process.stdout.write(JSON.stringify(urls.map(raw => {
             prefix = HISTORY.commit_url_prefix(ROOT, fallback)
         self.assertEqual(prefix, "https://fallback.test/project/commit/")
 
+    @unittest.skipUnless(NODE, "Node.js required for WHATWG URL cross-check")
     def test_shared_prefix_policy_rejects_ambiguous_authorities(self):
         userinfo = "fixture-user:fixture-password"
         suffix = userinfo + "@example.test/path/"
@@ -1046,30 +1064,60 @@ class ProbeTests(unittest.TestCase):
 
     def test_subprocess_timeouts_return_failed_json_checks(self):
         original_run = subprocess.run
+        original_test = PROBE.Isolated.test
+
+        def make_isolated_test(state):
+            def isolated_test(iso, rule=None):
+                state.phase = "fixture-run" if rule is None else "arm-kills"
+                try:
+                    return original_test(iso, rule)
+                finally:
+                    state.phase = None
+            return isolated_test
+
+        def make_run(state, records, target):
+            def run(command, *args, **kwargs):
+                verb = command[1:2]
+                if verb == ["test"] and "-U" in command:
+                    owner = "snapshot-update"
+                elif verb == ["test"]:
+                    owner = state.phase
+                    if owner not in ("fixture-run", "arm-kills"):
+                        records["unexpected"].append(command)
+                        return original_run(command, *args, **kwargs)
+                elif verb == ["scan"]:
+                    owner = "fixture-counts" if "--inline-rules" in command else "discovery"
+                elif verb == ["run"]:
+                    owner = "pattern-expressions"
+                else:
+                    return original_run(command, *args, **kwargs)
+                if owner == target:
+                    records["timeouts"] += 1
+                    timeout = kwargs.get("timeout")
+                    if timeout is None:
+                        records["missing_timeouts"].append(command)
+                        return original_run(command, *args, **kwargs)
+                    raise subprocess.TimeoutExpired(command, timeout)
+                return original_run(command, *args, **kwargs)
+            return run
+
         phases = (("fixture-counts", []), ("fixture-run", []), ("arm-kills", []),
                   ("discovery", []), ("pattern-expressions", ["--sexp"]),
                   ("snapshot-update", ["--snapshot"]))
         for phase, options in phases:
             with self.subTest(phase=phase):
-                calls = {"tests": 0, "timeouts": 0}
+                calls = {"timeouts": 0, "unexpected": [], "missing_timeouts": []}
+                state = SimpleNamespace(phase=None)
+                isolated_test = make_isolated_test(state)
+                run = make_run(state, calls, phase)
 
-                def run(command, *args, records=calls, target=phase, **kwargs):
-                    if command[1] == "test" and "-U" not in command:
-                        records["tests"] += 1
-                        owner = "fixture-run" if records["tests"] == 1 else "arm-kills"
-                    elif command[1] == "scan":
-                        owner = "fixture-counts" if "--inline-rules" in command else "discovery"
-                    else:
-                        owner = "snapshot-update" if "-U" in command else "pattern-expressions"
-                    if owner == target:
-                        records["timeouts"] += 1
-                        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
-                    return original_run(command, *args, **kwargs)
-
-                with patch.object(PROBE.subprocess, "run", side_effect=run), \
+                with patch.object(PROBE.Isolated, "test", isolated_test), \
+                        patch.object(PROBE.subprocess, "run", side_effect=run), \
                         patch("sys.argv", ["probe", "py-jwt-decode-unverified", "--json", *options]), \
                         contextlib.redirect_stdout(io.StringIO()) as output:
                     self.assertEqual(PROBE.main(), 1)
+                self.assertEqual(calls["unexpected"], [], "all test calls need an explicit phase")
+                self.assertEqual(calls["missing_timeouts"], [], "target calls need a timeout")
                 self.assertGreater(calls["timeouts"], 0, "the target subprocess must be reached")
                 report = json.loads(output.getvalue())
                 self.assertFalse(report["ok"])
@@ -1206,8 +1254,12 @@ class ProbeTests(unittest.TestCase):
                                         for check in report["checks"]))
 
     def test_snapshot_update_failure_cannot_return_old_snapshot(self):
+        source_rule, source_fixture = PROBE.find_rule("go-tls-min-version")
+        source_snapshot = ROOT / "tests/__snapshots__/go-tls-min-version-snapshot.yml"
         real_run = subprocess.run
+        real_load_mapping = PROBE.load_mapping
         updates = []
+        loaded = []
 
         def fail_update(command, *args, **kwargs):
             if "-U" in command:
@@ -1215,22 +1267,31 @@ class ProbeTests(unittest.TestCase):
                 return subprocess.CompletedProcess(command, 2, "", "injected snapshot write failure")
             return real_run(command, *args, **kwargs)
 
-        snapshot = ROOT / "tests/__snapshots__/go-tls-min-version-snapshot.yml"
-        original = snapshot.read_bytes()
-        with patch.object(PROBE.subprocess, "run", side_effect=fail_update), \
-                patch("sys.argv", ["probe", "go-tls-min-version", "--json", "--snapshot"]), \
-                contextlib.redirect_stdout(io.StringIO()) as output:
-            result = PROBE.main()
-        self.assertEqual(len(updates), 1)
-        self.assertEqual(snapshot.read_bytes(), original)
-        self.assertEqual(result, 1)
-        report = json.loads(output.getvalue())
-        self.assertFalse(report["ok"])
-        self.assertNotIn("snapshot", report)
-        self.assertIn("injected snapshot write failure", output.getvalue())
-        checks = {item["name"]: item["ok"] for item in report["checks"]}
-        for name in ("fixture-counts", "fixture-run", "arm-kills", "discovery"):
-            self.assertTrue(checks[name], name)
+        def record_load(path, *args, **kwargs):
+            loaded.append(path)
+            return real_load_mapping(path, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            copy_relative_files(root, (source_rule, source_fixture, source_snapshot))
+            snapshot = root / source_snapshot.relative_to(ROOT)
+            with patch.object(PROBE, "ROOT", root), \
+                    patch.object(PROBE, "load_mapping", side_effect=record_load), \
+                    patch.object(PROBE.subprocess, "run", side_effect=fail_update), \
+                    patch("sys.argv", ["probe", "go-tls-min-version", "--json", "--snapshot"]), \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(PROBE.main(), 1)
+            self.assertEqual(len(updates), 1)
+            self.assertEqual(Path(updates[0][3]), root / "sgconfig.yml")
+            self.assertIn(snapshot.resolve(), [Path(path).resolve() for path in loaded])
+            self.assertEqual(snapshot.read_bytes(), source_snapshot.read_bytes())
+            report = json.loads(output.getvalue())
+            self.assertFalse(report["ok"])
+            self.assertNotIn("snapshot", report)
+            self.assertIn("injected snapshot write failure", output.getvalue())
+            checks = {item["name"]: item["ok"] for item in report["checks"]}
+            for name in ("fixture-counts", "fixture-run", "arm-kills", "discovery"):
+                self.assertTrue(checks[name], name)
 
     def test_jwt_witnesses_validate_each_deleted_arm(self):
         rule_path, fixture_path = PROBE.find_rule("py-jwt-decode-unverified")
