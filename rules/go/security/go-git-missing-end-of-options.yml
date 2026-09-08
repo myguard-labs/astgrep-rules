@@ -1,0 +1,86 @@
+id: go-git-missing-end-of-options
+language: go
+severity: warning
+message: >-
+  exec.Command/CommandContext invokes git with a literal argv where a
+  non-literal value follows the subcommand, and neither --end-of-options nor
+  -- appears anywhere in the argument list. Git parses every argument until
+  one of those markers as a possible option, so a value starting with a dash
+  is reinterpreted as a flag instead of the operand it was meant to be (for
+  example -- and --end-of-options both stop this for add, rm, checkout,
+  restore, branch, tag, clone, grep and ls-files; -- also does it for log,
+  diff and show, which reject --end-of-options outright). Insert the
+  appropriate marker for the subcommand in use directly before the
+  non-literal value, or validate that the value cannot begin with a dash.
+note: >-
+  Fires on a literal exec.Command("git", ...)/exec.CommandContext(ctx,
+  "git", ...) argv where the subcommand is a literal and a later element is
+  not a literal, and neither "--end-of-options" nor "--" is present anywhere
+  in the argv. It cannot tell whether the non-literal value is
+  attacker-controlled, so a value drawn from a fixed internal list is a
+  legitimate dismissal. --end-of-options was added in git 2.24 and several
+  subcommands (log, diff, show, reset among them) do not accept it at all,
+  so a fleet running an older git or invoking one of those subcommands needs
+  -- instead; this rule does not check which marker suits the matched
+  subcommand or whether the installed git is new enough, only that some
+  marker is present. This is a literal-argv rule only: the common
+  args = []string{"git", sub}; args = append(args, userValue) form, and any
+  argv built into a []string and passed with exec.Command(name, args...),
+  is an honest syntactic miss of this rule, the same class of gap already
+  disclosed for the shell and formatted-argument argv rules in this pack.
+rule:
+  all:
+    - kind: call_expression
+    - any:
+        - all:
+            - has: {field: function, regex: '^exec\.Command$'}
+            - has:
+                field: arguments
+                kind: argument_list
+                all:
+                  - has:
+                      all:
+                        - nthChild: {position: 1, ofRule: {not: {kind: comment}}}
+                        - matches: git-literal
+                  - has:
+                      all:
+                        - nthChild: {position: 2, ofRule: {not: {kind: comment}}}
+                        - matches: string-literal
+                  - has:
+                      all:
+                        - nthChild: {position: n+3, ofRule: {not: {kind: comment}}}
+                        - matches: not-literal
+                  - not: {has: {matches: end-marker}}
+        - all:
+            - has: {field: function, regex: '^exec\.CommandContext$'}
+            - has:
+                field: arguments
+                kind: argument_list
+                all:
+                  - has:
+                      all:
+                        - nthChild: {position: 2, ofRule: {not: {kind: comment}}}
+                        - matches: git-literal
+                  - has:
+                      all:
+                        - nthChild: {position: 3, ofRule: {not: {kind: comment}}}
+                        - matches: string-literal
+                  - has:
+                      all:
+                        - nthChild: {position: n+4, ofRule: {not: {kind: comment}}}
+                        - matches: not-literal
+                  - not: {has: {matches: end-marker}}
+utils:
+  string-literal:
+    any:
+      - kind: interpreted_string_literal
+      - kind: raw_string_literal
+  git-literal:
+    matches: string-literal
+    regex: '^["`]git["`]$'
+  end-marker:
+    matches: string-literal
+    regex: '^["`](--end-of-options|--)["`]$'
+  not-literal:
+    not:
+      matches: string-literal

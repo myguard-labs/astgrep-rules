@@ -884,6 +884,17 @@ tail `return` immediately after the finalize does not match, nor does a use in a
 - `go-gob-decode-network` uses connection-shaped identifiers and `Body`/`Conn`
   field names as the network signal. A gob stream between trusted processes
   matches, and a limit applied to the reader elsewhere is not seen.
+- `go-git-missing-end-of-options` matches only the literal-argv form of
+  `exec.Command`/`exec.CommandContext` with `"git"` as the executable. The
+  common `args := []string{"git", sub}; args = append(args, userValue)` shape,
+  and any argv built into a slice and passed as `exec.Command(name, args...)`,
+  is an honest syntactic miss of the same class already disclosed for the
+  shell and formatted-argument argv rules in this pack. It also does not check
+  that `--end-of-options` or `--` is the correct marker for the matched
+  subcommand, or that the installed git is new enough for `--end-of-options`
+  (git 2.24+; `log`, `diff`, `show` and `reset` reject it outright and need
+  `--` instead) — it only requires that one of the two literals appears
+  somewhere in the argv.
 
 ## php and wordpress
 
