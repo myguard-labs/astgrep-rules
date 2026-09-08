@@ -449,24 +449,61 @@ def reject_duplicate_proposals(proposals, bad):
     return [proposal for proposal in proposals if proposal["id"] not in duplicates]
 
 
+def load_cluster_packet(path):
+    """Read the packet snapshot consumed by ingestion and validate its required fields."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        return None, f"cannot read packet: {error}"
+    try:
+        packet = json.loads(text)
+        if not isinstance(packet, dict):
+            raise TypeError("packet must be an object")
+        candidates = packet.get("candidates")
+        language = packet.get("language")
+        if not isinstance(candidates, list):
+            raise TypeError("candidates must be a list")
+        if not candidates:
+            raise ValueError("candidates must not be empty")
+        if not isinstance(language, str):
+            raise TypeError("language must be a string")
+        if not language:
+            raise ValueError("language must not be empty")
+        if any(not isinstance(candidate, dict)
+               or not isinstance(candidate.get("short"), str)
+               or not candidate["short"] for candidate in candidates):
+            raise TypeError("every candidate needs a nonempty string short id")
+        return ({candidate["short"] for candidate in candidates}, language), None
+    except (ValueError, KeyError, TypeError) as error:
+        return None, f"invalid packet: {error}"
+
+
 def cluster_ingest(args) -> int:
     if cluster_manifest(args.work / "cluster") is None:
         return 1
     packets = sorted((args.work / "cluster" / "packets").glob("*.json"))
     proposals, bad, missing = [], [], []
     for p in packets:
-        packet = json.loads(p.read_text())
-        members = {c["short"] for c in packet["candidates"]}
         reply_path = args.work / "cluster" / "replies" / p.name
         if not reply_path.exists():
             missing.append(p.stem)
             continue
+        loaded, error = load_cluster_packet(p)
+        if error:
+            bad.append((p.stem, error))
+            continue
+        members, language = loaded
         try:
-            reply = json.loads(reply_path.read_text())
+            reply_text = reply_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            bad.append((p.stem, f"cannot read reply: {error}"))
+            continue
+        try:
+            reply = json.loads(reply_text)
         except json.JSONDecodeError as e:
             bad.append((p.stem, f"invalid JSON: {e}"))
             continue
-        err, props = validate_cluster(reply, p.stem, members, packet["language"])
+        err, props = validate_cluster(reply, p.stem, members, language)
         if err:
             bad.append((p.stem, err))
             continue

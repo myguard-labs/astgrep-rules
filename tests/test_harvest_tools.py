@@ -419,7 +419,7 @@ process.stdout.write(JSON.stringify(urls.map(raw => {
             self.assertEqual([json.loads(line)["repo"]
                               for line in stdout.getvalue().splitlines()], ["first", "last"])
             self.assertIn("incomplete harvest", stderr.getvalue())
-            self.assertIn("timed-out-repos=1", stderr.getvalue())
+            self.assertIn("incomplete-repos=1", stderr.getvalue())
             self.assertIn("skip slow", stderr.getvalue())
             self.assertNotIn("Traceback", stderr.getvalue())
 
@@ -488,8 +488,9 @@ process.stdout.write(JSON.stringify(urls.map(raw => {
                                   for line in stdout.getvalue().splitlines()],
                                  ["first", "last"] if phase == "harvest"
                                  else ["first", "slow", "last"])
-                counter = "repos" if phase == "harvest" else "candidates"
-                self.assertIn(f"timed-out-{counter}=1", stderr.getvalue())
+                status = ("incomplete-repos=1" if phase == "harvest"
+                          else "timed-out-candidates=1")
+                self.assertIn(status, stderr.getvalue())
                 self.assertIn("skip slow" if phase == "harvest" else "retain slow",
                               stderr.getvalue())
                 self.assertNotIn("Traceback", stderr.getvalue())
@@ -651,6 +652,34 @@ process.stdout.write(JSON.stringify(urls.map(raw => {
         with patch.object(HISTORY, "run", return_value=numstat):
             self.assertEqual(HISTORY.changed_source_files(ROOT, "HEAD"),
                              [HISTORY.SourceChange("main.go", 1, 1)])
+
+    def test_truncated_rename_numstat_is_an_explicit_error(self):
+        prefix = "1\t0\tvalid.go\0"
+        for numstat in (prefix + "1\t1\t\0", prefix + "1\t1\t\0old.c\0"):
+            with self.subTest(numstat=numstat), \
+                    patch.object(HISTORY, "run", return_value=numstat), \
+                    self.assertRaisesRegex(HISTORY.TruncatedGitOutput,
+                                           "truncated rename numstat for HEAD"):
+                HISTORY.changed_source_files(ROOT, "HEAD")
+
+    def test_truncated_numstat_skips_only_affected_commit_and_marks_incomplete(self):
+        history = "\n".join(char * 40 + "\x1ffix bounds\x1f2026-09-08" for char in "abc")
+
+        def source_files(_repo, sha):
+            if sha == "b" * 40:
+                raise HISTORY.TruncatedGitOutput("truncated rename numstat")
+            return [HISTORY.SourceChange("valid.go", 1, 0)]
+
+        with patch.object(HISTORY, "commit_url_prefix", return_value=None), \
+                patch.object(HISTORY, "run", return_value=history), \
+                patch.object(HISTORY, "changed_source_files", side_effect=source_files), \
+                patch.object(HISTORY, "diff_body", return_value="-old\n+new"), \
+                patch.object(HISTORY, "cosmetic_commit", return_value=False), \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            rows, incomplete = HISTORY.harvest(ROOT, "sample", 3, 60, None)
+        self.assertEqual([row["sha"] for row in rows], ["a" * 40, "c" * 40])
+        self.assertEqual(incomplete, 1)
+        self.assertIn("malformed-commits=  1", errors.getvalue())
 
     def test_cosmetic_boundary(self):
         self.assertTrue(HISTORY.is_cosmetic("  x = 1\n", "\tx = 1\n"))
@@ -903,6 +932,106 @@ class ReplyTests(unittest.TestCase):
             self.assertEqual(PACKETS.cluster_ingest(SimpleNamespace(work=root)), 0)
             self.assertEqual({tuple(p["supporting"]) for p in PACKETS.read_jsonl(proposals_path)},
                              {("abc",), ("def",)})
+
+    def test_cluster_ingest_rejects_packet_changed_after_manifest_check(self):
+        malformed = ({}, {"candidates": {}, "language": "go"},
+                     {"candidates": [], "language": "go"},
+                     {"candidates": [{"short": "abc"}], "language": 7},
+                     {"candidates": [{"short": "abc"}], "language": ""},
+                     {"candidates": [{"short": ""}], "language": "go"},
+                     {"candidates": [{"short": 7}], "language": "go"})
+        for packet in malformed:
+            with self.subTest(packet=packet), tempfile.TemporaryDirectory() as directory, \
+                    contextlib.redirect_stderr(io.StringIO()) as errors:
+                root = Path(directory)
+                packets = root / "cluster/packets"
+                replies = root / "cluster/replies"
+                packets.mkdir(parents=True)
+                replies.mkdir()
+                (packets / "go-bounds.json").write_text(json.dumps(packet))
+                (replies / "go-bounds.json").write_text(json.dumps(
+                    {"cluster": "go-bounds", "proposals": []}))
+                with patch.object(PACKETS, "cluster_manifest", return_value={}):
+                    self.assertEqual(PACKETS.cluster_ingest(SimpleNamespace(work=root)), 1)
+                self.assertEqual(PACKETS.read_jsonl(root / "cluster/proposals.jsonl"), [])
+                self.assertIn("REJECT go-bounds: invalid packet", errors.getvalue())
+
+    def test_cluster_packet_read_failure_is_not_reported_as_invalid_schema(self):
+        path = Path("unreadable-packet.json")
+        with patch.object(Path, "read_text", side_effect=PermissionError("denied")) as reader:
+            loaded, error = PACKETS.load_cluster_packet(path)
+        reader.assert_called_once_with(encoding="utf-8")
+        self.assertIsNone(loaded)
+        self.assertIn("cannot read packet", error)
+        self.assertNotIn("invalid packet", error)
+
+    def test_cluster_ingest_rejects_packet_with_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            root = Path(directory)
+            packets = root / "cluster/packets"
+            replies = root / "cluster/replies"
+            packets.mkdir(parents=True)
+            replies.mkdir()
+            (packets / "go-bounds.json").write_bytes(b"\xff")
+            (replies / "go-bounds.json").write_text(json.dumps(
+                {"cluster": "go-bounds", "proposals": []}))
+            with patch.object(PACKETS, "cluster_manifest", return_value={}):
+                self.assertEqual(PACKETS.cluster_ingest(SimpleNamespace(work=root)), 1)
+            self.assertEqual(PACKETS.read_jsonl(root / "cluster/proposals.jsonl"), [])
+            self.assertIn("REJECT go-bounds: cannot read packet", errors.getvalue())
+
+    def test_cluster_ingest_reports_missing_reply_before_packet_schema(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            root = Path(directory)
+            packets = root / "cluster/packets"
+            packets.mkdir(parents=True)
+            (packets / "go-bounds.json").write_text("{}")
+            with patch.object(PACKETS, "cluster_manifest", return_value={}):
+                self.assertEqual(PACKETS.cluster_ingest(SimpleNamespace(work=root)), 1)
+            self.assertIn("MISSING go-bounds", errors.getvalue())
+            self.assertNotIn("REJECT go-bounds", errors.getvalue())
+
+    def test_cluster_ingest_rejects_reply_with_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            root = Path(directory)
+            packets = root / "cluster/packets"
+            replies = root / "cluster/replies"
+            packets.mkdir(parents=True)
+            replies.mkdir()
+            (packets / "go-bounds.json").write_text(json.dumps(
+                {"language": "go", "candidates": [{"short": "abc"}]}))
+            (replies / "go-bounds.json").write_bytes(b"\xff")
+            with patch.object(PACKETS, "cluster_manifest", return_value={}):
+                self.assertEqual(PACKETS.cluster_ingest(SimpleNamespace(work=root)), 1)
+            self.assertEqual(PACKETS.read_jsonl(root / "cluster/proposals.jsonl"), [])
+            self.assertIn("REJECT go-bounds: cannot read reply", errors.getvalue())
+
+    def test_cluster_ingest_rejects_reply_read_error(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            root = Path(directory)
+            packet = root / "cluster/packets/go-bounds.json"
+            reply = root / "cluster/replies/go-bounds.json"
+            packet.parent.mkdir(parents=True)
+            reply.parent.mkdir()
+            packet.write_text(json.dumps(
+                {"language": "go", "candidates": [{"short": "abc"}]}))
+            reply.write_text("{}")
+            original_read = Path.read_text
+
+            def refuse_reply(path, *args, **kwargs):
+                if path == reply:
+                    raise PermissionError("reply denied")
+                return original_read(path, *args, **kwargs)
+
+            with patch.object(PACKETS, "cluster_manifest", return_value={}), \
+                    patch.object(Path, "read_text", refuse_reply):
+                self.assertEqual(PACKETS.cluster_ingest(SimpleNamespace(work=root)), 1)
+            self.assertEqual(PACKETS.read_jsonl(root / "cluster/proposals.jsonl"), [])
+            self.assertIn("REJECT go-bounds: cannot read reply: reply denied", errors.getvalue())
 
     def test_cluster_chunk_change_refused_and_manifest_requires_all_packets(self):
         with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stderr(io.StringIO()):
@@ -1762,6 +1891,137 @@ class ScaffoldTests(unittest.TestCase):
                 self.assertEqual(SCAFFOLD.bump_count(False), (3, 4))
             self.assertEqual(path.read_bytes(), original.replace(b", 3)", b", 4)"))
 
+    def test_count_update_does_not_unlink_recreated_temp_path(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            guard = root / "tests/test_diagnostics.py"
+            guard.parent.mkdir()
+            guard.write_text("self.assertEqual(len(rules), 3)\nself.assertEqual(checked, 3)\n")
+            original_replace = Path.replace
+            recreated = None
+
+            def replace_then_recreate(source, target):
+                nonlocal recreated
+                original_replace(source, target)
+                recreated = source
+                source.write_text("new owner")
+                raise KeyboardInterrupt("after replace")
+
+            with patch.object(Path, "replace", replace_then_recreate), \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr, \
+                    self.assertRaisesRegex(KeyboardInterrupt, "after replace"):
+                SCAFFOLD.bump_count(False)
+            self.assertIsNotNone(recreated)
+            self.assertEqual(recreated.read_text(), "new owner")
+            self.assertEqual(guard.read_text().count(", 4)"), 2)
+            self.assertIn("path ownership changed; left untouched", stderr.getvalue())
+
+    @unittest.skipIf(os.name == "nt", "symlink creation is not generally available on Windows")
+    def test_count_update_does_not_unlink_recreated_temp_symlink(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            guard = root / "tests/test_diagnostics.py"
+            guard.parent.mkdir()
+            guard.write_text("self.assertEqual(len(rules), 3)\nself.assertEqual(checked, 3)\n")
+            original_replace = Path.replace
+            recreated = None
+
+            def replace_then_recreate(source, target):
+                nonlocal recreated
+                original_replace(source, target)
+                recreated = source
+                source.symlink_to(target)
+                raise KeyboardInterrupt("after replace")
+
+            with patch.object(Path, "replace", replace_then_recreate), \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr, \
+                    self.assertRaisesRegex(KeyboardInterrupt, "after replace"):
+                SCAFFOLD.bump_count(False)
+            self.assertIsNotNone(recreated)
+            self.assertTrue(recreated.is_symlink())
+            self.assertEqual(guard.read_text().count(", 4)"), 2)
+            self.assertIn("path ownership changed; left untouched", stderr.getvalue())
+
+    def test_count_temp_cleanup_failure_is_reported_without_masking_original(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".rule-count-owned"
+            path.write_text("partial")
+            identity = path.lstat()
+            with patch.object(Path, "unlink", side_effect=KeyboardInterrupt("cleanup")), \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr:
+                SCAFFOLD.remove_owned_temp(path, identity)
+            self.assertTrue(path.exists())
+            self.assertIn("cleanup failed: cleanup", stderr.getvalue())
+
+    def test_count_temp_identity_failure_is_reported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".rule-count-owned"
+            path.write_text("partial")
+            identity = path.lstat()
+            with patch.object(Path, "lstat", side_effect=PermissionError("verify")), \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr:
+                SCAFFOLD.remove_owned_temp(path, identity)
+            self.assertTrue(path.exists())
+            self.assertIn("cannot verify ownership: verify", stderr.getvalue())
+
+    def test_count_temp_missing_identity_is_reported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".rule-count-owned"
+            path.write_text("partial")
+            with contextlib.redirect_stderr(io.StringIO()) as stderr:
+                SCAFFOLD.remove_owned_temp(path, None)
+            self.assertTrue(path.exists())
+            self.assertIn("ownership identity unavailable", stderr.getvalue())
+
+    def test_broken_temp_warning_does_not_mask_original_exception(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".rule-count-owned"
+            path.write_text("partial")
+            identity = path.lstat()
+            with patch.object(Path, "lstat", side_effect=PermissionError("verify")), \
+                    patch("builtins.print", side_effect=BrokenPipeError("stderr closed")), \
+                    self.assertRaisesRegex(KeyboardInterrupt, "original"):
+                try:
+                    raise KeyboardInterrupt("original")
+                finally:
+                    SCAFFOLD.remove_owned_temp(path, identity)
+
+    def test_count_update_removes_owned_temp_after_partial_write(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            guard = root / "tests/test_diagnostics.py"
+            guard.parent.mkdir()
+            original = "self.assertEqual(len(rules), 3)\nself.assertEqual(checked, 3)\n"
+            guard.write_text(original)
+            named_temp = tempfile.NamedTemporaryFile
+
+            @contextlib.contextmanager
+            def partial_writer(*args, **kwargs):
+                with named_temp(*args, **kwargs) as output:
+                    class Writer:
+                        name = output.name
+
+                        @staticmethod
+                        def fileno():
+                            return output.fileno()
+
+                        @staticmethod
+                        def write(text):
+                            output.write(text[:10])
+                            output.flush()
+                            raise OSError("partial write")
+
+                    yield Writer()
+
+            with patch.object(SCAFFOLD.tempfile, "NamedTemporaryFile", partial_writer), \
+                    self.assertRaisesRegex(OSError, "partial write"):
+                SCAFFOLD.bump_count(False)
+            self.assertEqual(guard.read_text(), original)
+            self.assertEqual(list(guard.parent.glob(".rule-count-*")), [])
+
     def test_missing_matcher_is_controlled_refusal(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(SCAFFOLD, "ROOT", Path(directory)):
             root = Path(directory)
@@ -1898,7 +2158,8 @@ class ScaffoldTests(unittest.TestCase):
             self.assertTrue((root / "rules/go/security/go-test-rule.yml").exists())
             self.assertTrue((root / "tests/go/security/go-test-rule.yml").exists())
             self.assertEqual(guard.read_text(encoding="utf-8").count(", 4)"), 2)
-            self.assertIn("outputs and count were committed before the interrupt", stderr.getvalue())
+            self.assertIn("outputs and count were committed before the interrupt",
+                          stderr.getvalue())
             self.assertIn("rules/go/security/go-test-rule.yml", stderr.getvalue())
             self.assertIn("tests/go/security/go-test-rule.yml", stderr.getvalue())
 
@@ -2234,7 +2495,8 @@ class ScaffoldTests(unittest.TestCase):
                 SCAFFOLD.bump_count(False)
 
     def test_counts_update_together_and_dry_run_does_not_write(self):
-        with tempfile.TemporaryDirectory() as directory, patch.object(SCAFFOLD, "ROOT", Path(directory)):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
             path = Path(directory) / "tests/test_diagnostics.py"
             path.parent.mkdir()
             original = "self.assertEqual(len(rules), 3)\nself.assertEqual(checked, 3)\n"

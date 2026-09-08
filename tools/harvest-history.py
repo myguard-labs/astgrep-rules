@@ -92,6 +92,10 @@ class SourceChange(NamedTuple):
     old_path: str | None = None
 
 
+class TruncatedGitOutput(ValueError):
+    """A Git record stream ended before its current record was complete."""
+
+
 def changed_source_files(repo: Path, sha: str) -> list[SourceChange]:
     """Parse NUL-delimited numstat without treating display paths as filenames."""
     out = run(repo, "show", "--find-renames", "--numstat", "-z", "--format=", sha)
@@ -104,7 +108,9 @@ def changed_source_files(repo: Path, sha: str) -> list[SourceChange]:
         added, deleted, path = parts
         old_path = None
         if not path:
-            old_path, path = next(records), next(records)
+            old_path, path = next(records, ""), next(records, "")
+            if not old_path or not path:
+                raise TruncatedGitOutput(f"truncated rename numstat for {sha}")
         if added == "-" or deleted == "-":  # binary
             continue
         if Path(path).suffix not in SOURCE_SUFFIX:
@@ -241,14 +247,26 @@ def commit_url_prefix(repo: Path, fallback: str | None) -> str | None:
     return fallback
 
 
+def report_incomplete_commit(stats: dict[str, int], name: str, sha: str,
+                             error: subprocess.TimeoutExpired | TruncatedGitOutput) -> None:
+    """Account for one unreadable commit and emit its bounded skip reason."""
+    if isinstance(error, subprocess.TimeoutExpired):
+        stats["timed_out"] += 1
+        reason = f"Git timed out after {error.timeout}s"
+    else:
+        stats["malformed"] += 1
+        reason = str(error)
+    print(f"skip {name}:{sha}: {reason}", file=sys.stderr)
+
+
 def harvest(repo: Path, name: str, max_files: int, max_lines: int,
             url_prefix: str | None) -> tuple[list[dict], int]:
-    """Return retained candidates and the number of commits lost to timeouts."""
+    """Return retained candidates and the number of commits lost to incomplete reads."""
     prefix = commit_url_prefix(repo, url_prefix)
     shas = run(repo, "log", "--format=%H\x1f%s\x1f%ci", "--no-merges").splitlines()
     candidates = []
     stats = {"total": 0, "subject": 0, "source": 0, "sized": 0,
-             "cosmetic": 0, "no_diff": 0, "timed_out": 0}
+             "cosmetic": 0, "no_diff": 0, "timed_out": 0, "malformed": 0}
 
     for line in shas:
         sha, rest = line.split("\x1f", 1)
@@ -279,9 +297,8 @@ def harvest(repo: Path, name: str, max_files: int, max_lines: int,
             if cosmetic_commit(repo, sha, files):
                 stats["cosmetic"] += 1
                 continue
-        except subprocess.TimeoutExpired as error:
-            stats["timed_out"] += 1
-            print(f"skip {name}:{sha}: Git timed out after {error.timeout}s", file=sys.stderr)
+        except (subprocess.TimeoutExpired, TruncatedGitOutput) as error:
+            report_incomplete_commit(stats, name, sha, error)
             continue
 
         candidates.append({
@@ -303,10 +320,11 @@ def harvest(repo: Path, name: str, max_files: int, max_lines: int,
         f"in-size={stats['sized']:4d} cosmetic-dropped={stats['cosmetic']:3d} "
         f"no-diff-skipped={stats['no_diff']:3d} "
         f"timed-out-commits={stats['timed_out']:3d} "
+        f"malformed-commits={stats['malformed']:3d} "
         f"=> candidates={len(candidates):3d}",
         file=sys.stderr,
     )
-    return candidates, stats["timed_out"]
+    return candidates, stats["timed_out"] + stats["malformed"]
 
 
 def dedupe_by_patch_id(root: Path, candidates: list[dict]) -> list[dict]:
@@ -385,7 +403,7 @@ def main() -> int:
     args = ap.parse_args()
 
     all_candidates = []
-    timed_out = 0
+    incomplete_repos = 0
     for name in args.repos:
         repo = args.root / name
         if not (repo / ".git").exists():
@@ -395,13 +413,13 @@ def main() -> int:
             candidates, skipped = harvest(repo, name, args.max_files, args.max_lines,
                                           args.url_prefix)
             all_candidates.extend(candidates)
-            timed_out += bool(skipped)
+            incomplete_repos += bool(skipped)
         except subprocess.TimeoutExpired as error:
-            timed_out += 1
+            incomplete_repos += 1
             print(f"skip {name}: Git timed out after {error.timeout}s", file=sys.stderr)
 
-    if timed_out:
-        print(f"incomplete harvest: timed-out-repos={timed_out}; emitted corpus is partial",
+    if incomplete_repos:
+        print(f"incomplete harvest: incomplete-repos={incomplete_repos}; emitted corpus is partial",
               file=sys.stderr)
 
     all_candidates = dedupe_by_patch_id(args.root, all_candidates)
@@ -429,7 +447,7 @@ def main() -> int:
             hist[s] = hist.get(s, 0) + 1
     for term, n in sorted(hist.items(), key=lambda kv: -kv[1]):
         print(f"  {term:16s} {n}", file=sys.stderr)
-    return int(timed_out > 0)
+    return int(incomplete_repos > 0)
 
 
 if __name__ == "__main__":

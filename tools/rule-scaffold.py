@@ -110,18 +110,52 @@ def bump_count(dry_run: bool) -> tuple[int, int]:
     new = old + 1
     if not dry_run:
         temporary = None
+        temporary_identity = None
         try:
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=test.parent,
                                              newline="", delete=False,
                                              prefix=".rule-count-") as output:
                 temporary = Path(output.name)
+                temporary_identity = os.fstat(output.fileno())
                 output.write(pattern.sub(lambda m: m.group(1) + str(new), text))
             temporary.chmod(test.stat().st_mode)
             temporary.replace(test)
+            temporary = None
         finally:
-            if temporary is not None:
-                temporary.unlink(missing_ok=True)
+            remove_owned_temp(temporary, temporary_identity)
     return old, new
+
+
+def remove_owned_temp(path: Path | None, identity: os.stat_result | None) -> None:
+    """Remove a count temp file only while its filesystem identity is unchanged."""
+    if path is None:
+        return
+    if identity is None:
+        warn_temp_retained(path, "ownership identity unavailable; left untouched")
+        return
+    try:
+        current = path.lstat()
+    except FileNotFoundError:
+        return
+    except BaseException as error:  # noqa: BLE001
+        warn_temp_retained(path, f"cannot verify ownership: {error}")
+        return
+    if not os.path.samestat(identity, current):
+        warn_temp_retained(path, "path ownership changed; left untouched")
+        return
+    try:
+        path.unlink(missing_ok=True)
+    except BaseException as error:  # noqa: BLE001
+        warn_temp_retained(path, f"cleanup failed: {error}")
+
+
+def warn_temp_retained(path: Path, reason: str) -> bool:
+    """Report a retained count temp; return whether stderr accepted the warning."""
+    try:
+        print(f"warning: retained count temp {path.name}: {reason}", file=sys.stderr)
+    except BaseException:  # noqa: BLE001
+        return False
+    return True
 
 
 def prepare_scaffold(args):
