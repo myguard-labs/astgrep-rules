@@ -11,9 +11,10 @@ note: >-
   Both operands are recognized by identifier naming convention -- a haystack
   named $path/$target/$dest/$real and a needle named $base/$root/$dir/$prefix --
   which is a convention, not a type fact. Only strict identity against integer
-  zero matches; strpos(...) !== false is an existence test, strpos(...) == 0 is
-  the separate loose-comparison bug class, and str_starts_with is the safe form.
-  A scheme or non-path prefix test written under path-like variable names is the
+  zero matches; strpos(...) !== false is an existence test, and strpos(...) == 0
+  is the separate loose-comparison bug class. str_starts_with is NOT a fix: it is
+  the same bare prefix test without a trailing separator, so it is still bypassed
+  by a sibling name that merely extends the base. A scheme or non-path prefix test written under path-like variable names is the
   routine dismissal, and the matcher cannot see whether a separator check
   follows.
 utils:
