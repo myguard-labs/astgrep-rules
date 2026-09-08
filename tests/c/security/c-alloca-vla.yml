@@ -23,6 +23,11 @@ valid:
 - void f(void) { char buf[CFG.SUB.MAX]; }
 - void f(int len) { char buf[(MAX_LEN + 1)]; }
 - void f(int n) { char buf[-MAX_LEN]; }
+- void f(struct z *z) { char buf[countof(z)]; }
+- void f(struct z *z) { char buf[nitems(z)]; }
+- void f(struct z *z) { char buf[nelems(z)]; }
+- void f(struct z *z) { char buf[lengthof(z)]; }
+- void f(struct z *z) { char h[(countof(z))]; }
 invalid:
 - void f(void) { alloca(n); }
 - void f(void) { char *p = alloca(64); }
