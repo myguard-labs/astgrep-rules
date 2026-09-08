@@ -56,9 +56,9 @@ rule:
                   - has:
                       nthChild: 2
                       kind: integer
-                      regex: '^0+$'
+                      regex: '^(0[xXoObB][0_]*|[0_]+)$'
                   - has:
                       kind: keyword_argument
                       all:
                         - has: {field: name, regex: '^max_length$'}
-                        - has: {field: value, kind: integer, regex: '^0+$'}
+                        - has: {field: value, kind: integer, regex: '^(0[xXoObB][0_]*|[0_]+)$'}

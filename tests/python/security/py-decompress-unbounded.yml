@@ -8,6 +8,8 @@ valid:
 - 'body = zlib.compress(blob)'
 - '# body = zlib.decompress(blob)'
 - 'body = "zlib.decompress(blob)"'
+- zlib.decompressobj().decompress(blob, 0x1000)
+- zlib.decompressobj().decompress(blob, max_length=0x40)
 invalid:
 - 'body = zlib.decompress(blob)'
 - 'body = zlib.decompress(blob, wbits)'
@@ -23,3 +25,7 @@ invalid:
 - 'body = zlib.decompressobj().decompress(blob)'
 - 'body = zlib.decompressobj().decompress(blob, 0)'
 - 'body = zlib.decompressobj().decompress(blob, max_length=0)'
+- zlib.decompressobj().decompress(blob, 0x0)
+- zlib.decompressobj().decompress(blob, max_length=0_0)
+- zlib.decompressobj().decompress(blob, 0o0)
+- zlib.decompressobj().decompress(blob, 0b0)

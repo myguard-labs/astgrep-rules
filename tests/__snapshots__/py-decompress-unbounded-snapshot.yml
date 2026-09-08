@@ -288,3 +288,131 @@ snapshots:
       style: secondary
       start: 7
       end: 27
+  zlib.decompressobj().decompress(blob, 0b0):
+    labels:
+    - source: zlib.decompressobj().decompress(blob, 0b0)
+      style: primary
+      start: 0
+      end: 42
+    - source: decompress
+      style: secondary
+      start: 21
+      end: 31
+    - source: zlib.decompressobj
+      style: secondary
+      start: 0
+      end: 18
+    - source: zlib.decompressobj()
+      style: secondary
+      start: 0
+      end: 20
+    - source: zlib.decompressobj().decompress
+      style: secondary
+      start: 0
+      end: 31
+    - source: '0b0'
+      style: secondary
+      start: 38
+      end: 41
+    - source: (blob, 0b0)
+      style: secondary
+      start: 31
+      end: 42
+  zlib.decompressobj().decompress(blob, 0o0):
+    labels:
+    - source: zlib.decompressobj().decompress(blob, 0o0)
+      style: primary
+      start: 0
+      end: 42
+    - source: decompress
+      style: secondary
+      start: 21
+      end: 31
+    - source: zlib.decompressobj
+      style: secondary
+      start: 0
+      end: 18
+    - source: zlib.decompressobj()
+      style: secondary
+      start: 0
+      end: 20
+    - source: zlib.decompressobj().decompress
+      style: secondary
+      start: 0
+      end: 31
+    - source: '0o0'
+      style: secondary
+      start: 38
+      end: 41
+    - source: (blob, 0o0)
+      style: secondary
+      start: 31
+      end: 42
+  zlib.decompressobj().decompress(blob, 0x0):
+    labels:
+    - source: zlib.decompressobj().decompress(blob, 0x0)
+      style: primary
+      start: 0
+      end: 42
+    - source: decompress
+      style: secondary
+      start: 21
+      end: 31
+    - source: zlib.decompressobj
+      style: secondary
+      start: 0
+      end: 18
+    - source: zlib.decompressobj()
+      style: secondary
+      start: 0
+      end: 20
+    - source: zlib.decompressobj().decompress
+      style: secondary
+      start: 0
+      end: 31
+    - source: '0x0'
+      style: secondary
+      start: 38
+      end: 41
+    - source: (blob, 0x0)
+      style: secondary
+      start: 31
+      end: 42
+  zlib.decompressobj().decompress(blob, max_length=0_0):
+    labels:
+    - source: zlib.decompressobj().decompress(blob, max_length=0_0)
+      style: primary
+      start: 0
+      end: 53
+    - source: decompress
+      style: secondary
+      start: 21
+      end: 31
+    - source: zlib.decompressobj
+      style: secondary
+      start: 0
+      end: 18
+    - source: zlib.decompressobj()
+      style: secondary
+      start: 0
+      end: 20
+    - source: zlib.decompressobj().decompress
+      style: secondary
+      start: 0
+      end: 31
+    - source: max_length
+      style: secondary
+      start: 38
+      end: 48
+    - source: 0_0
+      style: secondary
+      start: 49
+      end: 52
+    - source: max_length=0_0
+      style: secondary
+      start: 38
+      end: 52
+    - source: (blob, max_length=0_0)
+      style: secondary
+      start: 31
+      end: 53
