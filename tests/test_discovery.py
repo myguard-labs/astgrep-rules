@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _astgrep import resolve_ast_grep
+from tests._astgrep import resolve_ast_grep
 
 ROOT = Path(__file__).resolve().parents[1]
 AST_GREP = resolve_ast_grep()
