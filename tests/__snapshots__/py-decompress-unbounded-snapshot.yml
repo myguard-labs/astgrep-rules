@@ -1,0 +1,168 @@
+id: py-decompress-unbounded
+snapshots:
+  body = brotli.decompress(blob):
+    labels:
+    - source: brotli.decompress(blob)
+      style: primary
+      start: 7
+      end: 30
+    - source: brotli
+      style: secondary
+      start: 7
+      end: 13
+    - source: decompress
+      style: secondary
+      start: 14
+      end: 24
+    - source: brotli.decompress
+      style: secondary
+      start: 7
+      end: 24
+  body = bz2.decompress(blob):
+    labels:
+    - source: bz2.decompress(blob)
+      style: primary
+      start: 7
+      end: 27
+    - source: bz2
+      style: secondary
+      start: 7
+      end: 10
+    - source: decompress
+      style: secondary
+      start: 11
+      end: 21
+    - source: bz2.decompress
+      style: secondary
+      start: 7
+      end: 21
+  body = gzip.decompress(blob):
+    labels:
+    - source: gzip.decompress(blob)
+      style: primary
+      start: 7
+      end: 28
+    - source: gzip
+      style: secondary
+      start: 7
+      end: 11
+    - source: decompress
+      style: secondary
+      start: 12
+      end: 22
+    - source: gzip.decompress
+      style: secondary
+      start: 7
+      end: 22
+  body = lzma.decompress(blob):
+    labels:
+    - source: lzma.decompress(blob)
+      style: primary
+      start: 7
+      end: 28
+    - source: lzma
+      style: secondary
+      start: 7
+      end: 11
+    - source: decompress
+      style: secondary
+      start: 12
+      end: 22
+    - source: lzma.decompress
+      style: secondary
+      start: 7
+      end: 22
+  body = snappy.decompress(blob):
+    labels:
+    - source: snappy.decompress(blob)
+      style: primary
+      start: 7
+      end: 30
+    - source: snappy
+      style: secondary
+      start: 7
+      end: 13
+    - source: decompress
+      style: secondary
+      start: 14
+      end: 24
+    - source: snappy.decompress
+      style: secondary
+      start: 7
+      end: 24
+  body = zlib.decompress(blob):
+    labels:
+    - source: zlib.decompress(blob)
+      style: primary
+      start: 7
+      end: 28
+    - source: zlib
+      style: secondary
+      start: 7
+      end: 11
+    - source: decompress
+      style: secondary
+      start: 12
+      end: 22
+    - source: zlib.decompress
+      style: secondary
+      start: 7
+      end: 22
+  body = zlib.decompress(blob, wbits):
+    labels:
+    - source: zlib.decompress(blob, wbits)
+      style: primary
+      start: 7
+      end: 35
+    - source: zlib
+      style: secondary
+      start: 7
+      end: 11
+    - source: decompress
+      style: secondary
+      start: 12
+      end: 22
+    - source: zlib.decompress
+      style: secondary
+      start: 7
+      end: 22
+  body = zlib.decompressobj().decompress(blob):
+    labels:
+    - source: zlib.decompressobj().decompress(blob)
+      style: primary
+      start: 7
+      end: 44
+    - source: decompress
+      style: secondary
+      start: 28
+      end: 38
+    - source: zlib.decompressobj
+      style: secondary
+      start: 7
+      end: 25
+    - source: zlib.decompressobj()
+      style: secondary
+      start: 7
+      end: 27
+    - source: zlib.decompressobj().decompress
+      style: secondary
+      start: 7
+      end: 38
+  body = zstandard.decompress(blob):
+    labels:
+    - source: zstandard.decompress(blob)
+      style: primary
+      start: 7
+      end: 33
+    - source: zstandard
+      style: secondary
+      start: 7
+      end: 16
+    - source: decompress
+      style: secondary
+      start: 17
+      end: 27
+    - source: zstandard.decompress
+      style: secondary
+      start: 7
+      end: 27

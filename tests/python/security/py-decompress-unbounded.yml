@@ -1,0 +1,21 @@
+id: py-decompress-unbounded
+valid:
+- 'body = zlib.decompress(blob, 15, 1024)'
+- 'body = zlib.decompress(blob, bufsize=MAX_PLAIN)'
+- 'body = zlib.decompress(data=blob, bufsize=MAX_PLAIN)'
+- 'body = obj.decompress(blob)'
+- 'body = zlib.decompressobj().decompress(blob, MAX_PLAIN)'
+- 'body = zlib.decompressobj().decompress(blob, max_length=MAX_PLAIN)'
+- 'body = zlib.compress(blob)'
+- '# body = zlib.decompress(blob)'
+- 'body = "zlib.decompress(blob)"'
+invalid:
+- 'body = zlib.decompress(blob)'
+- 'body = zlib.decompress(blob, wbits)'
+- 'body = gzip.decompress(blob)'
+- 'body = bz2.decompress(blob)'
+- 'body = lzma.decompress(blob)'
+- 'body = brotli.decompress(blob)'
+- 'body = zstandard.decompress(blob)'
+- 'body = snappy.decompress(blob)'
+- 'body = zlib.decompressobj().decompress(blob)'

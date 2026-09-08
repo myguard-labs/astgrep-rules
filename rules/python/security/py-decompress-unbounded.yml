@@ -1,0 +1,53 @@
+id: py-decompress-unbounded
+language: python
+severity: warning
+message: >-
+  Compressed data decompressed with no ceiling on the output. Compression ratios
+  of a thousand to one are easy to construct, so a small body expands to
+  gigabytes and exhausts memory before the call returns. Pass a hard output cap
+  (zlib.decompress's bufsize argument, or decompressobj().decompress's
+  max_length) sized from the expected content, and treat hitting that cap as a
+  rejected input.
+note: >-
+  Fires on a one-shot decompress call on a compression module with no output
+  cap, and on the incremental decompressobj().decompress form with no
+  max_length. A limit imposed on the compressed source before decompression does
+  not bound the expanded output, so it does not clear this finding. A decompress
+  call on a receiver whose construction is not visible here is out of scope, and
+  a module bound to a different name is not resolved. Decompressing an artifact
+  the deployment itself produced, such as a bundled asset or a self-written
+  cache blob, is the routine dismissal.
+rule:
+  kind: call
+  any:
+    - all:
+        - has:
+            field: function
+            kind: attribute
+            all:
+              - has: {field: object, regex: '^(zlib|gzip|bz2|lzma|zstandard|zstd|brotli|snappy)$'}
+              - has: {field: attribute, regex: '^decompress$'}
+        - not:
+            has:
+              field: arguments
+              any:
+                - has:
+                    kind: keyword_argument
+                    has: {field: name, regex: '^(bufsize|max_length|max_output_size)$'}
+                - has: {nthChild: 3}
+    - all:
+        - has:
+            field: function
+            kind: attribute
+            all:
+              - has: {field: attribute, regex: '^decompress$'}
+              - has:
+                  field: object
+                  kind: call
+                  has:
+                    field: function
+                    regex: 'decompressobj$'
+        - not:
+            has:
+              field: arguments
+              has: {nthChild: 2}
