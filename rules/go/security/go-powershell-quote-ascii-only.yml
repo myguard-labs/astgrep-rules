@@ -13,18 +13,34 @@ message: >-
   which is never subject to quote-character parsing at all.
 note: >-
   Fires on a function whose name mentions both a PowerShell-quoting purpose
-  and escaping/quoting, whose body replaces or escapes only the ASCII
-  quote/apostrophe characters, and whose body contains no literal or code-point
-  reference to U+2018, U+2019, U+201C or U+201D. Verified against PowerShell
-  7.6.5: Invoke-Expression parses all four as genuine quote delimiters and a
+  and escaping/quoting, whose body replaces or escapes an ASCII
+  quote/apostrophe literal, and whose body shows no evidence of SANITIZING the
+  smart-quote code points U+2018, U+2019, U+201C and U+201D. The ASCII arm
+  matches both source spellings of the character: the raw literal `` `"` ``
+  and the interpreted, backslash-escaped literal "\"" -- four source
+  characters including the backslash, which an unescaped three-character
+  pattern misses entirely. Suppression requires the smart quote to occur in a
+  SEARCH position -- the second argument of strings.Replace/ReplaceAll (or of
+  Trim/TrimLeft/TrimRight/ContainsAny/IndexAny), or any argument of
+  strings.NewReplacer, whose odd arguments are all search keys. A smart quote
+  used merely as a WRAPPER around the result ("‘" + s + "’") does not
+  suppress: it never neutralizes an input smart quote, so such a helper is a
+  true positive, not a dismissal. Suppression deliberately accepts a
+  DEFENSIBLE SUBSET rather than requiring all four code points: any single
+  smart quote in a sanitizing position is strong evidence that the author knew
+  about this class and handled it, and demanding all four would re-introduce
+  false positives on helpers that (correctly) strip only the pair their input
+  encoding can produce; a partial handler is left to human review rather than
+  reported as an ASCII-only escaper. Verified against PowerShell 7.6.5:
+  Invoke-Expression parses all four as genuine quote delimiters and a
   smart-quote-terminated argument executes injected text as a new statement;
   guillemets («, ») are not delimiters and are excluded from that claim. A
   SQL-style doubling escaper (replacing `'` with `''`) is flagged here as a
   DOCUMENTED RESIDUAL FALSE POSITIVE: it happens to neutralize the ASCII
   apostrophe but is named and reviewed as a SQL escaper, not a PowerShell one,
   and the matcher cannot distinguish the two from the replacement alone. A
-  helper that also replaces or strips the four smart-quote code points, or
-  that never claims to quote for PowerShell, is the routine dismissal.
+  helper that replaces or strips the smart-quote code points, or that never
+  claims to quote for PowerShell, is the routine dismissal.
 rule:
   kind: function_declaration
   all:
@@ -48,14 +64,45 @@ rule:
     - not:
         has:
           stopBy: end
-          kind: interpreted_string_literal
-          matches: smart-quote-literal
+          matches: smart-quote-sanitized
 utils:
   ascii-quote-literal:
     any:
       - kind: interpreted_string_literal
-        regex: '^"[\x27"]"$'
+        regex: '^"(?:[\x27"]|\\[\x27"])"$'
       - kind: raw_string_literal
         regex: '^`[\x27"]`$'
   smart-quote-literal:
-    regex: '[\x{2018}\x{2019}\x{201C}\x{201D}]'
+    any:
+      - kind: interpreted_string_literal
+        regex: '[‘’“”]'
+      - kind: raw_string_literal
+        regex: '[‘’“”]'
+  smart-quote-sanitized:
+    any:
+      # strings.Replace/ReplaceAll(s, "<smart quote>", ...) -- the smart quote
+      # sits in the SEARCH argument, so it is actually being neutralized.
+      - kind: call_expression
+        all:
+          - has:
+              field: function
+              regex: '^strings\.(Replace|ReplaceAll|Trim|TrimLeft|TrimRight|ContainsAny|IndexAny)$'
+          - has:
+              field: arguments
+              kind: argument_list
+              has:
+                all:
+                  - nthChild: {position: 2, ofRule: {not: {kind: comment}}}
+                  - matches: smart-quote-literal
+      # strings.NewReplacer("<smart quote>", ...) -- every odd argument is a
+      # search key, and a replacer built over smart quotes is sanitizing them.
+      - kind: call_expression
+        all:
+          - has:
+              field: function
+              regex: '^strings\.NewReplacer$'
+          - has:
+              field: arguments
+              kind: argument_list
+              has:
+                matches: smart-quote-literal

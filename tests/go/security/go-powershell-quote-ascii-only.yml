@@ -12,9 +12,9 @@ valid:
   }
 - |
   package p
-  func EscapePowerShellArgument(s string) string {
-      s = strings.Replace(s, "'", "''", -1)
-      return "‘" + s + "’"
+  func QuotePSArgReplacer(s string) string {
+      r := strings.NewReplacer("‘", "", "’", "", "“", "", "”", "", `"`, `""`)
+      return "'" + r.Replace(s) + "'"
   }
 - |
   package p
@@ -40,4 +40,19 @@ invalid:
       // but never handles the PowerShell smart-quote delimiters.
       s = strings.ReplaceAll(s, "'", "''")
       return "'" + s + "'"
+  }
+- |
+  package p
+  func QuotePowerShellInterpreted(s string) string {
+      // The escaped source form of a double quote: four characters, not three.
+      s = strings.ReplaceAll(s, "\"", "\\\"")
+      return "\"" + s + "\""
+  }
+- |
+  package p
+  func EscapePowerShellArgument(s string) string {
+      // Smart quotes appear only as WRAPPERS, never in a replace search
+      // position, so nothing neutralizes an input smart quote.
+      s = strings.Replace(s, "'", "''", -1)
+      return "‘" + s + "’"
   }
