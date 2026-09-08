@@ -24,6 +24,7 @@ class VLAMultidimCountTests(unittest.TestCase):
             check=False, timeout=15,
         )
         self.assertIn(result.returncode, (0, 1), result.stderr)
+        self.assertTrue(result.stdout.strip(), result.stderr)
         findings_two = json.loads(result.stdout)
         self.assertEqual(len(findings_two), 2,
                          f"Expected 2 findings for 'int m[rows][cols]', got {len(findings_two)}")
@@ -37,6 +38,7 @@ class VLAMultidimCountTests(unittest.TestCase):
             check=False, timeout=15,
         )
         self.assertIn(result.returncode, (0, 1), result.stderr)
+        self.assertTrue(result.stdout.strip(), result.stderr)
         findings_one = json.loads(result.stdout)
         self.assertEqual(len(findings_one), 1,
                          f"Expected 1 finding for 'int m[rows][10]', got {len(findings_one)}")
