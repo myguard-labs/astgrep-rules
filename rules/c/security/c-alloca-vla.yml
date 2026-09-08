@@ -18,7 +18,9 @@ note: >-
   Sizes that are not a bare identifier -- `buf[n * 2]`, `buf[len + 1]`,
   `buf[get_len()]` -- are out of scope and not reported. Parameter
   declarators such as `void f(int n, char buf[n])` are excluded because they
-  decay to a pointer and allocate nothing.
+  decay to a pointer and allocate nothing. A multidimensional VLA nests one
+  array declarator inside another, so only the outermost reports and
+  `int m[rows][cols]` raises one finding rather than one per dimension.
 rule:
   any:
     - kind: call_expression
@@ -37,3 +39,6 @@ rule:
             inside:
               kind: parameter_declaration
               stopBy: end
+        - not:
+            inside:
+              kind: array_declarator
