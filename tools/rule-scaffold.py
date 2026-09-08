@@ -21,20 +21,33 @@ Inputs:  a proposal (by --id from a proposals.jsonl) or explicit flags;
          rule's `rule:` body (else a TODO placeholder that will not parse as a
          rule, so an unfinished scaffold cannot pass the suite by accident).
 Outputs: the two YAML files; tests/test_diagnostics.py count bumped by one.
-Exit:    0 written, 1 refused (id exists, bad id, missing inputs).
-Side effects: writes into the repository; --dry-run prints instead.
+Exit:    0 written, 1 refused (invalid/conflicting inputs or lock unavailable).
+Side effects: writes into the repository; --dry-run prints instead but still
+              acquires the coordination lock and may create its ignored file.
 Limits:  message/note are drafts from the claim; the author rewrites them.
 Extend:  CATEGORIES, LANGUAGES.
 """
 
 import argparse
+import errno
 import json
+import os
 import re
 import sys
 import tempfile
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
+from time import monotonic, sleep
 
 import yaml
+
+WINDOWS = os.name == "nt"
+WINDOWS_LOCK_RETRY_ERRNOS = {
+    getattr(errno, name) for name in ("EACCES", "EDEADLK", "EDEADLOCK") if hasattr(errno, name)
+}
+POSIX_LOCK_RETRY_ERRNOS = {errno.EACCES, errno.EAGAIN}
+LOCK_TIMEOUT_SECONDS = 60
+LOCK_POLL_SECONDS = 0.1
 
 ROOT = Path(__file__).resolve().parents[1]
 CATEGORIES = ("security", "correctness")
@@ -191,6 +204,73 @@ def create_parent_dirs(directories: tuple[Path, ...], created_dirs: list[Path]) 
                 created_dirs.append(path)
 
 
+def repository_lock_path() -> Path:
+    """Keep the persistent lock outside tracked files when Git metadata exists."""
+    metadata = ROOT / ".git"
+    if metadata.is_dir():
+        return metadata / "rule-scaffold.lock"
+    if metadata.is_file():
+        try:
+            marker = metadata.read_text(encoding="utf-8").strip()
+        except (OSError, UnicodeError):
+            marker = ""
+        if marker.startswith("gitdir: "):
+            gitdir = Path(marker.removeprefix("gitdir: "))
+            gitdir = gitdir if gitdir.is_absolute() else ROOT / gitdir
+            if gitdir.is_dir():
+                return gitdir / "rule-scaffold.lock"
+    return ROOT / ".rule-scaffold.lock"
+
+
+@contextmanager
+def scaffold_lock():
+    """Serialize scaffolds so rule files and the inventory count stay consistent."""
+    with repository_lock_path().open("a+b") as lock:
+        if WINDOWS:
+            import msvcrt
+        else:
+            import fcntl
+        lock.seek(0)
+        deadline = monotonic() + LOCK_TIMEOUT_SECONDS
+        while True:
+            try:
+                if WINDOWS:
+                    msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError as error:
+                retry_errnos = WINDOWS_LOCK_RETRY_ERRNOS if WINDOWS else POSIX_LOCK_RETRY_ERRNOS
+                if error.errno not in retry_errnos:
+                    raise
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("timed out waiting for the scaffold lock") from error
+                sleep(min(LOCK_POLL_SECONDS, remaining))
+        try:
+            yield
+        finally:
+            lock.seek(0)
+            if WINDOWS:
+                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def cli_scaffold_lock():
+    """Report lock contention as an ordinary CLI refusal instead of a traceback."""
+    stack = ExitStack()
+    try:
+        stack.enter_context(scaffold_lock())
+    except TimeoutError as error:
+        sys.exit(str(error))
+    except OSError as error:
+        sys.exit(f"cannot acquire scaffold lock: {error}")
+    with stack:
+        yield
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n", maxsplit=1)[0])
     ap.add_argument("--id", required=True)
@@ -204,32 +284,36 @@ def main() -> int:
     ap.add_argument("--severity", default="warning", choices=("error", "warning", "info"))
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
-    rule_path, fixture_path, (rule_text, fixture_text) = prepare_scaffold(args)
 
-    old, new = bump_count(True)
     if args.dry_run:
+        with cli_scaffold_lock():
+            rule_path, fixture_path, (rule_text, fixture_text) = prepare_scaffold(args)
+            old, new = bump_count(dry_run=True)
         print(f"--- {rule_path.relative_to(ROOT)}\n{rule_text}")
         print(f"--- {fixture_path.relative_to(ROOT)}\n{fixture_text}")
         print(f"--- tests/test_diagnostics.py: rule count {old} -> {new}")
         return 0
-    created_dirs: list[Path] = []
-    created: list[Path] = []
-    try:
-        create_parent_dirs((rule_path.parent, fixture_path.parent), created_dirs)
-        for path, text in ((rule_path, rule_text), (fixture_path, fixture_text)):
-            with path.open("x", encoding="utf-8", newline="") as output:
-                created.append(path)
-                output.write(text)
-        old, new = bump_count(False)
-    except (OSError, UnicodeError, SystemExit):
-        for path in reversed(created):
-            path.unlink(missing_ok=True)
-        for directory in reversed(created_dirs):
-            try:
-                directory.rmdir()
-            except OSError:
-                continue
-        raise
+    with cli_scaffold_lock():
+        rule_path, fixture_path, (rule_text, fixture_text) = prepare_scaffold(args)
+        bump_count(dry_run=True)
+        created_dirs: list[Path] = []
+        created: list[Path] = []
+        try:
+            create_parent_dirs((rule_path.parent, fixture_path.parent), created_dirs)
+            for path, text in ((rule_path, rule_text), (fixture_path, fixture_text)):
+                with path.open("x", encoding="utf-8", newline="") as output:
+                    created.append(path)
+                    output.write(text)
+            old, new = bump_count(dry_run=False)
+        except (OSError, UnicodeError, SystemExit):
+            for path in reversed(created):
+                path.unlink(missing_ok=True)
+            for directory in reversed(created_dirs):
+                try:
+                    directory.rmdir()
+                except OSError:
+                    continue
+            raise
     print(f"wrote {rule_path.relative_to(ROOT)}, {fixture_path.relative_to(ROOT)}; "
           f"rule count {old} -> {new}. Next: tools/rule-probe.py {args.id}")
     return 0

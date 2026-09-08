@@ -10,7 +10,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -1500,6 +1502,201 @@ class ScaffoldTests(unittest.TestCase):
                 "--near-miss", "good(x)", "--claim", "Check call", "--matcher", str(matcher)]
         return guard, argv
 
+    def test_same_id_concurrent_scaffolds_are_revalidated_under_lock(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            guard, argv = self.make_scaffold_case(root)
+            matcher = Path(argv[-1])
+            first_validated = threading.Event()
+            second_started = threading.Event()
+            second_contended = threading.Event()
+            release_first = threading.Event()
+            timeout = 10
+            thread_args = threading.local()
+            original_prepare = SCAFFOLD.prepare_scaffold
+            original_sleep = SCAFFOLD.sleep
+
+            def prepare(args):
+                result = original_prepare(args)
+                if args.category == "security":
+                    first_validated.set()
+                    release_first.wait()
+                return result
+
+            def contention_sleep(_delay):
+                if thread_args.value.category == "correctness":
+                    second_contended.set()
+                    release_first.wait()
+                original_sleep(_delay)
+
+            def run(category):
+                thread_args.value = SimpleNamespace(
+                    id="go-test-rule", proposal=None, language="go", category=category,
+                    positive="bad(x)", near_miss="good(x)", claim="Check call",
+                    matcher=matcher, severity="warning", dry_run=False)
+                if category == "correctness":
+                    second_started.set()
+                return SCAFFOLD.main()
+
+            with patch.object(SCAFFOLD.argparse.ArgumentParser, "parse_args",
+                              side_effect=lambda: thread_args.value), \
+                    patch.object(SCAFFOLD, "prepare_scaffold", side_effect=prepare), \
+                    patch.object(SCAFFOLD, "sleep", side_effect=contention_sleep), \
+                    patch("builtins.print"), ThreadPoolExecutor(max_workers=2) as pool:
+                first = pool.submit(run, "security")
+                try:
+                    self.assertTrue(first_validated.wait(timeout))
+                    second = pool.submit(run, "correctness")
+                    self.assertTrue(second_started.wait(timeout))
+                    self.assertTrue(second_contended.wait(timeout), "second scaffold did not contend")
+                finally:
+                    release_first.set()
+                self.assertEqual(first.result(timeout=timeout), 0)
+                with self.assertRaisesRegex(SystemExit, "already exists"):
+                    second.result(timeout=timeout)
+            self.assertTrue((root / "rules/go/security/go-test-rule.yml").exists())
+            self.assertFalse((root / "rules/go/correctness/go-test-rule.yml").exists())
+            self.assertEqual(guard.read_text(encoding="utf-8").count(", 4)"), 2)
+
+    def test_cli_lock_timeout_is_reported_without_traceback(self):
+        argv = ["rule-scaffold", "--id", "go-test-rule", "--category", "security",
+                "--dry-run"]
+        with patch("sys.argv", argv), \
+                patch.object(SCAFFOLD, "scaffold_lock",
+                             side_effect=TimeoutError("timed out waiting for the scaffold lock")), \
+                self.assertRaisesRegex(SystemExit, "timed out waiting for the scaffold lock"):
+            SCAFFOLD.main()
+
+    def test_cli_lock_wrapper_does_not_relabel_body_timeouts(self):
+        with patch.object(SCAFFOLD, "scaffold_lock", return_value=contextlib.nullcontext()), \
+                self.assertRaisesRegex(TimeoutError, "body operation"), \
+                SCAFFOLD.cli_scaffold_lock():
+            raise TimeoutError("body operation timed out")
+
+    def test_cli_lock_permission_failure_is_a_readable_refusal(self):
+        with patch.object(SCAFFOLD, "scaffold_lock",
+                          side_effect=PermissionError("read-only lock location")), \
+                self.assertRaisesRegex(SystemExit,
+                                       "cannot acquire scaffold lock: read-only lock location"), \
+                SCAFFOLD.cli_scaffold_lock():
+            self.fail("unavailable lock was acquired")
+
+    def test_windows_lock_does_not_access_contents_before_locking(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lock_path = Path(directory) / "scaffold.lock"
+            fake_msvcrt = SimpleNamespace(LK_NBLCK=1, LK_UNLCK=2, calls=[])
+            fake_msvcrt.locking = lambda _fd, mode, count: fake_msvcrt.calls.append((mode, count))
+            with patch.object(SCAFFOLD, "repository_lock_path", return_value=lock_path), \
+                    patch.object(SCAFFOLD, "WINDOWS", True), \
+                    patch.dict(sys.modules, {"msvcrt": fake_msvcrt}), SCAFFOLD.scaffold_lock():
+                self.assertEqual(fake_msvcrt.calls, [(fake_msvcrt.LK_NBLCK, 1)])
+            self.assertEqual(fake_msvcrt.calls, [
+                (fake_msvcrt.LK_NBLCK, 1), (fake_msvcrt.LK_UNLCK, 1)])
+            self.assertEqual(lock_path.read_bytes(), b"")
+
+    def test_windows_lock_retries_sharing_violations(self):
+        def failing_once(error_code):
+            fake = SimpleNamespace(LK_NBLCK=1, LK_UNLCK=2, calls=[])
+
+            def locking(_fd, mode, count):
+                fake.calls.append((mode, count))
+                if mode == fake.LK_NBLCK and fake.calls.count((mode, count)) == 1:
+                    raise OSError(error_code, "temporarily locked")
+
+            fake.locking = locking
+            return fake
+
+        for error_code in (SCAFFOLD.errno.EACCES, SCAFFOLD.errno.EDEADLK):
+            with self.subTest(error_code=error_code), tempfile.TemporaryDirectory() as directory:
+                lock_path = Path(directory) / "scaffold.lock"
+                fake_msvcrt = failing_once(error_code)
+                with patch.object(SCAFFOLD, "repository_lock_path", return_value=lock_path), \
+                        patch.object(SCAFFOLD, "WINDOWS", True), \
+                        patch.dict(sys.modules, {"msvcrt": fake_msvcrt}), \
+                        patch.object(SCAFFOLD, "sleep") as sleeper, \
+                        SCAFFOLD.scaffold_lock():
+                    pass
+                self.assertEqual(fake_msvcrt.calls, [
+                    (fake_msvcrt.LK_NBLCK, 1), (fake_msvcrt.LK_NBLCK, 1),
+                    (fake_msvcrt.LK_UNLCK, 1)])
+                sleeper.assert_called_once_with(SCAFFOLD.LOCK_POLL_SECONDS)
+
+    def test_windows_lock_timeout_is_explicit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lock_path = Path(directory) / "scaffold.lock"
+            fake_msvcrt = SimpleNamespace(LK_NBLCK=1, LK_UNLCK=2)
+
+            def unavailable(*_args):
+                raise OSError(SCAFFOLD.errno.EACCES, "still locked")
+
+            fake_msvcrt.locking = unavailable
+            with patch.object(SCAFFOLD, "repository_lock_path", return_value=lock_path), \
+                    patch.object(SCAFFOLD, "WINDOWS", True), \
+                    patch.dict(sys.modules, {"msvcrt": fake_msvcrt}), \
+                    patch.object(SCAFFOLD, "monotonic", side_effect=[0, 61]), \
+                    patch.object(SCAFFOLD, "sleep") as sleeper, \
+                    self.assertRaisesRegex(TimeoutError, "scaffold lock"), \
+                    SCAFFOLD.scaffold_lock():
+                self.fail("unavailable lock was acquired")
+            sleeper.assert_not_called()
+
+    def test_posix_lock_retries_contention_then_unlocks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lock_path = Path(directory) / "scaffold.lock"
+            fake_fcntl = SimpleNamespace(LOCK_EX=1, LOCK_NB=2, LOCK_UN=4, calls=[])
+            lock_operation = fake_fcntl.LOCK_EX | fake_fcntl.LOCK_NB
+
+            def flock(_fd, operation):
+                fake_fcntl.calls.append(operation)
+                if operation == lock_operation and fake_fcntl.calls.count(operation) == 1:
+                    raise BlockingIOError(SCAFFOLD.errno.EAGAIN, "temporarily locked")
+
+            fake_fcntl.flock = flock
+            with patch.object(SCAFFOLD, "repository_lock_path", return_value=lock_path), \
+                    patch.object(SCAFFOLD, "WINDOWS", False), \
+                    patch.dict(sys.modules, {"fcntl": fake_fcntl}), \
+                    patch.object(SCAFFOLD, "sleep") as sleeper, SCAFFOLD.scaffold_lock():
+                pass
+            self.assertEqual(fake_fcntl.calls, [lock_operation, lock_operation,
+                                                fake_fcntl.LOCK_UN])
+            sleeper.assert_called_once_with(SCAFFOLD.LOCK_POLL_SECONDS)
+
+    def test_posix_lock_timeout_is_explicit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lock_path = Path(directory) / "scaffold.lock"
+            fake_fcntl = SimpleNamespace(LOCK_EX=1, LOCK_NB=2, LOCK_UN=4)
+
+            def unavailable(_fd, _operation):
+                raise BlockingIOError(SCAFFOLD.errno.EAGAIN, "still locked")
+
+            fake_fcntl.flock = unavailable
+            with patch.object(SCAFFOLD, "repository_lock_path", return_value=lock_path), \
+                    patch.object(SCAFFOLD, "WINDOWS", False), \
+                    patch.dict(sys.modules, {"fcntl": fake_fcntl}), \
+                    patch.object(SCAFFOLD, "monotonic", side_effect=[0, 61]), \
+                    patch.object(SCAFFOLD, "sleep") as sleeper, \
+                    self.assertRaisesRegex(TimeoutError, "scaffold lock"), \
+                    SCAFFOLD.scaffold_lock():
+                self.fail("unavailable lock was acquired")
+            sleeper.assert_not_called()
+
+    def test_linked_worktree_lock_uses_relative_git_directory(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            gitdir = root / "metadata"
+            gitdir.mkdir()
+            (root / ".git").write_text("gitdir: metadata\n", encoding="utf-8")
+            self.assertEqual(SCAFFOLD.repository_lock_path(), gitdir / "rule-scaffold.lock")
+
+    def test_stale_linked_worktree_metadata_uses_repository_fallback(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            (root / ".git").write_text("gitdir: missing-metadata\n", encoding="utf-8")
+            self.assertEqual(SCAFFOLD.repository_lock_path(), root / ".rule-scaffold.lock")
+
     def test_trailing_newline_id_is_refused(self):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(SCAFFOLD, "ROOT", Path(directory)):
@@ -1526,7 +1723,26 @@ class ScaffoldTests(unittest.TestCase):
             guard.parent.mkdir()
             original = "self.assertEqual(len(rules), 3)\nself.assertEqual(checked, 3)\n"
             guard.write_text(original, encoding="utf-8")
-            with patch("sys.argv", argv), contextlib.redirect_stdout(io.StringIO()) as output:
+            held = False
+            original_prepare = SCAFFOLD.prepare_scaffold
+
+            @contextlib.contextmanager
+            def observed_lock():
+                nonlocal held
+                held = True
+                try:
+                    yield
+                finally:
+                    held = False
+
+            def prepare(args):
+                self.assertTrue(held, "dry-run reads bypassed the scaffold lock")
+                return original_prepare(args)
+
+            with patch("sys.argv", argv), patch.object(SCAFFOLD, "scaffold_lock",
+                                                       side_effect=observed_lock), \
+                    patch.object(SCAFFOLD, "prepare_scaffold", side_effect=prepare), \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
                 self.assertEqual(SCAFFOLD.main(), 0)
             self.assertIn("message:", output.getvalue())
             self.assertEqual(guard.read_text(encoding="utf-8"), original)
