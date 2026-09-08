@@ -449,14 +449,9 @@ def reject_duplicate_proposals(proposals, bad):
     return [proposal for proposal in proposals if proposal["id"] not in duplicates]
 
 
-def load_cluster_packet(path):
-    """Read the packet snapshot consumed by ingestion and validate its required fields."""
+def cluster_packet_fields(packet):
+    """Validate one packet from the manifest snapshot consumed by ingestion."""
     try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as error:
-        return None, f"cannot read packet: {error}"
-    try:
-        packet = json.loads(text)
         if not isinstance(packet, dict):
             raise TypeError("packet must be an object")
         candidates = packet.get("candidates")
@@ -479,36 +474,36 @@ def load_cluster_packet(path):
 
 
 def cluster_ingest(args) -> int:
-    if cluster_manifest(args.work / "cluster") is None:
+    packets = cluster_manifest(args.work / "cluster")
+    if packets is None:
         return 1
-    packets = sorted((args.work / "cluster" / "packets").glob("*.json"))
     proposals, bad, missing = [], [], []
-    for p in packets:
-        reply_path = args.work / "cluster" / "replies" / p.name
+    for stem, packet in sorted(packets.items()):
+        reply_path = args.work / "cluster" / "replies" / f"{stem}.json"
         if not reply_path.exists():
-            missing.append(p.stem)
+            missing.append(stem)
             continue
-        loaded, error = load_cluster_packet(p)
+        loaded, error = cluster_packet_fields(packet)
         if error:
-            bad.append((p.stem, error))
+            bad.append((stem, error))
             continue
         members, language = loaded
         try:
             reply_text = reply_path.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as error:
-            bad.append((p.stem, f"cannot read reply: {error}"))
+            bad.append((stem, f"cannot read reply: {error}"))
             continue
         try:
             reply = json.loads(reply_text)
         except json.JSONDecodeError as e:
-            bad.append((p.stem, f"invalid JSON: {e}"))
+            bad.append((stem, f"invalid JSON: {e}"))
             continue
-        err, props = validate_cluster(reply, p.stem, members, language)
+        err, props = validate_cluster(reply, stem, members, language)
         if err:
-            bad.append((p.stem, err))
+            bad.append((stem, err))
             continue
         for pr in props:
-            proposals.append({**pr, "cluster": p.stem})
+            proposals.append({**pr, "cluster": stem})
     proposals = reject_duplicate_proposals(proposals, bad)
     write_jsonl(args.work / "cluster" / "proposals.jsonl", proposals)
     hist: dict[str, int] = defaultdict(int)

@@ -933,7 +933,7 @@ class ReplyTests(unittest.TestCase):
             self.assertEqual({tuple(p["supporting"]) for p in PACKETS.read_jsonl(proposals_path)},
                              {("abc",), ("def",)})
 
-    def test_cluster_ingest_rejects_packet_changed_after_manifest_check(self):
+    def test_cluster_packet_snapshot_schema_is_validated(self):
         malformed = ({}, {"candidates": {}, "language": "go"},
                      {"candidates": [], "language": "go"},
                      {"candidates": [{"short": "abc"}], "language": 7},
@@ -941,54 +941,50 @@ class ReplyTests(unittest.TestCase):
                      {"candidates": [{"short": ""}], "language": "go"},
                      {"candidates": [{"short": 7}], "language": "go"})
         for packet in malformed:
-            with self.subTest(packet=packet), tempfile.TemporaryDirectory() as directory, \
-                    contextlib.redirect_stderr(io.StringIO()) as errors:
-                root = Path(directory)
-                packets = root / "cluster/packets"
-                replies = root / "cluster/replies"
-                packets.mkdir(parents=True)
-                replies.mkdir()
-                (packets / "go-bounds.json").write_text(json.dumps(packet))
-                (replies / "go-bounds.json").write_text(json.dumps(
-                    {"cluster": "go-bounds", "proposals": []}))
-                with patch.object(PACKETS, "cluster_manifest", return_value={}):
-                    self.assertEqual(PACKETS.cluster_ingest(SimpleNamespace(work=root)), 1)
-                self.assertEqual(PACKETS.read_jsonl(root / "cluster/proposals.jsonl"), [])
-                self.assertIn("REJECT go-bounds: invalid packet", errors.getvalue())
+            with self.subTest(packet=packet):
+                loaded, error = PACKETS.cluster_packet_fields(packet)
+                self.assertIsNone(loaded)
+                self.assertIn("invalid packet", error)
 
-    def test_cluster_packet_read_failure_is_not_reported_as_invalid_schema(self):
-        path = Path("unreadable-packet.json")
-        with patch.object(Path, "read_text", side_effect=PermissionError("denied")) as reader:
-            loaded, error = PACKETS.load_cluster_packet(path)
-        reader.assert_called_once_with(encoding="utf-8")
-        self.assertIsNone(loaded)
-        self.assertIn("cannot read packet", error)
-        self.assertNotIn("invalid packet", error)
-
-    def test_cluster_ingest_rejects_packet_with_invalid_utf8(self):
+    def test_cluster_ingest_uses_verified_manifest_snapshot(self):
         with tempfile.TemporaryDirectory() as directory, \
                 contextlib.redirect_stderr(io.StringIO()) as errors:
             root = Path(directory)
-            packets = root / "cluster/packets"
-            replies = root / "cluster/replies"
-            packets.mkdir(parents=True)
-            replies.mkdir()
-            (packets / "go-bounds.json").write_bytes(b"\xff")
+            stage = root / "cluster"
+            packets = stage / "packets"
+            replies = stage / "replies"
+            snapshot = {"go-bounds": {
+                "language": "go", "candidates": [{"short": "abc"}]}}
+            self.assertTrue(PACKETS.emit_packets(stage, snapshot, PACKETS.CLUSTER_PROMPT))
             (replies / "go-bounds.json").write_text(json.dumps(
-                {"cluster": "go-bounds", "proposals": []}))
-            with patch.object(PACKETS, "cluster_manifest", return_value={}):
-                self.assertEqual(PACKETS.cluster_ingest(SimpleNamespace(work=root)), 1)
-            self.assertEqual(PACKETS.read_jsonl(root / "cluster/proposals.jsonl"), [])
-            self.assertIn("REJECT go-bounds: cannot read packet", errors.getvalue())
+                {"cluster": "go-bounds", "proposals": [
+                    {**self.proposal(), "supporting": ["abc"]}]}))
+            packet_state = PACKETS.packet_state
+
+            def validate_then_mutate(*args, **kwargs):
+                valid = packet_state(*args, **kwargs)
+                self.assertTrue(valid)
+                (packets / "go-bounds.json").write_text(json.dumps(
+                    {"language": "c", "candidates": [{"short": "def"}]}))
+                (packets / "go-extra.json").write_text(json.dumps(
+                    {"language": "go", "candidates": [{"short": "xyz"}]}))
+                (replies / "go-extra.json").write_text(json.dumps(
+                    {"cluster": "go-extra", "proposals": [
+                        {**self.proposal(), "id": "go-extra-check",
+                         "supporting": ["xyz"]}]}))
+                return valid
+
+            with patch.object(PACKETS, "packet_state", side_effect=validate_then_mutate):
+                self.assertEqual(PACKETS.cluster_ingest(SimpleNamespace(work=root)), 0)
+            proposals = PACKETS.read_jsonl(root / "cluster/proposals.jsonl")
+            self.assertEqual([proposal["id"] for proposal in proposals], [self.proposal()["id"]])
+            self.assertNotIn("REJECT", errors.getvalue())
 
     def test_cluster_ingest_reports_missing_reply_before_packet_schema(self):
         with tempfile.TemporaryDirectory() as directory, \
                 contextlib.redirect_stderr(io.StringIO()) as errors:
             root = Path(directory)
-            packets = root / "cluster/packets"
-            packets.mkdir(parents=True)
-            (packets / "go-bounds.json").write_text("{}")
-            with patch.object(PACKETS, "cluster_manifest", return_value={}):
+            with patch.object(PACKETS, "cluster_manifest", return_value={"go-bounds": {}}):
                 self.assertEqual(PACKETS.cluster_ingest(SimpleNamespace(work=root)), 1)
             self.assertIn("MISSING go-bounds", errors.getvalue())
             self.assertNotIn("REJECT go-bounds", errors.getvalue())
@@ -997,14 +993,12 @@ class ReplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, \
                 contextlib.redirect_stderr(io.StringIO()) as errors:
             root = Path(directory)
-            packets = root / "cluster/packets"
             replies = root / "cluster/replies"
-            packets.mkdir(parents=True)
-            replies.mkdir()
-            (packets / "go-bounds.json").write_text(json.dumps(
-                {"language": "go", "candidates": [{"short": "abc"}]}))
+            replies.mkdir(parents=True)
             (replies / "go-bounds.json").write_bytes(b"\xff")
-            with patch.object(PACKETS, "cluster_manifest", return_value={}):
+            snapshot = {"go-bounds": {
+                "language": "go", "candidates": [{"short": "abc"}]}}
+            with patch.object(PACKETS, "cluster_manifest", return_value=snapshot):
                 self.assertEqual(PACKETS.cluster_ingest(SimpleNamespace(work=root)), 1)
             self.assertEqual(PACKETS.read_jsonl(root / "cluster/proposals.jsonl"), [])
             self.assertIn("REJECT go-bounds: cannot read reply", errors.getvalue())
@@ -1013,12 +1007,8 @@ class ReplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, \
                 contextlib.redirect_stderr(io.StringIO()) as errors:
             root = Path(directory)
-            packet = root / "cluster/packets/go-bounds.json"
             reply = root / "cluster/replies/go-bounds.json"
-            packet.parent.mkdir(parents=True)
-            reply.parent.mkdir()
-            packet.write_text(json.dumps(
-                {"language": "go", "candidates": [{"short": "abc"}]}))
+            reply.parent.mkdir(parents=True)
             reply.write_text("{}")
             original_read = Path.read_text
 
@@ -1027,7 +1017,9 @@ class ReplyTests(unittest.TestCase):
                     raise PermissionError("reply denied")
                 return original_read(path, *args, **kwargs)
 
-            with patch.object(PACKETS, "cluster_manifest", return_value={}), \
+            snapshot = {"go-bounds": {
+                "language": "go", "candidates": [{"short": "abc"}]}}
+            with patch.object(PACKETS, "cluster_manifest", return_value=snapshot), \
                     patch.object(Path, "read_text", refuse_reply):
                 self.assertEqual(PACKETS.cluster_ingest(SimpleNamespace(work=root)), 1)
             self.assertEqual(PACKETS.read_jsonl(root / "cluster/proposals.jsonl"), [])
@@ -1631,6 +1623,10 @@ class ScaffoldTests(unittest.TestCase):
                 "--near-miss", "good(x)", "--claim", "Check call", "--matcher", str(matcher)]
         return guard, argv
 
+    def test_count_temporary_files_are_ignored(self):
+        self.assertIn(".rule-count-*", (ROOT / ".gitignore").read_text(
+            encoding="utf-8").splitlines())
+
     def test_same_id_concurrent_scaffolds_are_revalidated_under_lock(self):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(SCAFFOLD, "ROOT", Path(directory)):
@@ -1974,6 +1970,20 @@ class ScaffoldTests(unittest.TestCase):
                 SCAFFOLD.remove_owned_temp(path, None)
             self.assertTrue(path.exists())
             self.assertIn("ownership identity unavailable", stderr.getvalue())
+
+    def test_windows_unavailable_file_identity_is_retained(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".rule-count-owned"
+            path.write_text("partial")
+            unavailable = SimpleNamespace(st_dev=0, st_ino=0)
+            with patch.object(SCAFFOLD, "WINDOWS", True), \
+                    patch.object(Path, "lstat", return_value=unavailable), \
+                    patch.object(Path, "unlink") as unlink, \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr:
+                SCAFFOLD.remove_owned_temp(path, unavailable)
+            unlink.assert_not_called()
+            self.assertIn("filesystem identity unavailable; left untouched",
+                          stderr.getvalue())
 
     def test_broken_temp_warning_does_not_mask_original_exception(self):
         with tempfile.TemporaryDirectory() as directory:

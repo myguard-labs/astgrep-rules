@@ -140,6 +140,10 @@ def remove_owned_temp(path: Path | None, identity: os.stat_result | None) -> Non
     except BaseException as error:  # noqa: BLE001
         warn_temp_retained(path, f"cannot verify ownership: {error}")
         return
+    if WINDOWS and (not identity.st_dev or not identity.st_ino
+                    or not current.st_dev or not current.st_ino):
+        warn_temp_retained(path, "filesystem identity unavailable; left untouched")
+        return
     if not os.path.samestat(identity, current):
         warn_temp_retained(path, "path ownership changed; left untouched")
         return
