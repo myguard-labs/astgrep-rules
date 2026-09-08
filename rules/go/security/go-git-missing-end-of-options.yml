@@ -3,27 +3,37 @@ language: go
 severity: warning
 message: >-
   exec.Command/CommandContext invokes git with a literal argv where a
-  non-literal value follows the subcommand, and neither --end-of-options nor
-  -- appears anywhere in the argument list. Git parses every argument until
-  one of those markers as a possible option, so a value starting with a dash
-  is reinterpreted as a flag instead of the operand it was meant to be (for
-  example -- and --end-of-options both stop this for add, rm, checkout,
-  restore, branch, tag, clone, grep and ls-files; -- also does it for log,
-  diff and show, which reject --end-of-options outright). Insert the
-  appropriate marker for the subcommand in use directly before the
-  non-literal value, or validate that the value cannot begin with a dash.
+  non-literal value follows the subcommand and no option-terminating marker
+  appears BEFORE that value. Git parses every argument up to such a marker as
+  a possible option, so a value starting with a dash is reinterpreted as a
+  flag instead of the operand it was meant to be. A marker placed after the
+  value does not protect it. The two markers are not interchangeable:
+  --end-of-options (git >= 2.24) only terminates option parsing and leaves
+  the operand's meaning intact, while -- separates revisions from paths and
+  therefore changes what the operand means for subcommands that accept both.
+  For example, git log -- ref searches the history of a PATH named ref and
+  silently reports nothing rather than logging that revision, and
+  git checkout -- branch restores a file instead of switching branches.
+  Prefer inserting --end-of-options before the non-literal value wherever
+  the subcommand accepts it; where it does not, or where the deployed git
+  predates 2.24, validate that the value cannot begin with a dash instead of blindly
+  inserting --.
 note: >-
   Fires on a literal exec.Command("git", ...)/exec.CommandContext(ctx,
   "git", ...) argv where the subcommand is a literal and a later element is
-  not a literal, and neither "--end-of-options" nor "--" is present anywhere
-  in the argv. It cannot tell whether the non-literal value is
-  attacker-controlled, so a value drawn from a fixed internal list is a
-  legitimate dismissal. --end-of-options was added in git 2.24 and several
-  subcommands (log, diff, show, reset among them) do not accept it at all,
-  so a fleet running an older git or invoking one of those subcommands needs
-  -- instead; this rule does not check which marker suits the matched
-  subcommand or whether the installed git is new enough, only that some
-  marker is present. This is a literal-argv rule only: the common
+  not a literal with neither "--end-of-options" nor "--" at an earlier
+  position in the argv. A marker appearing after that element does not
+  protect it and does not suppress the finding. It cannot tell whether the
+  non-literal value is attacker-controlled, so a value drawn from a fixed
+  internal list is a legitimate dismissal. --end-of-options was added in git
+  2.24; on the git this rule was authored against (2.55.0) log, diff, show,
+  reset, checkout, restore, branch, tag, add, rm, grep, ls-files and
+  rev-parse all accept it, but
+  per-subcommand support across older releases was not audited here, so a
+  fleet on an older git must confirm it before relying on it. This rule does
+  not check which marker suits the matched subcommand, nor whether the
+  installed git is new enough -- only that some marker precedes the
+  non-literal value. This is a literal-argv rule only: the common
   args = []string{"git", sub}; args = append(args, userValue) form, and any
   argv built into a []string and passed with exec.Command(name, args...),
   is an honest syntactic miss of this rule, the same class of gap already
@@ -49,8 +59,7 @@ rule:
                   - has:
                       all:
                         - nthChild: {position: n+3, ofRule: {not: {kind: comment}}}
-                        - matches: not-literal
-                  - not: {has: {matches: end-marker}}
+                        - matches: unprotected-not-literal
         - all:
             - has: {field: function, regex: '^exec\.CommandContext$'}
             - has:
@@ -68,8 +77,7 @@ rule:
                   - has:
                       all:
                         - nthChild: {position: n+4, ofRule: {not: {kind: comment}}}
-                        - matches: not-literal
-                  - not: {has: {matches: end-marker}}
+                        - matches: unprotected-not-literal
 utils:
   string-literal:
     any:
@@ -84,3 +92,10 @@ utils:
   not-literal:
     not:
       matches: string-literal
+  unprotected-not-literal:
+    all:
+      - matches: not-literal
+      - not:
+          follows:
+            stopBy: end
+            matches: end-marker

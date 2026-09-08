@@ -889,12 +889,16 @@ tail `return` immediately after the finalize does not match, nor does a use in a
   common `args := []string{"git", sub}; args = append(args, userValue)` shape,
   and any argv built into a slice and passed as `exec.Command(name, args...)`,
   is an honest syntactic miss of the same class already disclosed for the
-  shell and formatted-argument argv rules in this pack. It also does not check
-  that `--end-of-options` or `--` is the correct marker for the matched
-  subcommand, or that the installed git is new enough for `--end-of-options`
-  (git 2.24+; `log`, `diff`, `show` and `reset` reject it outright and need
-  `--` instead) — it only requires that one of the two literals appears
-  somewhere in the argv.
+  shell and formatted-argument argv rules in this pack. It requires only that
+  one of the two marker literals appears at an earlier argv position than
+  the non-literal value; a marker placed after that value does not suppress the finding. It
+  does not check that the marker chosen is the correct one for the matched
+  subcommand — `--end-of-options` merely ends option parsing, while `--`
+  separates revisions from paths and so changes the operand's meaning for
+  subcommands taking both (`git log -- ref` searches a path named `ref`) —
+  nor that the installed git is new enough for `--end-of-options` (git 2.24+;
+  per-subcommand support on releases older than the 2.55.0 this rule was
+  checked against was not audited).
 
 ## php and wordpress
 
