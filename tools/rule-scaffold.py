@@ -82,7 +82,11 @@ def bump_count(dry_run: bool) -> tuple[int, int]:
     together.
     """
     test = ROOT / "tests" / "test_diagnostics.py"
-    text = test.read_text(encoding="utf-8")
+    try:
+        with test.open(encoding="utf-8", newline="") as source:
+            text = source.read()
+    except (OSError, UnicodeError) as error:
+        sys.exit(f"cannot read rule-count guard {test}: {error}")
     pattern = re.compile(r"(self\.assertEqual\((?:len\(rules\)|checked), )(\d+)")
     counts = {int(m.group(2)) for m in pattern.finditer(text)}
     if len(counts) != 1:
@@ -93,7 +97,8 @@ def bump_count(dry_run: bool) -> tuple[int, int]:
         temporary = None
         try:
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=test.parent,
-                                             delete=False, prefix=".rule-count-") as output:
+                                             newline="", delete=False,
+                                             prefix=".rule-count-") as output:
                 temporary = Path(output.name)
                 output.write(pattern.sub(lambda m: m.group(1) + str(new), text))
             temporary.chmod(test.stat().st_mode)
@@ -194,7 +199,7 @@ def main() -> int:
     created = []
     try:
         for path, text in ((rule_path, rule_text), (fixture_path, fixture_text)):
-            with path.open("x", encoding="utf-8") as output:
+            with path.open("x", encoding="utf-8", newline="") as output:
                 created.append(path)
                 output.write(text)
         bump_count(False)

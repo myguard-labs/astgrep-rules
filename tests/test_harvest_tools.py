@@ -34,18 +34,21 @@ SCAFFOLD = load_tool("rule-scaffold")
 
 @contextlib.contextmanager
 def ascii_text_defaults():
-    """Exercise implicit encodings independently of the developer's UTF-8 locale."""
+    """Exercise implicit encoding/newline behavior independently of the host."""
     original_open = Path.open
     original_temporary = tempfile.NamedTemporaryFile
 
     def open_path(path, mode="r", buffering=-1, encoding=None, errors=None, newline=None):
         if "b" not in mode and encoding in (None, "locale"):
             encoding = "ascii"
+        if "b" not in mode and any(flag in mode for flag in "wax+") and newline is None:
+            newline = "\r\n"
         return original_open(path, mode, buffering, encoding, errors, newline)
 
     def temporary(*args, **kwargs):
         if "b" not in kwargs.get("mode", "w+b"):
             kwargs.setdefault("encoding", "ascii")
+            kwargs.setdefault("newline", "\r\n")
         return original_temporary(*args, **kwargs)
 
     with patch.object(Path, "open", open_path), \
@@ -1457,8 +1460,8 @@ class ScaffoldTests(unittest.TestCase):
             self.assertFalse((Path(directory) / "rules").exists())
 
     def test_count_update_preserves_utf8_source_under_ascii_defaults(self):
-        original = ("# café 🧪\nself.assertEqual(len(rules), 3)\n"
-                    "self.assertEqual(checked, 3)\n").encode()
+        original = ("# café 🧪\r\nself.assertEqual(len(rules), 3)\n"
+                    "self.assertEqual(checked, 3)\r\n").encode()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = root / "tests/test_diagnostics.py"
@@ -1588,7 +1591,17 @@ class ScaffoldTests(unittest.TestCase):
             self.assertIn("mojibaké", rule)
             self.assertIn("café($X)", rule)
             self.assertIn("café 🧪", fixture)
+            self.assertNotIn(b"\r\n", rule_path.read_bytes())
+            self.assertNotIn(b"\r\n", fixture_path.read_bytes())
             self.assertEqual(guard.read_text(encoding="utf-8").count(", 4)"), 2)
+
+    def test_missing_rule_count_guard_is_controlled_refusal(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            path = Path(directory) / "tests/test_diagnostics.py"
+            path.parent.mkdir()
+            with self.assertRaisesRegex(SystemExit, "cannot read rule-count guard"):
+                SCAFFOLD.bump_count(False)
 
     def test_counts_update_together_and_dry_run_does_not_write(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(SCAFFOLD, "ROOT", Path(directory)):
