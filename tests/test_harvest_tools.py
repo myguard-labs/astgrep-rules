@@ -1541,6 +1541,19 @@ class ScaffoldTests(unittest.TestCase):
                     self.assertFalse((root / "rules/go/security/go-test-rule.yml").exists())
                     self.assertFalse((root / "tests/go/security/go-test-rule.yml").exists())
                     self.assertEqual(guard.read_text().count(", 3)"), 2)
+
+                def fail_fixture_encoding(path, *values, **kwargs):
+                    mode = values[0] if values else kwargs.get("mode", "r")
+                    if path == root / "tests/go/security/go-test-rule.yml" and mode == "x":
+                        raise UnicodeEncodeError("ascii", "é", 0, 1, "injected encoding failure")
+                    return original_open(path, *values, **kwargs)
+
+                with patch("sys.argv", argv), patch.object(Path, "open", fail_fixture_encoding), \
+                        self.assertRaisesRegex(UnicodeEncodeError, "injected encoding failure"):
+                    SCAFFOLD.main()
+                self.assertFalse((root / "rules/go/security/go-test-rule.yml").exists())
+                self.assertFalse((root / "tests/go/security/go-test-rule.yml").exists())
+                self.assertEqual(guard.read_text().count(", 3)"), 2)
                 with patch("sys.argv", argv):
                     self.assertEqual(SCAFFOLD.main(), 0)
                 with patch("sys.argv", argv), self.assertRaisesRegex(SystemExit, "refusing to overwrite"):
@@ -1550,6 +1563,28 @@ class ScaffoldTests(unittest.TestCase):
             self.assertEqual(rule["rule"], {"pattern": "bad($X)"})
             self.assertEqual(fixture, {"id": "go-test-rule", "valid": ["good(x)"], "invalid": ["bad(x)"]})
             self.assertEqual(guard.read_text().count(", 4)"), 2)
+
+    def test_scaffold_writes_utf8_under_ascii_defaults(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            root = Path(directory)
+            guard = root / "tests/test_diagnostics.py"
+            guard.parent.mkdir()
+            guard.write_text("self.assertEqual(len(rules), 3)\nself.assertEqual(checked, 3)\n",
+                             encoding="utf-8")
+            argv = ["rule-scaffold", "--id", "go-unicode-test", "--language", "go",
+                    "--category", "correctness", "--positive", 'fmt.Println("café 🧪")',
+                    "--near-miss", 'fmt.Println("cafe")', "--claim", "Reject mojibaké"]
+            with patch("sys.argv", argv), ascii_text_defaults(), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(SCAFFOLD.main(), 0)
+            rule_path = root / "rules/go/correctness/go-unicode-test.yml"
+            fixture_path = root / "tests/go/correctness/go-unicode-test.yml"
+            rule = rule_path.read_text(encoding="utf-8")
+            fixture = fixture_path.read_text(encoding="utf-8")
+            self.assertIn("mojibaké", rule)
+            self.assertIn("café 🧪", fixture)
+            self.assertEqual(guard.read_text(encoding="utf-8").count(", 4)"), 2)
 
     def test_counts_update_together_and_dry_run_does_not_write(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(SCAFFOLD, "ROOT", Path(directory)):

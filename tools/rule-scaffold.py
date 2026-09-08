@@ -194,11 +194,11 @@ def main() -> int:
     created = []
     try:
         for path, text in ((rule_path, rule_text), (fixture_path, fixture_text)):
-            with path.open("x") as output:
+            with path.open("x", encoding="utf-8") as output:
                 created.append(path)
                 output.write(text)
         bump_count(False)
-    except (OSError, SystemExit):
+    except (OSError, UnicodeError, SystemExit):
         for path in reversed(created):
             path.unlink(missing_ok=True)
         raise
