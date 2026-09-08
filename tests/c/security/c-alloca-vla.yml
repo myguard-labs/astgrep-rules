@@ -50,3 +50,4 @@ invalid:
 - void f(int n) { char buf[-n]; }
 - void f(struct a *a) { char buf[a->b->len]; }
 - void f(struct o *ops) { char buf[ops->get_len()]; }
+- void f(struct c *countof) { char buf[countof.get_len()]; }

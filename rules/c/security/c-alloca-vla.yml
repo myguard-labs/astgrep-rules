@@ -20,7 +20,12 @@ note: >-
   and `buf[CFG.MAX]` are skipped. The callee exemption also allowlists the
   conventional lowercase count spellings `countof`, `nitems`, `nelems`, and
   `lengthof`, so `buf[countof(z)]` is skipped the same way, through the same
-  parenthesized/unary wrappers as the uppercase exemption. The exemption is per identifier, not per
+  parenthesized/unary wrappers as the uppercase exemption. This lowercase
+  allowlist covers a direct call callee only -- the function name itself, or
+  the method name of a field-access callee -- and does not extend to the
+  object of a field-access callee or to a bare field-access size, so an
+  object merely named `countof` still reports, e.g. `buf[countof.get_len()]`.
+  The exemption is per identifier, not per
   size: within an arithmetic size each lowercase identifier is skipped only
   when it sits inside `sizeof` or inside a call whose callee is uppercase. So
   `buf[ARRAY_SIZE(x) - 1]` is skipped because its only lowercase identifier is
@@ -89,7 +94,7 @@ rule:
                                 stopBy: end
                                 kind: identifier
                                 not:
-                                  regex: ^([A-Z_].*|countof|nitems|nelems|lengthof)$
+                                  regex: ^[A-Z_]
               - all:
                   - kind: field_expression
                   - has:
