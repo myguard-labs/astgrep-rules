@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -65,6 +66,219 @@ def coverage_cases(cases):
 
 
 class HistoryTests(unittest.TestCase):
+    def test_nonspecial_opaque_authorities_preserve_encoded_host(self):
+        cases = [("custom://host%2fname/commit/", "custom://host%2fname/commit/"),
+                 ("custom://host%40name/commit/", "custom://host%40name/commit/"),
+                 ("custom://fixture-user:fixture-password@host%2fname/commit/",
+                  "custom://host%2fname/commit/")]
+        javascript = """
+const fs = require('fs');
+const u = new URL(JSON.parse(fs.readFileSync(0, 'utf8')));
+process.stdout.write(JSON.stringify({
+  host: u.hostname, userinfo: Boolean(u.username || u.password)
+}));
+"""
+        for number, (raw, expected) in enumerate(cases):
+            with self.subTest(case=number), \
+                    patch.object(HISTORY, "run", return_value="/local/repo"):
+                prefix = HISTORY.commit_url_prefix(ROOT, raw)
+                self.assertEqual(prefix, expected)
+                parsed = subprocess.run(["node", "-e", javascript], input=json.dumps(prefix),
+                                        capture_output=True, text=True, check=True, timeout=10)
+                self.assertEqual(json.loads(parsed.stdout),
+                                 {"host": HISTORY.urlsplit(expected).hostname, "userinfo": False})
+
+    def test_file_fallbacks_without_userinfo_are_preserved(self):
+        urls = ["file:///tmp/project/", "file:///C:/project/", "file://localhost/tmp/project/"]
+        javascript = """
+const fs = require('fs');
+const urls = JSON.parse(fs.readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify(urls.map(raw => {
+  const u = new URL(raw);
+  return Boolean(u.username || u.password);
+})));
+"""
+        parsed = subprocess.run(["node", "-e", javascript], input=json.dumps(urls),
+                                capture_output=True, text=True, check=True, timeout=10)
+        self.assertEqual(json.loads(parsed.stdout), [False] * len(urls))
+        for raw in urls:
+            with self.subTest(raw=raw), patch.object(HISTORY, "run", return_value="/local/repo"):
+                self.assertEqual(HISTORY.commit_url_prefix(ROOT, raw), raw)
+
+    def test_rejected_scp_origin_uses_sanitized_fallback(self):
+        userinfo = "fixture-user:fixture-password"
+        origin = "git@\\:" + userinfo + "@example.test/path.git"
+        fallback = "https://" + userinfo + "@fallback.test/project/commit/"
+        with patch.object(HISTORY, "run", return_value=origin):
+            prefix = HISTORY.commit_url_prefix(ROOT, fallback)
+        self.assertEqual(prefix, "https://fallback.test/project/commit/")
+
+    def test_shared_prefix_policy_rejects_ambiguous_authorities(self):
+        userinfo = "fixture-user:fixture-password"
+        suffix = userinfo + "@example.test/path/"
+        fallbacks = [scheme + delimiter + suffix
+                     for scheme in ("http", "https", "ftp", "ws", "wss")
+                     for delimiter in ("://\\/", ":///", ":\\\\")]
+        fallbacks += [delimiter + suffix for delimiter in ("//\\/", "///", "/\\/", "\\\\")]
+        fallbacks += ["\x01https://\\/" + suffix, "https:\t//\\/" + suffix]
+        javascript = """
+const fs = require('fs');
+const urls = JSON.parse(fs.readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify(urls.map(raw => {
+  const u = new URL(raw, 'https://base.test/');
+  return {host: u.hostname, userinfo: Boolean(u.username || u.password)};
+})));
+"""
+        parsed = subprocess.run(["node", "-e", javascript], input=json.dumps(fallbacks),
+                                capture_output=True, text=True, check=True, timeout=10)
+        self.assertEqual(json.loads(parsed.stdout),
+                         [{"host": "example.test", "userinfo": True}] * len(fallbacks))
+        cases = [("fallback", raw) for raw in fallbacks]
+        cases += [("origin", scheme + "://\\/" + suffix.removesuffix("/") + ".git")
+                  for scheme in ("http", "https")]
+        cases += [("origin", "git@\\:" + suffix.removesuffix("/") + ".git")]
+        for case, (source, raw) in enumerate(cases):
+            with self.subTest(source=source, case=case), \
+                    patch.object(HISTORY, "run", return_value=raw if source == "origin"
+                                 else "/local/repo"):
+                prefix = HISTORY.commit_url_prefix(ROOT, raw if source == "fallback" else None)
+                candidate = {"short": "abc", "repo": "sample", "subject": "fix",
+                             "churn": 1, "density": 1, "signals": [],
+                             "url": prefix + "abc" if prefix else ""}
+                with tempfile.TemporaryDirectory() as directory:
+                    index = Path(directory) / "index.md"
+                    HISTORY.write_index(index, [candidate])
+                    for rendered in (json.dumps(candidate), index.read_text()):
+                        self.assertFalse(userinfo in rendered,
+                                         "ambiguous authority leaked userinfo")
+                self.assertIsNone(prefix)
+
+    def test_shared_prefix_policy_encoded_hosts_and_safe_authorities(self):
+        for encoded in ("%2f", "%5c", "%40", "%3a", "%00", "%20"):
+            for source in ("fallback", "origin", "network-relative"):
+                raw = ("//" if source == "network-relative" else "https://") + encoded + "/path/"
+                with self.subTest(encoded=encoded, source=source), \
+                        patch.object(HISTORY, "run", return_value=raw if source == "origin"
+                                     else "/local/repo"):
+                    self.assertIsNone(HISTORY.commit_url_prefix(
+                        ROOT, None if source == "origin" else raw))
+        valid = ("https://example.test/path/", "http://127.0.0.1:8080/path/",
+                 "https://[::1]/path/", "ftp://example.test/path/", "ws://example.test/path/",
+                 "wss://example.test/path/", "//example.test/path/", "custom:opaque\\path/",
+                 "relative@name/[unclosed", "custom://[unclosed")
+        for raw in valid:
+            with self.subTest(raw=raw), patch.object(HISTORY, "run", return_value="/local/repo"):
+                self.assertEqual(HISTORY.commit_url_prefix(ROOT, raw), raw)
+        for raw, expected in (("https://example.test/owner/repo.git",
+                               "https://example.test/owner/repo/commit/"),
+                              ("git@example.test:owner/repo.git",
+                               "https://example.test/owner/repo/commit/")):
+            with self.subTest(origin=raw), patch.object(HISTORY, "run", return_value=raw):
+                self.assertEqual(HISTORY.commit_url_prefix(ROOT, None), expected)
+
+    def test_authorityless_http_fallbacks_are_not_published(self):
+        userinfo = "fixture-user:fixture-password"
+        for scheme in ("http", "https"):
+            for delimiter in ("///", "////", "\\\\", "/\\", "\\/", "//\\"):
+                with self.subTest(scheme=scheme, delimiter=delimiter), \
+                        patch.object(HISTORY, "run", return_value="/local/repo"):
+                    prefix = HISTORY.commit_url_prefix(
+                        ROOT, scheme + ":" + delimiter + userinfo + "@example.test/path/")
+                    candidate = {"short": "abc", "repo": "sample", "subject": "fix",
+                                 "churn": 1, "density": 1, "signals": [],
+                                 "url": prefix + "abc" if prefix else ""}
+                    with tempfile.TemporaryDirectory() as directory:
+                        index = Path(directory) / "index.md"
+                        HISTORY.write_index(index, [candidate])
+                        for rendered in (json.dumps(candidate), index.read_text()):
+                            self.assertFalse(userinfo in rendered,
+                                             "authorityless HTTP userinfo reached output")
+                    self.assertIsNone(prefix)
+        for fallback in ("https://example.test/path/", "http://localhost:8080/path/",
+                         "https://[::1]/path/", "custom:///opaque/path/", "relative/path/",
+                         "https://example.test/path\\part/", "custom:opaque\\path/"):
+            with self.subTest(fallback=fallback), \
+                    patch.object(HISTORY, "run", return_value="/local/repo"):
+                self.assertEqual(HISTORY.commit_url_prefix(ROOT, fallback), fallback)
+
+    def test_fallback_http_userinfo_is_not_published(self):
+        for scheme in ("http", "https", " http", " https", "\thttp", "\thttps",
+                       "\nhttp", "\nhttps", "ssh", "custom", " ssh", "\tcustom", "\nssh"):
+            for userinfo in ("fixture-token", "fixture-user:fixture-password"):
+                with self.subTest(scheme=scheme, password=":" in userinfo), \
+                        patch.object(HISTORY, "run", return_value="/local/repo"):
+                    prefix = HISTORY.commit_url_prefix(
+                        ROOT, f"{scheme}://{userinfo}@example.test/project/commit/")
+                    candidate = {"short": "abc", "repo": "sample", "subject": "fix",
+                                 "churn": 1, "density": 1, "signals": [], "url": prefix + "abc"}
+                    with tempfile.TemporaryDirectory() as directory:
+                        index = Path(directory) / "index.md"
+                        HISTORY.write_index(index, [candidate])
+                        for rendered in (json.dumps(candidate), index.read_text()):
+                            self.assertFalse(userinfo in rendered,
+                                             "fallback userinfo reached output")
+                    self.assertTrue(prefix == f"{scheme.strip()}://example.test/project/commit/",
+                                    "fallback userinfo must not reach published URLs")
+        for fallback in ("relative/commit/", "git@example.test:project/commit/",
+                         " relative/commit/", "custom://[unclosed", "relative@name/[unclosed"):
+            with patch.object(HISTORY, "run", return_value="/local/repo"):
+                self.assertEqual(HISTORY.commit_url_prefix(ROOT, fallback), fallback)
+        with patch.object(HISTORY, "run", return_value="git@example.test:owner/project.git"):
+            self.assertEqual(HISTORY.commit_url_prefix(ROOT, "relative/"),
+                             "https://example.test/owner/project/commit/")
+
+    def test_malformed_fallback_userinfo_is_rejected(self):
+        schemes = ["ssh://", "custom://", " custom://", "\tssh://", "//"]
+        schemes += [scheme + ":" + control + "//" for scheme in ("http", "ssh", "custom")
+                    for control in ("\t", "\n", "\r")]
+        schemes += ["/" + control + "/" for control in ("\t", "\n", "\r")]
+        schemes += [chr(code) + "//" for code in range(0x21)]
+        for scheme in schemes:
+            with self.subTest(scheme=scheme), \
+                    patch.object(HISTORY, "run", return_value="/local/repo"):
+                prefix = HISTORY.commit_url_prefix(
+                    ROOT, scheme + "fixture-user:fixture-password@[unclosed/path/")
+                self.assertTrue(prefix is None, "malformed fallback must not publish userinfo")
+
+    def test_parse_failure_preserves_opaque_fallbacks(self):
+        # Current urlsplit accepts these; inject failure to exercise the exception contract.
+        fallbacks = ["relative@name/[unclosed", "git@example.test:project/commit/",
+                     "relative@name/\t[unclosed", "git@\nexample.test:project/commit/"]
+        fallbacks += [chr(code) + "relative@name/[unclosed" for code in range(0x21)]
+        for fallback in fallbacks:
+            with self.subTest(fallback=fallback), \
+                    patch.object(HISTORY, "urlsplit", side_effect=ValueError("parse failure")), \
+                    patch.object(HISTORY, "run", return_value="/local/repo"):
+                self.assertEqual(HISTORY.commit_url_prefix(ROOT, fallback), fallback)
+
+    def test_per_commit_timeout_emits_partial_corpus_and_fails_cli(self):
+        history = "\n".join(char * 40 + "\x1ffix bounds\x1f2026-09-08" for char in "abc")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sample/.git").mkdir(parents=True)
+            corpus, index = root / "corpus.jsonl", root / "index.md"
+            with patch.object(HISTORY, "commit_url_prefix", return_value=None), \
+                    patch.object(HISTORY, "run", return_value=history), \
+                    patch.object(HISTORY, "changed_source_files", return_value=[
+                        HISTORY.SourceChange("x.c", 1, 1)]), \
+                    patch.object(HISTORY, "diff_body", side_effect=(
+                        "-old\n+new", subprocess.TimeoutExpired(["git", "show"], 60),
+                        "-old\n+new")), \
+                    patch.object(HISTORY, "cosmetic_commit", return_value=False), \
+                    patch.object(HISTORY, "dedupe_by_patch_id", side_effect=lambda _, rows: rows), \
+                    patch("sys.argv", ["harvest", "--root", str(root), "--repos", "sample",
+                                       "--out", str(corpus), "--index", str(index)]), \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr:
+                result = HISTORY.main()
+            rows = [json.loads(line) for line in corpus.read_text().splitlines()]
+            self.assertEqual([row["sha"] for row in rows], ["a" * 40, "c" * 40])
+            self.assertIn("a" * 12, index.read_text())
+            self.assertIn("c" * 12, index.read_text())
+            self.assertRegex(stderr.getvalue(), r"timed-out-commits=\s*1")
+            self.assertIn("skip sample:" + "b" * 40, stderr.getvalue())
+            self.assertEqual(result, 1)
+            self.assertIn("incomplete harvest", stderr.getvalue())
+
     def test_dedupe_sha_aliases_preserve_first_repo_and_packet_uniqueness(self):
         for phase in ("show", "patch-id"):
             for order in (("fast", "slow"), ("slow", "fast"), ("fast", "alias", "slow")):
@@ -183,7 +397,8 @@ class HistoryTests(unittest.TestCase):
                         patch.object(HISTORY, "diff_body", side_effect=diff), \
                         patch.object(HISTORY, "cosmetic_commit", side_effect=cosmetic), \
                         contextlib.redirect_stderr(io.StringIO()) as stderr:
-                    rows = HISTORY.harvest(ROOT, "sample", 3, 60, None)
+                    rows, timed_out = HISTORY.harvest(ROOT, "sample", 3, 60, None)
+                self.assertEqual(timed_out, 1)
                 self.assertEqual([row["sha"] for row in rows], ["a" * 40, "c" * 40])
                 self.assertRegex(stderr.getvalue(), r"timed-out-commits=\s*1")
                 self.assertIn("skip sample:" + "b" * 40, stderr.getvalue())
@@ -198,7 +413,7 @@ class HistoryTests(unittest.TestCase):
                 def harvest(_repo, name, *_args, target=phase):
                     if name == "slow" and target == "harvest":
                         raise subprocess.TimeoutExpired(["git", "log"], 60)
-                    return [{"repo": name, "sha": name, "signals": [], "churn": 1}]
+                    return [{"repo": name, "sha": name, "signals": [], "churn": 1}], 0
 
                 def show(repo, *_args, target=phase):
                     if repo.name == "slow" and target == "show":
@@ -243,7 +458,7 @@ class HistoryTests(unittest.TestCase):
                 argv = ["harvest", "--root", str(root), "--repos", "sample", "--index", str(index)]
                 if file_output:
                     argv += ["--out", str(output)]
-                with patch.object(HISTORY, "harvest", return_value=[dict(candidate)]), \
+                with patch.object(HISTORY, "harvest", return_value=([dict(candidate)], 0)), \
                         patch.object(HISTORY, "dedupe_by_patch_id",
                                      side_effect=lambda _, rows: rows), \
                         patch("sys.argv", argv), ascii_text_defaults(), \
@@ -451,7 +666,8 @@ class HistoryTests(unittest.TestCase):
                 patch.object(HISTORY, "diff_body", return_value="-x\n+y"), \
                 patch.object(HISTORY, "cosmetic_commit", return_value=False), \
                 contextlib.redirect_stderr(io.StringIO()):
-            rows = HISTORY.harvest(ROOT, "sample", 3, 60, None)
+            rows, timed_out = HISTORY.harvest(ROOT, "sample", 3, 60, None)
+        self.assertEqual(timed_out, 0)
         self.assertEqual(rows[0]["subject"], "fix: a\x1fb")
         self.assertEqual(rows[0]["date"], "2026-09-07")
 
@@ -779,12 +995,12 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("unsupported discovery language", discovery["detail"])
         self.assertNotIn("positive.None", discovery["detail"])
 
-    def test_nonstring_diagnostics_return_failed_json_checks(self):
+    def test_invalid_diagnostics_return_failed_json_checks(self):
         rule_path, fixture_path = PROBE.find_rule("go-tls-min-version")
         rule = yaml.safe_load(rule_path.read_text())
         fixture = yaml.safe_load(fixture_path.read_text())
         for field in ("message", "note"):
-            for value in (42, True, ["text"], {"text": "value"}):
+            for value in (42, True, ["text"], {"text": "value"}, " ", "\t\n"):
                 with self.subTest(field=field, value=value):
                     with patch.object(PROBE, "load_inputs", return_value=(
                             {**rule, field: value}, fixture["valid"], fixture["invalid"])), \
@@ -1180,6 +1396,38 @@ class ProbeTests(unittest.TestCase):
 
 
 class ScaffoldTests(unittest.TestCase):
+    def test_trailing_newline_id_is_refused(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            guard = Path(directory) / "tests/test_diagnostics.py"
+            guard.parent.mkdir()
+            guard.write_text("self.assertEqual(len(rules), 3)\nself.assertEqual(checked, 3)\n",
+                             encoding="utf-8")
+            argv = ["rule-scaffold", "--id", "c-check\n", "--language", "c",
+                    "--category", "correctness", "--positive", "bad(x)",
+                    "--near-miss", "good(x)", "--claim", "Check return value", "--dry-run"]
+            with patch("sys.argv", argv), contextlib.redirect_stdout(io.StringIO()), \
+                    self.assertRaisesRegex(SystemExit, "not kebab-case"):
+                SCAFFOLD.main()
+            self.assertFalse((Path(directory) / "rules").exists())
+
+    def test_documented_manual_usage_dry_run(self):
+        usage = SCAFFOLD.__doc__.split("Usage:\n", 1)[1].split("\nInputs:", 1)[0]
+        commands = usage.replace("\\\n", "").splitlines()
+        manual = next(line for line in commands if "--language c" in line)
+        argv = shlex.split(manual.replace("[--dry-run]", "--dry-run"))
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(SCAFFOLD, "ROOT", Path(directory)):
+            guard = Path(directory) / "tests/test_diagnostics.py"
+            guard.parent.mkdir()
+            original = "self.assertEqual(len(rules), 3)\nself.assertEqual(checked, 3)\n"
+            guard.write_text(original, encoding="utf-8")
+            with patch("sys.argv", argv), contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(SCAFFOLD.main(), 0)
+            self.assertIn("message:", output.getvalue())
+            self.assertEqual(guard.read_text(encoding="utf-8"), original)
+            self.assertFalse((Path(directory) / "rules").exists())
+
     def test_count_update_preserves_utf8_source_under_ascii_defaults(self):
         original = ("# café 🧪\nself.assertEqual(len(rules), 3)\n"
                     "self.assertEqual(checked, 3)\n").encode()

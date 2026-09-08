@@ -10,9 +10,11 @@ controls. Pipeline: .claude/skills/astgrep-rules/references/harvest-pipeline.md
 
 Usage:
   rule-scaffold.py --proposal WORK/cluster/proposals.jsonl --id go-x-y \\
-                   --category security [--matcher matcher.yml] [--dry-run]
+                   --category security --claim 'Check bounds before indexing' \\
+                   [--matcher matcher.yml] [--dry-run]
   rule-scaffold.py --id c-x-y --language c --category correctness \\
-                   --positive 'int f(){...}' --near-miss 'int f(){...}' [--dry-run]
+                   --positive 'int f(){...}' --near-miss 'int f(){...}' \\
+                   --claim 'Check the return value before use' [--dry-run]
 
 Inputs:  a proposal (by --id from a proposals.jsonl) or explicit flags;
          optional --matcher, a YAML file whose top-level mapping becomes the
@@ -104,7 +106,7 @@ def bump_count(dry_run: bool) -> tuple[int, int]:
 
 def prepare_scaffold(args):
     """Resolve proposal fields and reject conflicting destinations before writing."""
-    if not KEBAB.match(args.id):
+    if not KEBAB.fullmatch(args.id):
         sys.exit(f"id {args.id!r} is not kebab-case")
     prop = load_proposal(args.proposal, args.id) if args.proposal else {}
     language = args.language or prop.get("language")

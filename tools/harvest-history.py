@@ -19,12 +19,12 @@ Outputs: JSONL (one candidate per line, with the full diff) to --out or stdout;
          optional Markdown reading-order index to --index; summary on stderr.
          Fork duplicates are collapsed by `git patch-id --stable`; the earlier
          repo in --repos order wins and later ones are listed in `also_in`.
-Exit:    0 normally; 1 when an initial repository read times out. Completed
-         repositories still emit, but diagnostics mark that corpus incomplete.
+Exit:    0 normally; 1 when a repository or per-commit read times out. Retained
+         candidates still emit, but diagnostics mark that corpus incomplete.
          A repo without .git is reported and skipped.
 Side effects: none beyond the files named above. No network. Git subprocesses
          have a 60-second timeout. Per-commit timeouts skip only that commit;
-         initial repository reads make the run incomplete. Patch-id timeouts
+         any skipped read makes the run incomplete. Patch-id timeouts
          retain harvested candidates using their SHA identity. Commits without
          attributable diffs are counted and skipped. Index output preserves
          legacy bytes with UTF-8/surrogateescape.
@@ -40,9 +40,10 @@ import json
 import re
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 from typing import NamedTuple
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 # Commits whose subject matches these are fixes worth reading. Kept broad on
 # purpose: precision comes from the diff filters below, not from commit prose,
@@ -70,9 +71,9 @@ EXCLUDE_PATH = re.compile(
     r"|(^|/)mage/",
 )
 
-# A fix that only moves whitespace or renames an identifier teaches nothing.
-# Detected structurally below rather than by message, because "fix: apply mage
-# format" and "fix: reset pooled field" are indistinguishable as prose.
+# Detect outer-whitespace-only changes conservatively below rather than by
+# message, because "fix: apply mage format" and "fix: reset pooled field" are
+# indistinguishable as prose.
 
 
 def run(repo: Path, *args: str) -> str:
@@ -179,29 +180,70 @@ def signal_terms(diff: str, subject: str) -> list[str]:
     return sorted(k for k, pat in terms.items() if re.search(pat, hay, re.IGNORECASE))
 
 
+def safe_url_authority(parsed) -> bool:
+    """Reject authority delimiters that RFC and browser parsers interpret differently."""
+    try:
+        host = parsed.hostname
+        _ = parsed.port
+    except ValueError:
+        return False
+    if not host or "\\" in parsed.netloc:
+        return False
+    host = unicodedata.normalize("NFKC", unquote(host))
+    if re.search(r"[\x00-\x20\x7f%#/<>?@\[\]\\^|]", host):
+        return False
+    return ":" not in host or parsed.netloc.rsplit("@", 1)[-1].startswith("[")
+
+
+def sanitize_url_fallback(fallback: str | None) -> str | None:
+    """Strip unambiguous URL userinfo while preserving genuinely opaque fallbacks."""
+    if not fallback:
+        return fallback
+    # Match urlsplit's leading WHATWG C0/space and embedded ASCII control removal.
+    normalized = fallback.lstrip("".join(map(chr, range(0x21))))
+    normalized = normalized.replace("\t", "").replace("\n", "").replace("\r", "")
+    special = normalized.partition(":")[0].lower() in ("http", "https", "ftp", "ws", "wss", "file")
+    network_relative = re.match(r"^[/\\]{2}", normalized)
+    try:
+        parsed = urlsplit(fallback)
+    except ValueError:
+        authority_shaped = re.search(r"://|^[/\\]{2}", normalized)
+        if special or network_relative or (authority_shaped and "@" in fallback):
+            return None
+        return fallback
+    if parsed.scheme != "file" or parsed.netloc:
+        if (special or network_relative) and not safe_url_authority(parsed):
+            return None
+        if "@" in parsed.netloc or special:
+            return parsed._replace(netloc=parsed.netloc.rsplit("@", 1)[-1]).geturl()
+    return fallback
+
+
 def commit_url_prefix(repo: Path, fallback: str | None) -> str | None:
     """Derive a credential-free HTTPS commit URL from origin, else use fallback."""
+    fallback = sanitize_url_fallback(fallback)
     try:
         origin = run(repo, "remote", "get-url", "origin").strip()
     except subprocess.CalledProcessError:
         origin = ""
     if origin.startswith(("http://", "https://")):
-        try:
-            parsed = urlsplit(origin)
-        except ValueError:
+        safe_origin = sanitize_url_fallback(origin)
+        if safe_origin is None:
             return fallback
+        parsed = urlsplit(safe_origin)
         path = parsed.path.rstrip("/").removesuffix(".git")
         if parsed.hostname and path:
-            return f"https://{parsed.netloc.rsplit('@', 1)[-1]}{path}/commit/"
+            return sanitize_url_fallback(f"https://{parsed.netloc}{path}/commit/")
         return fallback
     m = re.match(r"git@([^:/]+)[:/](.+?)(?:\.git)?/?$", origin)
     if m and not origin.startswith("/"):
-        return f"https://{m.group(1)}/{m.group(2)}/commit/"
+        return sanitize_url_fallback(f"https://{m.group(1)}/{m.group(2)}/commit/") or fallback
     return fallback
 
 
 def harvest(repo: Path, name: str, max_files: int, max_lines: int,
-            url_prefix: str | None) -> list[dict]:
+            url_prefix: str | None) -> tuple[list[dict], int]:
+    """Return retained candidates and the number of commits lost to timeouts."""
     prefix = commit_url_prefix(repo, url_prefix)
     shas = run(repo, "log", "--format=%H\x1f%s\x1f%ci", "--no-merges").splitlines()
     candidates = []
@@ -264,7 +306,7 @@ def harvest(repo: Path, name: str, max_files: int, max_lines: int,
         f"=> candidates={len(candidates):3d}",
         file=sys.stderr,
     )
-    return candidates
+    return candidates, stats["timed_out"]
 
 
 def dedupe_by_patch_id(root: Path, candidates: list[dict]) -> list[dict]:
@@ -350,8 +392,10 @@ def main() -> int:
             print(f"skip {name}: not a git checkout", file=sys.stderr)
             continue
         try:
-            all_candidates.extend(harvest(repo, name, args.max_files, args.max_lines,
-                                          args.url_prefix))
+            candidates, skipped = harvest(repo, name, args.max_files, args.max_lines,
+                                          args.url_prefix)
+            all_candidates.extend(candidates)
+            timed_out += bool(skipped)
         except subprocess.TimeoutExpired as error:
             timed_out += 1
             print(f"skip {name}: Git timed out after {error.timeout}s", file=sys.stderr)

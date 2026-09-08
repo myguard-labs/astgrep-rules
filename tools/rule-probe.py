@@ -386,7 +386,7 @@ def update_snapshot(rule, report, check):
 
 def literal_diagnostic(value):
     """Require nonempty text before checking literal diagnostic placeholders."""
-    return isinstance(value, str) and bool(value) and not META.search(value)
+    return isinstance(value, str) and bool(value.strip()) and not META.search(value)
 
 
 def main() -> int:
