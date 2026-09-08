@@ -18,6 +18,12 @@ valid:
 - void f(void) { char buf[NELEMS(a)]; }
 - void f(void) { char buf[MAX(A, B)]; }
 - void f(void) { char buf[CFG.MAX]; }
+- void f(void) { char buf[ARRAY_SIZE(x) - 1]; }
+- void f(void) { char buf[MAX(a, b) + 1]; }
+- void f(int len) { char buf[(len + 1)]; }
+- void f(int n) { char buf[-n]; }
+- void f(struct a *a) { char buf[a->b->len]; }
+- void f(struct o *ops) { char buf[ops->get_len()]; }
 invalid:
 - void f(void) { alloca(n); }
 - void f(void) { char *p = alloca(64); }
@@ -34,3 +40,4 @@ invalid:
 - void f(int n) { char buf[n * 2]; }
 - void f(void) { char buf[get_len()]; }
 - void f(struct h *h) { char buf[h->len]; }
+- void f(int n) { char buf[get_len() + n]; }
