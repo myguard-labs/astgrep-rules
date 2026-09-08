@@ -150,3 +150,44 @@ snapshots:
       style: secondary
       start: 147
       end: 182
+  ? |
+    package p
+    func QuotePowerShellPrefixed(s string) string {
+        // The only smart quote is a NewReplacer REPLACEMENT VALUE (even
+        // position), which neutralizes nothing; input smart quotes stay intact.
+        s = strings.ReplaceAll(s, `"`, `""`)
+        r := strings.NewReplacer("prefix", "‘")
+        return "'" + r.Replace(s) + "'"
+    }
+  : labels:
+    - source: |-
+        func QuotePowerShellPrefixed(s string) string {
+            // The only smart quote is a NewReplacer REPLACEMENT VALUE (even
+            // position), which neutralizes nothing; input smart quotes stay intact.
+            s = strings.ReplaceAll(s, `"`, `""`)
+            r := strings.NewReplacer("prefix", "‘")
+            return "'" + r.Replace(s) + "'"
+        }
+      style: primary
+      start: 10
+      end: 328
+    - source: QuotePowerShellPrefixed
+      style: secondary
+      start: 15
+      end: 38
+    - source: strings.ReplaceAll
+      style: secondary
+      start: 212
+      end: 230
+    - source: '`"`'
+      style: secondary
+      start: 234
+      end: 237
+    - source: (s, `"`, `""`)
+      style: secondary
+      start: 230
+      end: 244
+    - source: strings.ReplaceAll(s, `"`, `""`)
+      style: secondary
+      start: 212
+      end: 244

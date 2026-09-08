@@ -56,3 +56,12 @@ invalid:
       s = strings.Replace(s, "'", "''", -1)
       return "‘" + s + "’"
   }
+- |
+  package p
+  func QuotePowerShellPrefixed(s string) string {
+      // The only smart quote is a NewReplacer REPLACEMENT VALUE (even
+      // position), which neutralizes nothing; input smart quotes stay intact.
+      s = strings.ReplaceAll(s, `"`, `""`)
+      r := strings.NewReplacer("prefix", "‘")
+      return "'" + r.Replace(s) + "'"
+  }
