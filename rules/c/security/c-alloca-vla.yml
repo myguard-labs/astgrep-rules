@@ -12,7 +12,9 @@ note: >-
   naming heuristic, not a constant-expression analysis: it reports an array
   declarator whose size is a bare identifier not starting with an uppercase
   letter or underscore, so a conventionally-named macro such as MAX_LEN is
-  skipped while a lowercase `static const` or lowercase macro still reports.
+  skipped while a lowercase `static const`, lowercase macro or lowercase enum
+  constant still reports -- all three are fixed-size arrays, so triage them as
+  false positives.
   Sizes that are not a bare identifier -- `buf[n * 2]`, `buf[len + 1]`,
   `buf[get_len()]` -- are out of scope and not reported. Parameter
   declarators such as `void f(int n, char buf[n])` are excluded because they
