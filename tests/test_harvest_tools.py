@@ -66,6 +66,34 @@ def coverage_cases(cases):
 
 
 class HistoryTests(unittest.TestCase):
+    def test_legacy_url_parser_receives_normalized_fallback(self):
+        original = HISTORY.urlsplit
+        userinfo = "fixture-user:fixture-password"
+        clean_input = "https://" + userinfo + "@example.test/project/commit/"
+
+        def legacy_urlsplit(value):
+            if value and ord(value[0]) <= 0x20:
+                return original("relative")._replace(path=value)
+            return original(value)
+
+        for code in range(0x21):
+            with self.subTest(leading_byte=code), \
+                    patch.object(HISTORY, "urlsplit", side_effect=legacy_urlsplit) as parser, \
+                    patch.object(HISTORY, "run", return_value="/local/repo"):
+                raw = chr(code) + clean_input
+                self.assertEqual(legacy_urlsplit(raw).netloc, "")
+                prefix = HISTORY.commit_url_prefix(ROOT, raw)
+                self.assertEqual(prefix, "https://example.test/project/commit/")
+                self.assertTrue(parser.call_args.args[0] == clean_input,
+                                "parse the normalized input, not raw leading controls")
+                candidate = {"short": "abc", "repo": "sample", "subject": "fix",
+                             "churn": 1, "density": 1, "signals": [], "url": prefix + "abc"}
+                with tempfile.TemporaryDirectory() as directory:
+                    index = Path(directory) / "index.md"
+                    HISTORY.write_index(index, [candidate])
+                    for rendered in (json.dumps(candidate), index.read_text()):
+                        self.assertFalse(userinfo in rendered, "legacy parser leaked userinfo")
+
     def test_nonspecial_opaque_authorities_preserve_encoded_host(self):
         cases = [("custom://host%2fname/commit/", "custom://host%2fname/commit/"),
                  ("custom://host%40name/commit/", "custom://host%40name/commit/"),

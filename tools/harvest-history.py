@@ -205,7 +205,7 @@ def sanitize_url_fallback(fallback: str | None) -> str | None:
     special = normalized.partition(":")[0].lower() in ("http", "https", "ftp", "ws", "wss", "file")
     network_relative = re.match(r"^[/\\]{2}", normalized)
     try:
-        parsed = urlsplit(fallback)
+        parsed = urlsplit(normalized)
     except ValueError:
         authority_shaped = re.search(r"://|^[/\\]{2}", normalized)
         if special or network_relative or (authority_shaped and "@" in fallback):
