@@ -7,10 +7,15 @@ message: >-
   Unicode "smart quote" characters U+2018, U+2019, U+201C and U+201D as string
   delimiters, so a value containing one of them closes the quoted argument
   early and anything after it runs as a new command. Escaping more characters
-  does not fix this class of bug: stop building a command string for
-  PowerShell to re-parse. Pass the argument list directly to exec.Command (no
-  shell) or use pwsh's -EncodedCommand with a base64-encoded UTF-16LE script,
-  which is never subject to quote-character parsing at all.
+  does not fix this class of bug: stop interpolating untrusted values into
+  script source that PowerShell will re-parse. Invoke the target executable
+  directly with exec.Command and pass each untrusted value as its own argv
+  element, so no shell or script parser ever sees it. -EncodedCommand is not
+  a fix: it only base64-transports the script, and PowerShell still parses
+  and executes the decoded text, so an interpolated value is injected exactly
+  as before. If a script genuinely must run, keep untrusted data out of its
+  source and pass it separately, for example through -File arguments, a
+  parameter binding, or the environment.
 note: >-
   Fires on a function whose name mentions both a PowerShell-quoting purpose
   and escaping/quoting, whose body replaces or escapes an ASCII
@@ -84,12 +89,16 @@ utils:
   smart-quote-sanitized:
     any:
       # strings.Replace/ReplaceAll(s, "<smart quote>", ...) -- the smart quote
-      # sits in the SEARCH argument, so it is actually being neutralized.
+      # sits in the SEARCH argument, so it is actually being neutralized
+      # everywhere in the value. Trim/TrimLeft/TrimRight are deliberately NOT
+      # accepted here: they only strip at the string BOUNDARIES, so an
+      # embedded smart quote survives and still terminates the quoted
+      # argument. ContainsAny/IndexAny only detect, they neutralize nothing.
       - kind: call_expression
         all:
           - has:
               field: function
-              regex: '^strings\.(Replace|ReplaceAll|Trim|TrimLeft|TrimRight|ContainsAny|IndexAny)$'
+              regex: '^strings\.(Replace|ReplaceAll)$'
           - has:
               field: arguments
               kind: argument_list
