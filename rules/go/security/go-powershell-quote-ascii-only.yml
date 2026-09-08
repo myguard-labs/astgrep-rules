@@ -1,0 +1,61 @@
+id: go-powershell-quote-ascii-only
+language: go
+severity: warning
+message: >-
+  Function name and body identify this as a PowerShell command-line quoting
+  helper, escaping only the ASCII quote characters. PowerShell also treats the
+  Unicode "smart quote" characters U+2018, U+2019, U+201C and U+201D as string
+  delimiters, so a value containing one of them closes the quoted argument
+  early and anything after it runs as a new command. Escaping more characters
+  does not fix this class of bug: stop building a command string for
+  PowerShell to re-parse. Pass the argument list directly to exec.Command (no
+  shell) or use pwsh's -EncodedCommand with a base64-encoded UTF-16LE script,
+  which is never subject to quote-character parsing at all.
+note: >-
+  Fires on a function whose name mentions both a PowerShell-quoting purpose
+  and escaping/quoting, whose body replaces or escapes only the ASCII
+  quote/apostrophe characters, and whose body contains no literal or code-point
+  reference to U+2018, U+2019, U+201C or U+201D. Verified against PowerShell
+  7.6.5: Invoke-Expression parses all four as genuine quote delimiters and a
+  smart-quote-terminated argument executes injected text as a new statement;
+  guillemets («, ») are not delimiters and are excluded from that claim. A
+  SQL-style doubling escaper (replacing `'` with `''`) is flagged here as a
+  DOCUMENTED RESIDUAL FALSE POSITIVE: it happens to neutralize the ASCII
+  apostrophe but is named and reviewed as a SQL escaper, not a PowerShell one,
+  and the matcher cannot distinguish the two from the replacement alone. A
+  helper that also replaces or strips the four smart-quote code points, or
+  that never claims to quote for PowerShell, is the routine dismissal.
+rule:
+  kind: function_declaration
+  all:
+    - has:
+        field: name
+        regex: '(?i)(PowerShell|PSQuote|PwshQuote|PSArg|PSCommand).*(Quote|Escape)|(Quote|Escape).*(PowerShell|PSQuote|PwshQuote|PSArg|PSCommand)'
+    - has:
+        stopBy: end
+        kind: call_expression
+        all:
+          - has:
+              field: function
+              regex: '^strings\.(Replace|ReplaceAll)$'
+          - has:
+              field: arguments
+              kind: argument_list
+              has:
+                all:
+                  - nthChild: {position: 2, ofRule: {not: {kind: comment}}}
+                  - matches: ascii-quote-literal
+    - not:
+        has:
+          stopBy: end
+          kind: interpreted_string_literal
+          matches: smart-quote-literal
+utils:
+  ascii-quote-literal:
+    any:
+      - kind: interpreted_string_literal
+        regex: '^"[\x27"]"$'
+      - kind: raw_string_literal
+        regex: '^`[\x27"]`$'
+  smart-quote-literal:
+    regex: '[\x{2018}\x{2019}\x{201C}\x{201D}]'

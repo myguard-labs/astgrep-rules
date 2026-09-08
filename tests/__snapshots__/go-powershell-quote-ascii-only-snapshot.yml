@@ -1,0 +1,76 @@
+id: go-powershell-quote-ascii-only
+snapshots:
+  ? |
+    package p
+    func EscapePSCommandArg(s string) string {
+        // SQL-style doubling: coincidentally neutralizes the ASCII apostrophe,
+        // but never handles the PowerShell smart-quote delimiters.
+        s = strings.ReplaceAll(s, "'", "''")
+        return "'" + s + "'"
+    }
+  : labels:
+    - source: |-
+        func EscapePSCommandArg(s string) string {
+            // SQL-style doubling: coincidentally neutralizes the ASCII apostrophe,
+            // but never handles the PowerShell smart-quote delimiters.
+            s = strings.ReplaceAll(s, "'", "''")
+            return "'" + s + "'"
+        }
+      style: primary
+      start: 10
+      end: 260
+    - source: EscapePSCommandArg
+      style: secondary
+      start: 15
+      end: 33
+    - source: strings.ReplaceAll
+      style: secondary
+      start: 201
+      end: 219
+    - source: '"''"'
+      style: secondary
+      start: 223
+      end: 226
+    - source: (s, "'", "''")
+      style: secondary
+      start: 219
+      end: 233
+    - source: strings.ReplaceAll(s, "'", "''")
+      style: secondary
+      start: 201
+      end: 233
+  ? |
+    package p
+    func QuotePowerShellArg(s string) string {
+        s = strings.Replace(s, `"`, `\"`, -1)
+        return `"` + s + `"`
+    }
+  : labels:
+    - source: |-
+        func QuotePowerShellArg(s string) string {
+            s = strings.Replace(s, `"`, `\"`, -1)
+            return `"` + s + `"`
+        }
+      style: primary
+      start: 10
+      end: 121
+    - source: QuotePowerShellArg
+      style: secondary
+      start: 15
+      end: 33
+    - source: strings.Replace
+      style: secondary
+      start: 61
+      end: 76
+    - source: '`"`'
+      style: secondary
+      start: 80
+      end: 83
+    - source: (s, `"`, `\"`, -1)
+      style: secondary
+      start: 76
+      end: 94
+    - source: strings.Replace(s, `"`, `\"`, -1)
+      style: secondary
+      start: 61
+      end: 94

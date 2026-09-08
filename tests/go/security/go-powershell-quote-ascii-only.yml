@@ -1,0 +1,43 @@
+id: go-powershell-quote-ascii-only
+valid:
+- |
+  package p
+  func QuotePowerShellArg(s string) string {
+      s = strings.ReplaceAll(s, "‘", "")
+      s = strings.ReplaceAll(s, "’", "")
+      s = strings.ReplaceAll(s, "“", "")
+      s = strings.ReplaceAll(s, "”", "")
+      s = strings.ReplaceAll(s, `"`, `""`)
+      return "'" + s + "'"
+  }
+- |
+  package p
+  func EscapePowerShellArgument(s string) string {
+      s = strings.Replace(s, "'", "''", -1)
+      return "‘" + s + "’"
+  }
+- |
+  package p
+  func BuildArgs(args []string) *exec.Cmd {
+      return exec.Command("pwsh", append([]string{"-NoProfile", "-Command"}, args...)...)
+  }
+- |
+  package p
+  func EscapeSQLString(s string) string {
+      return strings.Replace(s, "'", "''", -1)
+  }
+invalid:
+- |
+  package p
+  func QuotePowerShellArg(s string) string {
+      s = strings.Replace(s, `"`, `\"`, -1)
+      return `"` + s + `"`
+  }
+- |
+  package p
+  func EscapePSCommandArg(s string) string {
+      // SQL-style doubling: coincidentally neutralizes the ASCII apostrophe,
+      // but never handles the PowerShell smart-quote delimiters.
+      s = strings.ReplaceAll(s, "'", "''")
+      return "'" + s + "'"
+  }
