@@ -48,7 +48,7 @@ rule makes is fixed by its fixtures, not by the linked page.
   C++-style line comments are not used in nginx source.
 - `nginx-plain-inline` — nginx development guide,
   [functions](https://nginx.org/en/docs/dev/development_guide.html#code_style_functions):
-  nginx requires its `ngx_inline` portability macro instead of plain C
+  nginx recommends its `ngx_inline` portability macro instead of plain C
   `inline`.
 - `nginx-slab-locked-without-lock` — nginx slab API contract,
   `src/core/ngx_slab.c`
