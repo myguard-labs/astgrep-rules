@@ -2,13 +2,14 @@ id: go-test-diagnostic-observed-value
 language: go
 severity: warning
 message: >-
-  Assertion diagnostic prints the expected value in both observed and expected
-  slots, hiding the value initialized for comparison.
+  Assertion diagnostic repeats the expected value; check whether one slot should
+  print the value initialized for comparison.
 note: >-
   Matches the exact short-if form with a direct Fatalf call whose first two
   diagnostic values are the same condition operand, within a function declaring
   a parameter named t of type *testing.T. It does not resolve aliases or
   shadowing, interpret the format string, or follow values beyond this if.
+  Different format verbs can legitimately print the same value twice.
 rule:
   all:
     - any:

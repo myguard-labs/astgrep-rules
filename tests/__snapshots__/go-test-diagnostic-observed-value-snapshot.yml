@@ -91,6 +91,12 @@ snapshots:
       style: primary
       start: 34
       end: 108
+  package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("want %v of type %T", want, want) } }:
+    labels:
+    - source: if got := actual(); got != want { t.Fatalf("want %v of type %T", want, want) }
+      style: primary
+      start: 34
+      end: 112
   package m; func f(t *testing.T) { if got := actual(); want != got { /* diagnostic */ t.Fatalf("got %v want %v", want, want) } }:
     labels:
     - source: if got := actual(); want != got { /* diagnostic */ t.Fatalf("got %v want %v", want, want) }
