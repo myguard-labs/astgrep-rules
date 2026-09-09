@@ -5,9 +5,10 @@ message: >-
   Assertion diagnostic repeats the expected value; check whether one slot should
   print the value initialized for comparison.
 note: >-
-  Matches a short-if with a sole direct Fatalf call taking exactly two values
-  after the format string, both repeating the expected condition operand, within
-  a function declaring a parameter named t of type *testing.T. It does not resolve
+  Matches a short-if that initializes one identifier, with a sole direct Fatalf
+  call taking exactly two values after the format string, both repeating the
+  expected condition operand, within a function declaring a parameter named t of
+  type *testing.T. It does not resolve
   aliases or shadowing, interpret the format string, or follow values beyond this if.
   Different format verbs can legitimately print the same value twice.
   Other helpers and repeated observed operands require separate rules and evidence.

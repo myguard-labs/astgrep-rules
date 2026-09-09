@@ -1,5 +1,6 @@
 id: go-test-diagnostic-observed-value
 valid:
+- package m; func f(t *testing.T) { if got, err := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
 - package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatal(want, want) } }
 - package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", got, got) } }
 - package m; func f(t *testing.T) { if got := actual(); want != got { t.Fatalf("got %v want %v", got, got) } }
