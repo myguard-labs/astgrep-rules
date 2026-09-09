@@ -22,8 +22,10 @@ the caller must first establish what `.len` means.
   purely by syntax. They cannot identify whether a C file belongs to nginx, so
   consumers must scope these informational rules to nginx core and module
   sources. The comment rule ignores slash pairs inside strings and block
-  comments. The inline rule matches the exact storage-class specifier, not
-  identifiers or macro names containing `inline`.
+  comments. Its conservative preprocessor arm also skips a line comment when
+  quoted text precedes it in the macro replacement; distinguishing that case
+  would require lexical analysis. The inline rule matches the exact
+  storage-class specifier, not identifiers or macro names containing `inline`.
 - `c-prctl-set-dumpable` recognizes decimal `1` with optional `U`/`L`
   suffixes (either order and case), not computed values, aliases, or other
   integer spellings. Zero remains excluded.
