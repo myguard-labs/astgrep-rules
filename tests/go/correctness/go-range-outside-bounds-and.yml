@@ -1,0 +1,17 @@
+id: go-range-outside-bounds-and
+valid:
+- |-
+  if id < start || id > end {
+    continue
+  }
+- |-
+  if id < start || id > end { continue }
+- |-
+  // if id < start && id > end { continue }
+invalid:
+- |-
+  if id < start && id > end {
+    continue
+  }
+- |-
+  if value < low && value > high { return }

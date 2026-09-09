@@ -1,0 +1,28 @@
+id: go-range-outside-bounds-and
+snapshots:
+  ? |-
+    if id < start && id > end {
+      continue
+    }
+  : labels:
+    - source: |-
+        if id < start && id > end {
+          continue
+        }
+      style: primary
+      start: 0
+      end: 40
+    - source: id < start && id > end
+      style: secondary
+      start: 3
+      end: 25
+  if value < low && value > high { return }:
+    labels:
+    - source: if value < low && value > high { return }
+      style: primary
+      start: 0
+      end: 41
+    - source: value < low && value > high
+      style: secondary
+      start: 3
+      end: 30
