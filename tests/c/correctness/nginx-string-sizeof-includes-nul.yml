@@ -1,0 +1,24 @@
+id: nginx-string-sizeof-includes-nul
+valid:
+- |-
+  ngx_str_t value;
+  value.data = (u_char *)"nginx";
+  value.len = sizeof("nginx") - 1;
+- |-
+  void f(ngx_str_t value) {
+    value.len = strlen("nginx");
+  }
+- |-
+  void f(void) {
+    const char *text = "value.len = sizeof(\"nginx\")";
+    /* value.len = sizeof("nginx"); */
+  }
+invalid:
+- |-
+  ngx_str_t value;
+  value.data = (u_char *)"nginx";
+  value.len = sizeof("nginx");
+- |-
+  void f(ngx_str_t output) {
+    output.len = sizeof("value");
+  }

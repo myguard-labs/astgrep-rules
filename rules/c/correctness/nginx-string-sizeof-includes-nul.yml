@@ -1,0 +1,17 @@
+id: nginx-string-sizeof-includes-nul
+language: c
+severity: warning
+message: An ngx_str_t length is assigned sizeof of a NUL-terminated string literal
+  or static string array without subtracting one, so the NUL is included in the logical
+  value.
+note: nginx strings carry an explicit byte length and commonly point to non-NUL data;
+  counting a literal terminator contaminates downstream header or FFI values.
+rule:
+  kind: assignment_expression
+  pattern:
+    context: |
+      void f(void) { $STR.len = sizeof($LIT); }
+    selector: assignment_expression
+constraints:
+  LIT:
+    kind: string_literal

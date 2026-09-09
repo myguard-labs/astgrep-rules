@@ -1,0 +1,48 @@
+id: nginx-empty-ngx-str-converted-to-null
+snapshots:
+  ? |-
+    if (value.len == 0) {
+      *out = NULL;
+      return NGX_OK;
+    }
+  : labels:
+    - source: |-
+        if (value.len == 0) {
+          *out = NULL;
+          return NGX_OK;
+        }
+      style: primary
+      start: 0
+      end: 55
+    - source: (value.len == 0)
+      style: secondary
+      start: 3
+      end: 19
+    - source: '*out = NULL'
+      style: secondary
+      start: 24
+      end: 35
+  ? |-
+    void f(ngx_str_t input, char **result) {
+      if (input.len == 0) {
+        *result = NULL;
+        return NGX_OK;
+      }
+    }
+  : labels:
+    - source: |-
+        if (input.len == 0) {
+            *result = NULL;
+            return NGX_OK;
+          }
+      style: primary
+      start: 43
+      end: 107
+    - source: (input.len == 0)
+      style: secondary
+      start: 46
+      end: 62
+    - source: '*result = NULL'
+      style: secondary
+      start: 69
+      end: 83
