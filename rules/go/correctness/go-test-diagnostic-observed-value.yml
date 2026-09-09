@@ -9,4 +9,8 @@ note: >-
   diagnostic values are the same condition operand. It does not interpret the
   format string or follow values beyond this initializer, condition, and body.
 rule:
-  pattern: if $GOT := $ACTUAL; $GOT != $WANT { t.Fatalf($FMT, $WANT, $WANT) }
+  all:
+    - pattern: if $GOT := $ACTUAL; $GOT != $WANT { t.Fatalf($FMT, $WANT, $WANT) }
+    - inside:
+        kind: function_declaration
+        regex: 'func\s+\w+\s*\([^)]*[,(]\s*t\s+\*testing\.T\b'
