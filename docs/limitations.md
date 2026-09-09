@@ -154,12 +154,15 @@ resolution and remain outside this matcher.
   initializer's observed identifier and the inequality's expected operand, then
   matches a direct `t.Fatalf` whose first two diagnostic values repeat that
   expected operand. It requires exactly those two values after the format string,
-  so diagnostics with trailing values do not match. It does not parse the format
-  string, identify other testing helpers, or perform dataflow beyond the
-  initializer, condition, and body. The nearest function, method, or function
-  literal must declare a parameter named `t` with the literal type `*testing.T`;
-  grouped parameter names are supported. Test-handle parameter names other than
-  `t`, type/import aliases, and closures using an outer test handle are excluded.
+  so diagnostics with trailing values do not match. The consequence must contain
+  only that call as a statement; comments before or after it are allowed, but
+  additional statements and calls inside nested blocks are excluded. It does not
+  parse the format string, identify other testing helpers, or perform dataflow
+  beyond the initializer, condition, and body. The nearest function, method, or
+  function literal must declare a parameter named `t` with the literal type
+  `*testing.T`; grouped parameter names are supported. Test-handle parameter names
+  other than `t`, type/import aliases, and closures using an outer test handle are
+  excluded.
   This parameter syntax does not resolve imports or local shadowing of `t`.
 - `py-jwt-decode-unverified` matches `jwt.decode` and bare `decode` when the
   module has a top-level exact `from jwt import decode`. Function-local imports,

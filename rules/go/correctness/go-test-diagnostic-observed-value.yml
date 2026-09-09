@@ -11,7 +11,27 @@ note: >-
   shadowing, interpret the format string, or follow values beyond this if.
 rule:
   all:
-    - pattern: if $GOT := $ACTUAL; $GOT != $WANT { t.Fatalf($FMT, $WANT, $WANT) }
+    - pattern: if $GOT := $ACTUAL; $GOT != $WANT { $$$BODY }
+    - has:
+        field: consequence
+        has:
+          kind: statement_list
+          has:
+            all:
+              - pattern:
+                  context: 'func f() { t.Fatalf($FMT, $WANT, $WANT) }'
+                  selector: expression_statement
+              - nthChild:
+                  position: 1
+                  ofRule:
+                    not:
+                      kind: comment
+              - nthChild:
+                  position: 1
+                  reverse: true
+                  ofRule:
+                    not:
+                      kind: comment
     - pattern: $ASSERTION
     - inside:
         # Named functions and methods cannot nest in valid Go.

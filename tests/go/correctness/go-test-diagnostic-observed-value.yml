@@ -1,5 +1,22 @@
 id: go-test-diagnostic-observed-value
 valid:
+- package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ t.Fatalf("got %v want %v", got, want) } }
+- |
+  package m
+  func f(t *testing.T) {
+      if got := actual(); got != want {
+          // Include both values in this diagnostic.
+          t.Fatalf("got %v want %v", got, want)
+      }
+  }
+- package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ setup(); t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ t.Fatalf("got %v want %v", want, want); cleanup() } }
+- package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ want := other; t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ t.Fatalf("got %v want %v", want, want); return } }
+- package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ defer t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ if ready { t.Fatalf("got %v want %v", want, want) } } }
+- package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ { t.Fatalf("got %v want %v", want, want) } } }
+- package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ t.Fatalf("got %v want %v extra %v", want, want, extra) } }
 - package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", got, want) } }
 - package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", other, other) } }
 - package m; // if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) }
@@ -21,6 +38,23 @@ valid:
 - package m; func f(t *testing.TB) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
 - package m; func f(t testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
 invalid:
+- package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) /* diagnostic */ } }
+- |
+  package m
+  func f(t *testing.T) {
+      if got := actual(); got != want {
+          t.Fatalf("got %v want %v", want, want) // diagnostic
+      }
+  }
+- package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ t.Fatalf("got %v want %v", want, want) } }
+- |
+  package m
+  func f(t *testing.T) {
+      if got := actual(); got != want {
+          // Include both values in this diagnostic.
+          t.Fatalf("got %v want %v", want, want)
+      }
+  }
 - package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
 - package m; func f(first int, t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
 - package m; func f(other, t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }

@@ -17,6 +17,38 @@ snapshots:
       style: primary
       start: 62
       end: 170
+  ? |
+    package m
+    func f(t *testing.T) {
+        if got := actual(); got != want {
+            // Include both values in this diagnostic.
+            t.Fatalf("got %v want %v", want, want)
+        }
+    }
+  : labels:
+    - source: |-
+        if got := actual(); got != want {
+                // Include both values in this diagnostic.
+                t.Fatalf("got %v want %v", want, want)
+            }
+      style: primary
+      start: 37
+      end: 174
+  ? |
+    package m
+    func f(t *testing.T) {
+        if got := actual(); got != want {
+            t.Fatalf("got %v want %v", want, want) // diagnostic
+        }
+    }
+  : labels:
+    - source: |-
+        if got := actual(); got != want {
+                t.Fatalf("got %v want %v", want, want) // diagnostic
+            }
+      style: primary
+      start: 37
+      end: 137
   package m; func (s *Suite) f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }:
     labels:
     - source: if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) }
@@ -35,6 +67,18 @@ snapshots:
       style: primary
       start: 41
       end: 115
+  package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ t.Fatalf("got %v want %v", want, want) } }:
+    labels:
+    - source: if got := actual(); got != want { /* diagnostic */ t.Fatalf("got %v want %v", want, want) }
+      style: primary
+      start: 34
+      end: 125
+  package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) /* diagnostic */ } }:
+    labels:
+    - source: if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) /* diagnostic */ }
+      style: primary
+      start: 34
+      end: 125
   package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }:
     labels:
     - source: if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) }
