@@ -79,9 +79,33 @@ snapshots:
       style: primary
       start: 34
       end: 125
+  package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } else { ok() } }:
+    labels:
+    - source: if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } else { ok() }
+      style: primary
+      start: 34
+      end: 122
   package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }:
     labels:
     - source: if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) }
+      style: primary
+      start: 34
+      end: 108
+  package m; func f(t *testing.T) { if got := actual(); want != got { /* diagnostic */ t.Fatalf("got %v want %v", want, want) } }:
+    labels:
+    - source: if got := actual(); want != got { /* diagnostic */ t.Fatalf("got %v want %v", want, want) }
+      style: primary
+      start: 34
+      end: 125
+  package m; func f(t *testing.T) { if got := actual(); want != got { t.Fatalf("got %v want %v", want, want) } else { ok() } }:
+    labels:
+    - source: if got := actual(); want != got { t.Fatalf("got %v want %v", want, want) } else { ok() }
+      style: primary
+      start: 34
+      end: 122
+  package m; func f(t *testing.T) { if got := actual(); want != got { t.Fatalf("got %v want %v", want, want) } }:
+    labels:
+    - source: if got := actual(); want != got { t.Fatalf("got %v want %v", want, want) }
       style: primary
       start: 34
       end: 108

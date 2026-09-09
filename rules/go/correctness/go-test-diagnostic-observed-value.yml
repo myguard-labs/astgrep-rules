@@ -11,7 +11,9 @@ note: >-
   shadowing, interpret the format string, or follow values beyond this if.
 rule:
   all:
-    - pattern: if $GOT := $ACTUAL; $GOT != $WANT { $$$BODY }
+    - any:
+        - pattern: if $GOT := $ACTUAL; $GOT != $WANT { $$$BODY }
+        - pattern: if $GOT := $ACTUAL; $WANT != $GOT { $$$BODY }
     - has:
         field: consequence
         has:

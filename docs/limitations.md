@@ -153,8 +153,10 @@ resolution and remain outside this matcher.
 - `go-test-diagnostic-observed-value` is a same-`if` syntax check: it binds the
   initializer's observed identifier and the inequality's expected operand, then
   matches a direct `t.Fatalf` whose first two diagnostic values repeat that
-  expected operand. It requires exactly those two values after the format string,
-  so diagnostics with trailing values do not match. The consequence must contain
+  expected operand. Either inequality operand order is supported. An `else`
+  branch does not affect this check of the consequence. It requires exactly two
+  values after the format string, so diagnostics with trailing values do not
+  match. The consequence must contain
   only that call as a statement; comments before or after it are allowed, but
   additional statements and calls inside nested blocks are excluded. It does not
   parse the format string, identify other testing helpers, or perform dataflow

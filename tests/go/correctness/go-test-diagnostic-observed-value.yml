@@ -1,5 +1,13 @@
 id: go-test-diagnostic-observed-value
 valid:
+- package m; func f(t *testing.T) { if got := actual(); want != got { t.Fatalf("got %v want %v", got, want) } }
+- package m; func f(t *testing.T) { if got := actual(); want != got { t.Fatalf("got %v want %v", other, other) } }
+- package m; func f(t *testing.T) { if got := actual(); want != other { t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t *testing.T) { if got := actual(); want != got { t.Fatalf("got %v want %v extra %v", want, want, extra) } }
+- package m; func f(t *testing.T) { if got := actual(); want != got { t.Fatalf("got %v want %v", want, want); cleanup() } }
+- package m; func f(t *Logger) { if got := actual(); want != got { t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", got, want) } else { ok() } }
+- package m; func f(t *testing.T) { if got := actual(); want != got { t.Fatalf("got %v want %v", got, want) } else { ok() } }
 - package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ t.Fatalf("got %v want %v", got, want) } }
 - |
   package m
@@ -38,6 +46,10 @@ valid:
 - package m; func f(t *testing.TB) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
 - package m; func f(t testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
 invalid:
+- package m; func f(t *testing.T) { if got := actual(); want != got { t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t *testing.T) { if got := actual(); want != got { /* diagnostic */ t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } else { ok() } }
+- package m; func f(t *testing.T) { if got := actual(); want != got { t.Fatalf("got %v want %v", want, want) } else { ok() } }
 - package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) /* diagnostic */ } }
 - |
   package m
