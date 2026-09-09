@@ -75,7 +75,6 @@ valid:
 - package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ if ready { t.Fatalf("got %v want %v", want, want) } } }
 - package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ { t.Fatalf("got %v want %v", want, want) } } }
 - package m; func f(t *testing.T) { if got := actual(); got != want { /* diagnostic */ t.Fatalf("got %v want %v extra %v", want, want, extra) } }
-- package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", got, want) } }
 - package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", other, other) } }
 - package m; // if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) }
 - package m; var diagnostic = "if got := actual(); got != want { t.Fatalf(\\\"got %v want %v\\\", want, want) }"
