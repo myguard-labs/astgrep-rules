@@ -152,9 +152,11 @@ resolution and remain outside this matcher.
   directories. Test files legitimately discard results and dominate the rest.
 - `go-test-diagnostic-observed-value` is a same-`if` syntax check: it binds the
   initializer's observed identifier and the inequality's expected operand, then
-  matches a direct `t.Fatalf` whose first two diagnostic values repeat that
-  expected operand. Repeating the observed operand in both diagnostic values is
-  outside this rule. Either inequality operand order is supported. An `else`
+  matches a direct `t.Fatalf` with exactly two diagnostic values repeating that
+  expected operand. This rule deliberately covers only these expected/expected
+  `Fatalf` calls. Other helpers, including `Errorf` and non-formatting `Fatal`,
+  and observed/observed diagnostics require separate rules and evidence.
+  Either inequality operand order is supported. An `else`
   branch does not affect this check of the consequence. It requires exactly two
   values after the format string, so diagnostics with trailing values do not
   match. The consequence must contain
