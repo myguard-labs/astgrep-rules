@@ -51,7 +51,7 @@ valid:
 - package m; func f(t testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
 invalid:
 # Acknowledged advisory matches: invalid asserts current detection behavior.
-# This diagnostic intentionally prints a value and its type. Future changes
+# This diagnostic intentionally renders one value in two formats. Future changes
 # that interpret formats should update this expectation and the documented limit.
 - package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("want %v of type %T", want, want) } }
 # Target defect examples.

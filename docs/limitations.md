@@ -170,10 +170,11 @@ resolution and remain outside this matcher.
   other than `t`, type/import aliases, and closures using an outer test handle are
   excluded.
   This parameter syntax does not resolve imports or local shadowing of `t`.
-  Findings are advisory: `t.Fatalf("want %v of type %T", want, want)` intentionally
-  matches even though it correctly prints the expected value and its type. The
-  rule cannot infer the purpose of format slots. An `invalid` fixture and snapshot
-  explicitly preserve this acknowledged false positive.
+  Findings are advisory: intentionally rendering the same expected operand with
+  different format verbs or flags is an acknowledged false-positive class. For
+  example, `t.Fatalf("want %v of type %T", want, want)` correctly prints a value
+  and its type but still matches. The rule cannot infer the purpose of format
+  slots. An `invalid` fixture and snapshot preserve this representative example.
 - `py-jwt-decode-unverified` matches `jwt.decode` and bare `decode` when the
   module has a top-level exact `from jwt import decode`. Function-local imports,
   aliases and shadowing are not resolved. Verification disabled through a
