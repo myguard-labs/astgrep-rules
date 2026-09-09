@@ -18,3 +18,14 @@ snapshots:
       style: primary
       start: 29
       end: 57
+  ? |-
+    void f(void) {
+      /* Advisory boundary: a capacity including the NUL may be intentional. */
+      struct { unsigned len; } capacity;
+      capacity.len = sizeof("");
+    }
+  : labels:
+    - source: capacity.len = sizeof("")
+      style: primary
+      start: 130
+      end: 155
