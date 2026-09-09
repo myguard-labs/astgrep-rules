@@ -150,6 +150,13 @@ resolution and remain outside this matcher.
   still matches. Measured on labs/gozer, labs/gyzor and labs/mailstrix, most raw
   matches came from vendored dependencies; scope scans to first-party
   directories. Test files legitimately discard results and dominate the rest.
+- `go-test-diagnostic-observed-value` is a same-`if` syntax check: it binds the
+  initializer's observed identifier and the inequality's expected operand, then
+  matches a direct `t.Fatalf` whose first two diagnostic values repeat that
+  expected operand. It requires exactly those two values after the format string,
+  so diagnostics with trailing values do not match. It does not parse the format
+  string, identify other testing helpers, or perform dataflow beyond the
+  initializer, condition, and body.
 - `py-jwt-decode-unverified` matches `jwt.decode` and bare `decode` when the
   module has a top-level exact `from jwt import decode`. Function-local imports,
   aliases and shadowing are not resolved. Verification disabled through a

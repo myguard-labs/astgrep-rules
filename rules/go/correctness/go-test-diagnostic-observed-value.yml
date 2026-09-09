@@ -1,0 +1,12 @@
+id: go-test-diagnostic-observed-value
+language: go
+severity: warning
+message: >-
+  Assertion diagnostic prints the expected value in both observed and expected
+  slots, hiding the value initialized for comparison.
+note: >-
+  Matches the exact short-if form with a direct Fatalf call whose first two
+  diagnostic values are the same condition operand. It does not interpret the
+  format string or follow values beyond this initializer, condition, and body.
+rule:
+  pattern: if $GOT := $ACTUAL; $GOT != $WANT { t.Fatalf($FMT, $WANT, $WANT) }

@@ -1,0 +1,8 @@
+id: go-test-diagnostic-observed-value
+snapshots:
+  package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }:
+    labels:
+    - source: if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) }
+      style: primary
+      start: 34
+      end: 108

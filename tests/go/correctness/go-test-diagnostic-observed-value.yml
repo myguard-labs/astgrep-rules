@@ -1,0 +1,11 @@
+id: go-test-diagnostic-observed-value
+valid:
+- package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", got, want) } }
+- package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", other, other) } }
+- package m; // if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) }
+- package m; var diagnostic = "if got := actual(); got != want { t.Fatalf(\\\"got %v want %v\\\", want, want) }"
+- package m; func f(t *testing.T) { got := actual(); if got != want { t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t *testing.T) { if got := actual(); got != want { t.Errorf("got %v want %v", want, want) } }
+- package m; func f(logger *Logger) { if got := actual(); got != want { logger.Fatalf("got %v want %v", want, want) } }
+invalid:
+- package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
