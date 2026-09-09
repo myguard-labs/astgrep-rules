@@ -163,18 +163,25 @@ resolution and remain outside this matcher.
   match. The consequence must contain
   only that call as a statement; comments before or after it are allowed, but
   additional statements and calls inside nested blocks are excluded. It does not
-  parse the format string, identify other testing helpers, or perform dataflow
-  beyond the initializer, condition, and body. The nearest function, method, or
-  function literal must declare a parameter named `t` with the literal type
-  `*testing.T`; grouped parameter names are supported. Test-handle parameter names
-  other than `t`, type/import aliases, and closures using an outer test handle are
-  excluded.
+  fully interpret the format string, identify other testing helpers, or perform
+  dataflow beyond the initializer, condition, and body. The nearest function,
+  method, or function literal must declare a parameter named `t` with the
+  literal type `*testing.T`; grouped parameter names are supported. Test-handle
+  parameter names other than `t`, type/import aliases, and closures using an
+  outer test handle are excluded.
   This parameter syntax does not resolve imports or local shadowing of `t`.
-  Findings are advisory: intentionally rendering the same expected operand with
-  different format verbs or flags is an acknowledged false-positive class. For
-  example, `t.Fatalf("want %v of type %T", want, want)` correctly prints a value
-  and its type but still matches. The rule cannot infer the purpose of format
-  slots. An `invalid` fixture and snapshot preserve this representative example.
+  The format must be a string literal containing exactly two identical supported
+  directives: the bare standard verbs (`vTtbcdoOqxXUeEfFgGsp`), `%+v`, or `%#v`.
+  Literal `%%` text and ordinary Go escapes are allowed. Go escapes producing a
+  percent sign (`\x25`, `\u0025`, `\U00000025`, `\045`) are excluded so
+  source-level counting cannot overlook runtime directives. Intentional mixed
+  representations such as `%v`/`%T`, `%v`/`%q`, `%d`/`%x`, and `%v`/`%#v` are quiet.
+  This deliberately misses genuine repeated-expected bugs using mixed directives,
+  other flags, widths, precision, explicit argument indexes, custom verbs,
+  encoded directives, or nonliteral formats (including constants and
+  concatenation). Findings remain
+  advisory: even identical directives cannot prove the author's intended value
+  roles, and custom `fmt.Formatter` behavior is not analyzed.
 - `py-jwt-decode-unverified` matches `jwt.decode` and bare `decode` when the
   module has a top-level exact `from jwt import decode`. Function-local imports,
   aliases and shadowing are not resolved. Verification disabled through a
