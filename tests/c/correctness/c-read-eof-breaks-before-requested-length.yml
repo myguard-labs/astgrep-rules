@@ -1,0 +1,31 @@
+id: c-read-eof-breaks-before-requested-length
+valid:
+- |-
+  while (remaining > 0) {
+    n = read(fd, p, remaining);
+    if (n == 0) return ERROR;
+    remaining -= n;
+  }
+- |-
+  void f(int remaining, int n) {
+    while (remaining > 0) {
+      if (n == 0) return ERROR;
+      remaining -= n;
+    }
+  }
+- |-
+  void f(void) { const char *s = "while (remaining > 0) if (n == 0) break;"; }
+invalid:
+- |-
+  while (remaining > 0) {
+    n = read(fd, p, remaining);
+    if (n == 0) break;
+    remaining -= n;
+  }
+- |-
+  void f(int pending, int result) {
+    while (pending > 0) {
+      if (result == 0) break;
+      pending -= result;
+    }
+  }

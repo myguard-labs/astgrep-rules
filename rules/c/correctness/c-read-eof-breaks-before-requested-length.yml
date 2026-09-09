@@ -1,0 +1,29 @@
+id: c-read-eof-breaks-before-requested-length
+language: c
+severity: warning
+message: A loop that is filling a requested byte count breaks on a zero-byte read
+  instead of rejecting EOF before the remaining count reaches zero.
+note: When the loop's own remaining count represents a promised range, accepting EOF
+  produces a truncated body; this compact loop shape generalises to file-backed replay.
+rule:
+  kind: while_statement
+  all:
+    - has:
+        field: condition
+        pattern:
+          context: |
+            void f(void) { while ($REMAINING > 0) {} }
+          selector: parenthesized_expression
+    - has:
+        stopBy: end
+        kind: if_statement
+        all:
+          - has:
+              field: condition
+              pattern:
+                context: |
+                  void f(void) { if ($N == 0) {} }
+                selector: parenthesized_expression
+          - has:
+              field: consequence
+              kind: break_statement
