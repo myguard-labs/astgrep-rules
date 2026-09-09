@@ -1,0 +1,26 @@
+id: nginx-chain-aggregate-used-per-element
+language: c
+severity: warning
+message: A chain loop uses an OR-accumulated last_buf flag to choose handling for
+  the current element, so links after the terminal link are misclassified as terminal.
+note: Nginx chains can contain trailing empty links after last_buf, so aggregate completion
+  and current-link terminality must remain distinct variables.
+rule:
+  kind: for_statement
+  all:
+    - has:
+        stopBy: end
+        kind: assignment_expression
+        pattern:
+          context: |
+            void f(void) { $FLAG |= $BUF->last_buf; }
+          selector: assignment_expression
+    - has:
+        stopBy: end
+        kind: if_statement
+        has:
+          field: condition
+          pattern:
+            context: |
+              void f(void) { if ($FLAG) {} }
+            selector: parenthesized_expression
