@@ -1,0 +1,18 @@
+id: nginx-cpp-line-comment
+valid:
+- |-
+    /* good */
+    int x;
+- |-
+    /*
+     * https://nginx.org/
+     */
+    int x;
+- 'const char *url = "https://nginx.org/";'
+- 'const char *text = "// not a comment";'
+invalid:
+- |-
+    // bad
+    int x;
+- |-
+    int x; // trailing comment
