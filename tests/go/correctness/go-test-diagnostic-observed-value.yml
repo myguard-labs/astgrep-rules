@@ -10,5 +10,29 @@ valid:
 - package m; func f(t *Logger) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
 - package m; type testT = testing.T; func f(t *testT) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
 - package m; type testT testing.T; func f(t *testT) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(tt *testing.T) { if got := actual(); got != want { tt.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t *testing.T) { if got := actual(); other != want { t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v extra %v", want, want, extra) } }
+- package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v", want) } }
+- package m; func f(t *testing.T) { g := func(t *Logger) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }; _ = g }
+- package m; func f(t *testing.T) { g := func() { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }; _ = g }
+- package m; func (s *Suite) f(t *Logger) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t *Logger, tt *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t *testing.TB) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
 invalid:
 - package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(first int, t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(other, t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
+- package m; func (s *Suite) f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
+- package m; var f = func(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }
+- package m; func f(t *testing.T) { if ready { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } } }
+- |
+  package m
+  func f(
+      t /* test handle */ *testing.T,
+  ) {
+      if observed := actual(); observed != expected {
+          t.Fatalf("got %v want %v", expected, expected)
+      }
+  }

@@ -1,8 +1,55 @@
 id: go-test-diagnostic-observed-value
 snapshots:
+  ? |
+    package m
+    func f(
+        t /* test handle */ *testing.T,
+    ) {
+        if observed := actual(); observed != expected {
+            t.Fatalf("got %v want %v", expected, expected)
+        }
+    }
+  : labels:
+    - source: |-
+        if observed := actual(); observed != expected {
+                t.Fatalf("got %v want %v", expected, expected)
+            }
+      style: primary
+      start: 62
+      end: 170
+  package m; func (s *Suite) f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }:
+    labels:
+    - source: if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) }
+      style: primary
+      start: 45
+      end: 119
+  package m; func f(first int, t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }:
+    labels:
+    - source: if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) }
+      style: primary
+      start: 45
+      end: 119
+  package m; func f(other, t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }:
+    labels:
+    - source: if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) }
+      style: primary
+      start: 41
+      end: 115
   package m; func f(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }:
     labels:
     - source: if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) }
       style: primary
       start: 34
       end: 108
+  package m; func f(t *testing.T) { if ready { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } } }:
+    labels:
+    - source: if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) }
+      style: primary
+      start: 45
+      end: 119
+  package m; var f = func(t *testing.T) { if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) } }:
+    labels:
+    - source: if got := actual(); got != want { t.Fatalf("got %v want %v", want, want) }
+      style: primary
+      start: 40
+      end: 114

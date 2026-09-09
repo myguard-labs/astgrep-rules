@@ -6,11 +6,31 @@ message: >-
   slots, hiding the value initialized for comparison.
 note: >-
   Matches the exact short-if form with a direct Fatalf call whose first two
-  diagnostic values are the same condition operand. It does not interpret the
-  format string or follow values beyond this initializer, condition, and body.
+  diagnostic values are the same condition operand, within a function declaring
+  a parameter named t of type *testing.T. It does not resolve aliases or
+  shadowing, interpret the format string, or follow values beyond this if.
 rule:
   all:
     - pattern: if $GOT := $ACTUAL; $GOT != $WANT { t.Fatalf($FMT, $WANT, $WANT) }
+    - pattern: $ASSERTION
     - inside:
-        kind: function_declaration
-        regex: 'func\s+\w+\s*\([^)]*[,(]\s*t\s+\*testing\.T\b'
+        # Named functions and methods cannot nest in valid Go.
+        stopBy:
+          kind: func_literal
+        has:
+          field: parameters
+          kind: parameter_list
+          has:
+            kind: parameter_declaration
+            all:
+              - has:
+                  kind: identifier
+                  regex: '^t$'
+              - has:
+                  field: type
+                  pattern:
+                    context: 'func f(t *testing.T) {}'
+                    selector: pointer_type
+labels:
+  ASSERTION:
+    style: primary
