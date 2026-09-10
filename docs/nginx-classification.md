@@ -19,6 +19,7 @@ Audit performed 2026-09-10 over every nginx-prefixed rule:
 | `nginx-plain-inline` | nginx | nginx portability policy; `inline` is valid C |
 | `nginx-pool-cleanup-add-size-discarded` | nginx | pool cleanup API ownership |
 | `c-string-sizeof-includes-nul` | C | only C string-literal and `sizeof` semantics |
+| `nginx-string-sizeof-includes-nul` | compatibility | disabled alias for explicit old-ID promotion |
 | `nginx-strlen-on-ngx-str-data` | nginx | `ngx_str_t` length convention |
 | `nginx-strstrn-length-off-by-one` | nginx | nginx substring API contract |
 | `nginx-atoi-unchecked` | nginx | nginx conversion API error contract |
@@ -46,4 +47,5 @@ Audit performed 2026-09-10 over every nginx-prefixed rule:
 The former `nginx-string-sizeof-includes-nul` was renamed because its matcher
 deliberately includes non-nginx structures and its claim requires no nginx
 contract. The nginx development guide remains useful evidence for the original
-case, but evidence provenance does not determine rule language.
+case, but evidence provenance does not determine rule language. Consumers must
+apply the [rule ID migration](id-migrations.md) when updating the pack.

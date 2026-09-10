@@ -1,0 +1,17 @@
+id: nginx-string-sizeof-includes-nul
+valid:
+- |-
+  void f(void) {
+    value.len = sizeof("text") - 1;
+    value.capacity = sizeof("text");
+  }
+- |-
+  void f(void) {
+    const char *text = "value.len = sizeof(\"text\")";
+    /* value.len = sizeof("text"); */
+  }
+invalid:
+- |-
+  void f(void) {
+    value.len = sizeof("text");
+  }

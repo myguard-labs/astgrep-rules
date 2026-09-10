@@ -1,0 +1,18 @@
+id: nginx-string-sizeof-includes-nul
+language: c
+severity: 'off'
+message: >-
+  Deprecated rule ID; use c-string-sizeof-includes-nul. A .len field receives
+  sizeof a string literal, including its terminating NUL.
+note: >-
+  Compatibility alias for consumers that explicitly promote the former ID.
+  Normal scans use c-string-sizeof-includes-nul and do not emit this rule.
+rule:
+  kind: assignment_expression
+  pattern:
+    context: |
+      void f(void) { $STR.len = sizeof($LIT); }
+    selector: assignment_expression
+constraints:
+  LIT:
+    kind: string_literal

@@ -78,7 +78,10 @@ The directory and `language` key name the parser, while the rule ID names the
 domain. nginx has no separate grammar here: keep its rules under `c` with
 `language: c`, and use an `nginx-*` ID only when the finding depends on an nginx
 API, data model, lifecycle, ABI, or source policy. Use a `c-*` ID when the claim
-remains useful and unchanged in ordinary C code.
+remains useful and unchanged in ordinary C code. A renamed consumer-facing ID
+may keep a `severity: off` alias when explicit promotion can preserve meaningful
+compatibility without duplicating normal diagnostics; document the remaining
+migration work in `docs/id-migrations.md`.
 
 Add `invalid` detections, `valid` near misses, lexical lookalikes, and relevant
 boundary shapes. For advisory rules, a safe call may intentionally match:

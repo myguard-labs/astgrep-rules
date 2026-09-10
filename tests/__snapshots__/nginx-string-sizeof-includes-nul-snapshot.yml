@@ -1,0 +1,11 @@
+id: nginx-string-sizeof-includes-nul
+snapshots:
+  ? |-
+    void f(void) {
+      value.len = sizeof("text");
+    }
+  : labels:
+    - source: value.len = sizeof("text")
+      style: primary
+      start: 17
+      end: 43
