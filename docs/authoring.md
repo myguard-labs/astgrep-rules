@@ -70,9 +70,15 @@ the following word before treating that word as another flag.
 
 Put the rule in `rules/<language>/<category>/<id>.yml` and matching fixtures in
 `tests/<language>/<category>/<id>.yml`. Use `security` for security review and
-`correctness` for general API/logic mistakes. Keep nginx under language `c`.
+`correctness` for general API/logic mistakes.
 Tests identify the rule by `id`; use realistic syntax including PHP open tags
 and complete C functions where context affects parsing.
+
+The directory and `language` key name the parser, while the rule ID names the
+domain. nginx has no separate grammar here: keep its rules under `c` with
+`language: c`, and use an `nginx-*` ID only when the finding depends on an nginx
+API, data model, lifecycle, ABI, or source policy. Use a `c-*` ID when the claim
+remains useful and unchanged in ordinary C code.
 
 Add `invalid` detections, `valid` near misses, lexical lookalikes, and relevant
 boundary shapes. For advisory rules, a safe call may intentionally match:

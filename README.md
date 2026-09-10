@@ -1,6 +1,6 @@
 # astgrep-rules
 
-Handcrafted [ast-grep](https://ast-grep.github.io/) rules for Bash, C/nginx, Go,
+Handcrafted [ast-grep](https://ast-grep.github.io/) rules for Bash, C, nginx, Go,
 Java, JavaScript, Lua, PHP, and Python. Security and correctness checks identify
 code that needs review; a match alone does not establish a vulnerability.
 
@@ -14,7 +14,8 @@ platform.
 
 ## Layout
 
-- `rules/<language>/<category>/`: active YAML rules; nginx rules use `c`.
+- `rules/<parser-language>/<category>/`: active YAML rules. nginx rules use the
+  C parser and `nginx-*` IDs; generic C rules use `c-*` IDs.
 - `tests/<language>/<category>/`: matching `valid` and `invalid` fixtures.
 - `docs/`: authoring guidance, detection limits, per-rule source evidence, and
   excluded candidates with rejection evidence.
@@ -50,8 +51,9 @@ the PHP parser.
 Warnings and information are advisory; error severity can fail a scan. Validate
 any promoted rule IDs and exercise a known positive before using a scan as a gate.
 
-See [authoring](docs/authoring.md), [limitations](docs/limitations.md),
-[sources](docs/sources.md) and [rejected candidates](docs/rejected-candidates.md).
+See [authoring](docs/authoring.md), [nginx classification](docs/nginx-classification.md),
+[limitations](docs/limitations.md), [sources](docs/sources.md) and
+[rejected candidates](docs/rejected-candidates.md).
 
 ## Related reading
 

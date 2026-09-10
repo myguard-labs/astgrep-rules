@@ -1,4 +1,4 @@
-id: nginx-string-sizeof-includes-nul
+id: c-string-sizeof-includes-nul
 valid:
 - |-
   void f(void) {
