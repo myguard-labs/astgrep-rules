@@ -1423,7 +1423,7 @@ class ProbeTests(unittest.TestCase):
             rule = yaml.safe_load(path.read_text())
             if rule.get("severity") in ("off", False):
                 off_ids.append(rule["id"])
-        self.assertEqual(sorted(off_ids), sorted(PROBE.OFF_RULE_IDS))
+        self.assertEqual(sorted(off_ids), sorted(PROBE.COMPATIBILITY_ALIAS_IDS))
 
         source_rule, source_fixture = PROBE.find_rule("nginx-string-sizeof-includes-nul")
         source_snapshot = (
@@ -1456,7 +1456,7 @@ class ProbeTests(unittest.TestCase):
 
             rule.write_text(original)
             with patch.object(PROBE, "ROOT", root), \
-                    patch.object(PROBE, "OFF_RULE_IDS", set()), \
+                    patch.object(PROBE, "COMPATIBILITY_ALIAS_IDS", set()), \
                     patch("sys.argv", ["probe", source_rule.stem, "--json"]), \
                     contextlib.redirect_stdout(io.StringIO()) as output:
                 self.assertEqual(PROBE.main(), 1)
@@ -1465,9 +1465,13 @@ class ProbeTests(unittest.TestCase):
                 item for item in report["checks"] if item["name"] == "severity"
             )
             self.assertFalse(severity["ok"])
-            self.assertTrue(all(
-                item["ok"] for item in report["checks"] if item["name"] != "severity"
-            ))
+            self.assertIsNone(PROBE.promoted_rule_id({
+                "id": "work-in-progress", "severity": "off"
+            }))
+            discovery = next(
+                item for item in report["checks"] if item["name"] == "discovery"
+            )
+            self.assertFalse(discovery["ok"])
 
             document = yaml.safe_load(original)
             del document["severity"]
@@ -1481,6 +1485,9 @@ class ProbeTests(unittest.TestCase):
                 item for item in report["checks"] if item["name"] == "severity"
             )
             self.assertFalse(severity["ok"])
+            self.assertTrue(all(
+                item["ok"] for item in report["checks"] if item["name"] != "severity"
+            ))
 
     def test_jwt_witnesses_validate_each_deleted_arm(self):
         rule_path, fixture_path = PROBE.find_rule("py-jwt-decode-unverified")

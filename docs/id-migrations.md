@@ -14,5 +14,7 @@ emit only the replacement ID, while an existing
 `--error=nginx-string-sizeof-includes-nul` promotion activates the alias and
 continues to fail on a known positive. That explicit promotion emits both the
 legacy error and the replacement warning for each site; count-based reports
-must account for the temporary duplicate. Suppressions, filters, reports, and
-other ID-based configuration still need the mapping above.
+must account for the temporary duplicate. Scans that explicitly pass
+`--include-off` also activate the alias and produce both IDs. Suppressions,
+filters, reports, and other ID-based configuration still need the mapping
+above.

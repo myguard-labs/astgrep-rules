@@ -47,7 +47,7 @@ AST_GREP = ROOT / "node_modules" / ".bin" / "ast-grep"
 EXTENSIONS = {"go": "go", "c": "c", "php": "php", "python": "py", "javascript": "js",
               "java": "java", "lua": "lua", "bash": "sh"}
 META = re.compile(r"\$\$?\$?[A-Z_][A-Z0-9_]*")
-OFF_RULE_IDS = {"nginx-string-sizeof-includes-nul"}
+COMPATIBILITY_ALIAS_IDS = {"nginx-string-sizeof-includes-nul"}
 
 
 def find_rule(rule_id: str) -> tuple[Path, Path]:
@@ -97,12 +97,15 @@ def runnable_rule(rule: dict) -> dict:
 def supported_severity(rule: dict) -> bool:
     severity = canonical_severity(rule)
     return severity in ("error", "warning", "info") or (
-        severity == "off" and rule.get("id") in OFF_RULE_IDS
+        severity == "off" and rule.get("id") in COMPATIBILITY_ALIAS_IDS
     )
 
 
 def promoted_rule_id(rule: dict) -> str | None:
-    return rule["id"] if canonical_severity(rule) == "off" else None
+    rule_id = rule.get("id")
+    return rule_id if (
+        canonical_severity(rule) == "off" and rule_id in COMPATIBILITY_ALIAS_IDS
+    ) else None
 
 
 def scan_stdin(rule: dict, source: str) -> tuple[int | None, str]:
