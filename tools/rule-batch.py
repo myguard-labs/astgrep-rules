@@ -259,8 +259,10 @@ def preserve_actionable_routes(rows: list[dict[str, str]], plan_path: Path,
         current_candidate = row["candidate_digest"]
         provenance_matches = bool(current_candidate) and current_candidate in {
             prior["candidate_digest"], state_candidate}
-        if same_eligibility and provenance_matches and prior["action"] in ACTIONABLE:
-            row["action"] = prior["action"]
+        restorable = ACTIONABLE | {"PROBE-FAILED"}
+        if same_eligibility and provenance_matches and prior["action"] in restorable:
+            row["action"] = ("AI-DRAFT" if prior["action"] == "PROBE-FAILED"
+                             else prior["action"])
             row["detail"] = prior["detail"]
 
 

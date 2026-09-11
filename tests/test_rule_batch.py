@@ -350,6 +350,20 @@ class RuleBatchTests(unittest.TestCase):
             self.assertEqual(rows[0]["action"], "AI-DRAFT")
             self.assertEqual(rows[0]["detail"], "continue drafting")
 
+    def test_replanning_converts_bound_probe_failure_to_ai_draft(self):
+        prior = {"id": "go-test-rule", "category": "correctness",
+                 "classification": "syntactic", "duplicate": "no",
+                 "proposal_digest": "a" * 64, "candidate_digest": "b" * 64,
+                 "action": "PROBE-FAILED", "detail": "probe failed"}
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            plan = work / "draft-plan.tsv"
+            BATCH.write_plan(plan, [prior])
+            rows = [{**prior, "action": "EXISTING-REVIEW", "detail": "existing"}]
+            BATCH.preserve_actionable_routes(rows, plan, work)
+            self.assertEqual(rows[0]["action"], "AI-DRAFT")
+            self.assertEqual(rows[0]["detail"], "probe failed")
+
     def test_main_binds_candidate_created_by_seed_apply(self):
         proposal = {"id": "go-test-rule", "language": "go",
                     "classification": "syntactic"}
