@@ -99,26 +99,31 @@ class RuleBatchTests(unittest.TestCase):
 
     def test_seed_status_requires_explicit_oracle_verdict(self):
         cases = (
-            (completed(stdout="SEED PASS fixture oracle; review\n"), "SEEDED-REVIEW"),
-            (completed(stdout="SEED NONE; author matcher\n"), "AI-DRAFT"),
-            (completed(stdout="no verdict\n"), "BLOCKED"),
-            (completed(1, stderr="invalid proposal\n"), "BLOCKED"),
+            (completed(stdout="SEED PASS fixture oracle; review\n"), "SEEDED-REVIEW", None),
+            (completed(stdout="SEED NONE; author matcher\n"), "AI-DRAFT",
+             "no safe seed; CONTRAST unavailable; rerun scaffold assessment"),
+            (completed(stdout="no verdict\n"), "BLOCKED", None),
+            (completed(1, stderr="invalid proposal\n"), "BLOCKED", None),
         )
-        for result, expected in cases:
+        for result, expected, expected_detail in cases:
             with self.subTest(expected=expected), patch.object(BATCH, "run", return_value=result):
-                action, _ = BATCH.seed_status(Path("p.jsonl"), "go-test-rule", "security")
+                action, detail = BATCH.seed_status(Path("p.jsonl"), "go-test-rule", "security")
                 self.assertEqual(action, expected)
+                if expected_detail is not None:
+                    self.assertEqual(detail, expected_detail)
         with patch.object(BATCH, "run", side_effect=BATCH.BatchError("scaffold timed out")):
             action, detail = BATCH.seed_status(Path("p.jsonl"), "go-test-rule", "security")
         self.assertEqual(action, "BLOCKED")
         self.assertIn("timed out", detail)
 
-    def test_seed_status_uses_only_the_first_output_line(self):
-        spoofed = completed(stdout=("SEED NONE; author matcher\n"
-                                    "CONTRAST near-only=[\"SEED PASS fixture oracle\"]\n"))
+    def test_seed_status_routes_from_first_line_and_bounds_contrast(self):
+        contrast = 'CONTRAST near-only=["SEED PASS fixture oracle"]; ' + "x" * 300 + "TAIL"
+        spoofed = completed(stdout=f"SEED NONE; author matcher\n{contrast}\n")
         with patch.object(BATCH, "run", return_value=spoofed):
-            action, _ = BATCH.seed_status(Path("p.jsonl"), "go-test-rule", "security")
+            action, detail = BATCH.seed_status(Path("p.jsonl"), "go-test-rule", "security")
         self.assertEqual(action, "AI-DRAFT")
+        self.assertEqual(detail, f"no safe seed; {contrast[:300]}")
+        self.assertNotIn("TAIL", detail)
 
     def test_seed_status_short_circuits_existing_rule_without_subprocess(self):
         with tempfile.TemporaryDirectory() as directory, \
@@ -210,6 +215,8 @@ class RuleBatchTests(unittest.TestCase):
                     self.assertFalse(BATCH.probe_passed(work, "go-test-rule", verdict))
 
     def test_relative_work_is_resolved_before_child_tools_run(self):
+        if not (ROOT / "node_modules/.bin/ast-grep").is_file():
+            self.skipTest("pinned ast-grep engine is not installed")
         proposal = {"id": "go-relative-work-rule", "language": "go",
                     "claim": "Report bad calls", "classification": "syntactic",
                     "positive": "package p\nfunc f(){ bad(x) }",

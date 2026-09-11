@@ -147,11 +147,14 @@ def seed_status(proposal: Path, rule_id: str, category: str) -> tuple[str, str]:
         detail = (result.stderr or result.stdout).strip().splitlines()[-1:]
         message = detail[0][:200] if detail else "scaffold returned no diagnostic"
         return "BLOCKED", message
-    first = result.stdout.splitlines()[:1]
+    lines = result.stdout.splitlines()
+    first = lines[:1]
     if first and first[0].startswith("SEED PASS fixture oracle;"):
         return "SEEDED-REVIEW", "fixture oracle passed; AI reviews claim and generality"
     if first and first[0].startswith("SEED NONE;"):
-        return "AI-DRAFT", "no safe seed; AI authors matcher from bounded contrast"
+        contrast = next((line[:300] for line in lines[1:] if line.startswith("CONTRAST ")), "")
+        seed_detail = contrast or "CONTRAST unavailable; rerun scaffold assessment"
+        return "AI-DRAFT", f"no safe seed; {seed_detail}"
     return "BLOCKED", "scaffold omitted seed verdict"
 
 
