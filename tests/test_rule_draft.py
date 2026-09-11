@@ -107,11 +107,16 @@ class RuleDraftTests(unittest.TestCase):
 
     def test_probe_uses_fingerprinted_bytes_during_aba_edit(self):
         observed = {}
+        snapshot = self.root / "tests/__snapshots__/go-test-rule-snapshot.yml"
+        coverage = self.root / "tests/arm_coverage.json"
+        snapshot.parent.mkdir(parents=True)
+        snapshot.write_bytes(b"snapshot bytes\n")
+        coverage.write_bytes(b'{"cases": []}\n')
 
         def probe(command, **_kwargs):
             input_root = Path(command[command.index("--input-root") + 1])
-            observed["rule"] = (input_root / self.rule.relative_to(self.root)).read_bytes()
-            observed["fixture"] = (input_root / self.fixture.relative_to(self.root)).read_bytes()
+            for source in (self.rule, self.fixture, snapshot, coverage):
+                observed[source] = (input_root / source.relative_to(self.root)).read_bytes()
             self.rule.write_text(self.initial_rule + "# raced\n", encoding="utf-8")
             self.rule.write_text(self.initial_rule, encoding="utf-8")
             return self.passed()
@@ -121,10 +126,10 @@ class RuleDraftTests(unittest.TestCase):
                 patch.object(DRAFT.subprocess, "run", side_effect=probe), \
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(DRAFT.advance("go-test-rule", self.work), 0)
-        self.assertEqual(observed["rule"], self.initial_rule.encode())
-        self.assertEqual(observed["fixture"], self.fixture.read_bytes())
+        for source in (self.rule, self.fixture, snapshot, coverage):
+            self.assertEqual(observed[source], source.read_bytes())
         state = json.loads((self.work / "draft/go-test-rule.json").read_text())
-        expected = DRAFT.candidate(self.rule, self.fixture)[0]
+        expected = DRAFT.candidate(self.rule, self.fixture, self.root)[0]
         self.assertEqual(state["attempts"][0]["candidate"], expected)
 
     def test_failed_verdict_without_gate_details_prints_one_line(self):
@@ -137,15 +142,22 @@ class RuleDraftTests(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertEqual(output, "go-test-rule: RETRY 1/4\n")
 
-    def test_terminal_state_rejects_changed_rule_or_fixture(self):
+    def test_terminal_state_rejects_changed_probe_input(self):
+        supporting = (
+            self.root / "tests/__snapshots__/go-test-rule-snapshot.yml",
+            self.root / "tests/arm_coverage.json",
+        )
+        supporting[0].parent.mkdir(parents=True)
+        supporting[0].write_bytes(b"snapshot bytes\n")
+        supporting[1].write_bytes(b'{"cases": []}\n')
         self.advance([self.passed()])
-        for path, suffix in ((self.rule, "# changed\n"), (self.fixture, "# changed\n")):
-            original = path.read_text(encoding="utf-8")
-            path.write_text(original + suffix, encoding="utf-8")
+        for path in (self.rule, self.fixture, *supporting):
+            original = path.read_bytes()
+            path.write_bytes(original + b"# changed\n")
             with self.subTest(path=path), patch.object(DRAFT, "ROOT", self.root), \
-                    self.assertRaisesRegex(DRAFT.DraftError, "different rule/fixture bytes"):
+                    self.assertRaisesRegex(DRAFT.DraftError, "different probe inputs"):
                 DRAFT.advance("go-test-rule", self.work)
-            path.write_text(original, encoding="utf-8")
+            path.write_bytes(original)
 
     def test_pass_with_sexp_is_valid_terminal_state(self):
         passed = self.passed()

@@ -263,6 +263,27 @@ class RuleBatchTests(unittest.TestCase):
             BATCH.write_plan(path, rows)
             self.assertEqual(path.read_bytes(), first)
 
+    def test_candidate_digest_tracks_every_probe_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rule = root / "rules/go/correctness/go-test-rule.yml"
+            fixture = root / "tests/go/correctness/go-test-rule.yml"
+            rule.parent.mkdir(parents=True)
+            fixture.parent.mkdir(parents=True)
+            rule.write_text("rule: {pattern: bad($X)}\n")
+            fixture.write_text("valid: [good(x)]\ninvalid: [bad(x)]\n")
+            baseline = BATCH.candidate_digest(rule, fixture, root)
+            supporting = (
+                root / "tests/__snapshots__/go-test-rule-snapshot.yml",
+                root / "tests/arm_coverage.json",
+            )
+            for path in supporting:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("probe input\n")
+                with self.subTest(path=path):
+                    self.assertNotEqual(BATCH.candidate_digest(rule, fixture, root), baseline)
+                path.unlink()
+
     def test_queue_and_task_hide_unrelated_proposals_and_terminal_drafts(self):
         proposals = [
             {"id": "go-first-rule", "language": "go", "claim": "first claim",
@@ -305,7 +326,7 @@ class RuleBatchTests(unittest.TestCase):
             rule.write_text("rule: {pattern: bad($X)}\n")
             fixture.write_text("valid: [good(x)]\ninvalid: [bad(x)]\n")
             finished = proposals[1]
-            finished_fingerprint = BATCH.candidate_digest(rule, fixture)
+            finished_fingerprint = BATCH.candidate_digest(rule, fixture, root)
             finished_state = work / "draft/go-finished-rule.json"
             finished_state.write_text(json.dumps(pass_state(
                 "go-finished-rule", finished_fingerprint)), encoding="utf-8")
@@ -360,7 +381,7 @@ class RuleBatchTests(unittest.TestCase):
             first_fixture = root / "tests/go/correctness/go-first-rule.yml"
             first_rule.write_text("rule: {pattern: bad($X)}\n")
             first_fixture.write_text("valid: [good(x)]\ninvalid: [bad(x)]\n")
-            first_fingerprint = BATCH.candidate_digest(first_rule, first_fixture)
+            first_fingerprint = BATCH.candidate_digest(first_rule, first_fixture, root)
             (work / "draft/go-first-rule.json").write_text(json.dumps(pass_state(
                 "go-first-rule", first_fingerprint)), encoding="utf-8")
             with patch.object(BATCH, "ROOT", root):

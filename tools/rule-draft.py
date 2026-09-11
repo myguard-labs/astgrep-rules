@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Track one rule's bounded probe loop and produce PASS, RETRY, or PARKED.
 
-The exact rule and fixture bytes identify a candidate. Only a completed probe
-of a distinct candidate consumes one of four attempts. Rechecking unchanged
-files is rejected without running the probe or consuming budget. PASS and
-PARKED are terminal and idempotent. State and parked reports are deterministic,
-atomic files under WORK/draft; malformed state fails closed.
+The exact bytes of every probe input identify a candidate. Only a completed
+probe of a distinct candidate consumes one of four attempts. Rechecking
+unchanged inputs is rejected without running the probe or consuming budget.
+PASS and PARKED are terminal and idempotent. State and parked reports are
+deterministic, atomic files under WORK/draft; malformed state fails closed.
 
 Usage:
   rule-draft.py <rule-id> --work WORK [--sexp]
@@ -51,40 +51,63 @@ def find_pair(rule_id: str) -> tuple[Path, Path]:
     return rule, fixture
 
 
-def candidate(rule: Path, fixture: Path) -> tuple[str, str, bytes, bytes]:
-    """Capture the exact candidate bytes, their identity, and matcher."""
-    rule_bytes = rule.read_bytes()
-    fixture_bytes = fixture.read_bytes()
+def candidate_inputs(rule: Path, fixture: Path,
+                     root: Path | None = None) -> dict[Path, bytes | None]:
+    """Capture required and optional bytes consumed by one probe."""
+    root = ROOT if root is None else root
+    inputs: dict[Path, bytes | None] = {
+        rule.relative_to(root): rule.read_bytes(),
+        fixture.relative_to(root): fixture.read_bytes(),
+    }
+    supporting = (
+        root / "tests" / "__snapshots__" / f"{rule.stem}-snapshot.yml",
+        root / "tests" / "arm_coverage.json",
+    )
+    for source in supporting:
+        try:
+            inputs[source.relative_to(root)] = source.read_bytes()
+        except FileNotFoundError:
+            inputs[source.relative_to(root)] = None
+    return inputs
+
+
+def input_digest(inputs: dict[Path, bytes | None]) -> str:
+    """Hash paths, presence, lengths, and bytes without concatenation ambiguity."""
+    digest = hashlib.sha256()
+    for path, contents in inputs.items():
+        name = path.as_posix().encode()
+        digest.update(len(name).to_bytes(8, "big"))
+        digest.update(name)
+        digest.update(b"\0" if contents is None else b"\1")
+        if contents is not None:
+            digest.update(len(contents).to_bytes(8, "big"))
+            digest.update(contents)
+    return digest.hexdigest()
+
+
+def candidate(rule: Path, fixture: Path,
+              root: Path | None = None) -> tuple[str, str, dict[Path, bytes | None]]:
+    """Capture the exact probe inputs, their identity, and matcher."""
+    root = ROOT if root is None else root
+    inputs = candidate_inputs(rule, fixture, root)
+    rule_bytes = inputs[rule.relative_to(root)]
+    assert rule_bytes is not None  # Required inputs never use the absence marker.
     try:
         document = yaml.safe_load(rule_bytes)
     except yaml.YAMLError as error:
         raise DraftError(f"invalid rule YAML: {error}") from error
     if not isinstance(document, dict):
         raise DraftError("rule YAML must be a mapping")
-    fingerprint = hashlib.sha256(rule_bytes + b"\0" + fixture_bytes).hexdigest()
     matcher = yaml.safe_dump(document.get("rule"), sort_keys=True).strip()
-    return fingerprint, matcher, rule_bytes, fixture_bytes
+    return input_digest(inputs), matcher, inputs
 
 
-def snapshot_candidate(rule: Path, fixture: Path, rule_bytes: bytes,
-                       fixture_bytes: bytes, target: Path) -> None:
+def snapshot_candidate(inputs: dict[Path, bytes | None], target: Path) -> None:
     """Materialize immutable probe inputs from the bytes that were fingerprinted."""
-    rule_target = target / rule.relative_to(ROOT)
-    fixture_target = target / fixture.relative_to(ROOT)
-    rule_target.parent.mkdir(parents=True)
-    fixture_target.parent.mkdir(parents=True)
-    rule_target.write_bytes(rule_bytes)
-    fixture_target.write_bytes(fixture_bytes)
-    supporting = (
-        ROOT / "tests" / "__snapshots__" / f"{rule.stem}-snapshot.yml",
-        ROOT / "tests" / "arm_coverage.json",
-    )
-    for source in supporting:
-        try:
-            contents = source.read_bytes()
-        except FileNotFoundError:
+    for relative, contents in inputs.items():
+        if contents is None:
             continue
-        destination = target / source.relative_to(ROOT)
+        destination = target / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(contents)
 
@@ -223,7 +246,7 @@ def terminal_result(state: dict, rule_id: str, fingerprint: str,
     attempts = state["attempts"]
     if not attempts or attempts[-1]["candidate"] != fingerprint:
         raise DraftError(
-            "terminal state belongs to different rule/fixture bytes; "
+            "terminal state belongs to different probe inputs; "
             "remove it explicitly to start a new draft")
     if state["status"] == "PARKED" and not report_path.exists():
         atomic_text(report_path, parked_report(rule_id, attempts))
@@ -242,7 +265,7 @@ def advance(rule_id: str, work: Path, sexp: bool = False) -> int:
     state = load_state(state_path, rule_id)
     attempts = state["attempts"]
     rule, fixture = find_pair(rule_id)
-    fingerprint, matcher, rule_bytes, fixture_bytes = candidate(rule, fixture)
+    fingerprint, matcher, inputs = candidate(rule, fixture)
     terminal = terminal_result(state, rule_id, fingerprint, report_path)
     if terminal is not None:
         return terminal
@@ -253,7 +276,7 @@ def advance(rule_id: str, work: Path, sexp: bool = False) -> int:
 
     with tempfile.TemporaryDirectory(prefix="rule-draft-input-") as directory:
         input_root = Path(directory)
-        snapshot_candidate(rule, fixture, rule_bytes, fixture_bytes, input_root)
+        snapshot_candidate(inputs, input_root)
         returncode, output = run_probe(rule_id, sexp, input_root)
     attempts.append({"candidate": fingerprint, "matcher": matcher, "probe": output})
     if returncode == 0:

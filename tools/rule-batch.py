@@ -70,13 +70,14 @@ def proposal_digest(proposal: dict) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def candidate_digest(rule: Path, fixture: Path) -> str | None:
-    """Mirror rule-draft's byte identity when the pair exists."""
+def candidate_digest(rule: Path, fixture: Path, root: Path | None = None) -> str | None:
+    """Mirror rule-draft's complete probe-input identity when the pair exists."""
+    root = ROOT if root is None else root
     try:
-        material = rule.read_bytes() + b"\0" + fixture.read_bytes()
+        inputs = DRAFT_STATE.candidate_inputs(rule, fixture, root)
     except OSError:
         return None
-    return hashlib.sha256(material).hexdigest()
+    return DRAFT_STATE.input_digest(inputs)
 
 
 def read_dedupe_rows(path: Path) -> list[dict[str, str]]:
