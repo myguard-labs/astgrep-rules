@@ -8,10 +8,11 @@ replicates the suite's per-rule contracts -- fixture layout, fixture run,
 exact JSON finding counts per fixture, every `any` arm killed by a fixture,
 literal diagnostics, and real-file discovery -- and prints one bounded report.
 Passing here is necessary, not sufficient: the full suite still runs before
-commit. Pipeline: .claude/skills/astgrep-rules/references/harvest-pipeline.md
+commit. Pipeline: docs/authoring.md#harvest-and-draft-pipeline
 
 Usage:
-  rule-probe.py <rule-id>            # report + exit 0/1
+  rule-probe.py <rule-id>            # report + exit 0/1; 2 when engine is absent
+  rule-probe.py <rule-id> --brief    # verdict plus failed checks only
   rule-probe.py <rule-id> --json     # machine-readable
   rule-probe.py <rule-id> --sexp     # also dump --debug-query=sexp of each pattern
   rule-probe.py <rule-id> --snapshot # write/refresh this rule's snapshot only,
@@ -128,11 +129,64 @@ def scan_stdin(rule: dict, source: str) -> tuple[int | None, str]:
     return len(findings), ""
 
 
+def run_source_scan(rule: dict, directory: Path,
+                    timeout: int = 15) -> tuple[object | None, str]:
+    """Run one bounded engine process for a directory of fixture snippets."""
+    try:
+        result = subprocess.run(
+            [AST_GREP, "scan", "--inline-rules", yaml.safe_dump(runnable_rule(rule)),
+             "--json=compact", directory],
+            text=True, capture_output=True, timeout=timeout, check=False)
+    except subprocess.TimeoutExpired as error:
+        return None, f"ast-grep timed out after {error.timeout}s"
+    if result.returncode not in (0, 1):
+        return None, result.stderr.strip()[:300] or f"ast-grep exited {result.returncode}"
+    try:
+        return json.loads(result.stdout or "[]"), ""
+    except json.JSONDecodeError:
+        return None, result.stderr.strip()[:300] or "invalid ast-grep JSON"
+
+
+def source_counts(findings: object, rule_id: str, targets: list[Path]) -> list[int] | None:
+    """Attribute every finding to one expected fixture file."""
+    if not isinstance(findings, list):
+        return None
+    counts = {target: 0 for target in targets}
+    for finding in findings:
+        file_name = finding.get("file") if isinstance(finding, dict) else None
+        path = Path(file_name).resolve() if isinstance(file_name, str) else None
+        if not isinstance(finding, dict) or finding.get("ruleId") != rule_id or path not in counts:
+            return None
+        counts[path] += 1
+    return [counts[target] for target in targets]
+
+
+def scan_sources(rule: dict, sources: list[tuple[str, int, str]]) -> list[tuple[int | None, str]]:
+    """Count all fixture snippets with one pinned-engine startup."""
+    language = rule.get("language")
+    extension = EXTENSIONS.get(language) if isinstance(language, str) else None
+    if extension is None:
+        message = f"unsupported fixture language {language!r}"
+        return [(None, message)] * len(sources)
+    with tempfile.TemporaryDirectory(prefix="rule-probe-count-") as name:
+        directory = Path(name)
+        targets = [directory / f"{kind}-{index}.{extension}" for kind, index, _ in sources]
+        for target, (_, _, source) in zip(targets, sources, strict=True):
+            target.write_text(source)
+        targets = [target.resolve() for target in targets]
+        findings, message = run_source_scan(rule, directory,
+                                            timeout=15 + 2 * len(sources))
+        counts = source_counts(findings, rule["id"], targets) if findings is not None else None
+    if counts is None:
+        return [(None, message or "findings for another rule or fixture")] * len(sources)
+    return [(count, "") for count in counts]
+
+
 class Isolated:
     """A throwaway sgconfig with exactly one rule, fixture and optional snapshot."""
 
     def __init__(self, rule_path: Path, fixture_path: Path):
-        self.tmp = tempfile.TemporaryDirectory(prefix="rule-probe-", dir=ROOT)
+        self.tmp = tempfile.TemporaryDirectory(prefix="rule-probe-")
         d = Path(self.tmp.name)
         (d / "rules").mkdir()
         (d / "tests" / "__snapshots__").mkdir(parents=True)
@@ -169,14 +223,15 @@ class Isolated:
 def fixture_counts(rule, valid, invalid):
     """Check each fixture independently of earlier report failures."""
     counts, multiple, passed = [], [], True
-    for kind, sources in (("invalid", invalid), ("valid", valid)):
-        for index, source in enumerate(sources):
-            count, error = scan_stdin(rule, source)
-            passed &= count is not None and (count >= 1 if kind == "invalid" else count == 0)
-            detail = f"{kind}[{index}]={'ERR ' + error if count is None else count}"
-            counts.append(detail)
-            if kind == "invalid" and count is not None and count > 1:
-                multiple.append(detail)
+    sources = [(kind, index, source) for kind, fixtures in (("invalid", invalid),
+               ("valid", valid)) for index, source in enumerate(fixtures)]
+    results = scan_sources(rule, sources)
+    for (kind, index, _source), (count, error) in zip(sources, results, strict=True):
+        passed &= count is not None and (count >= 1 if kind == "invalid" else count == 0)
+        detail = f"{kind}[{index}]={'ERR ' + error if count is None else count}"
+        counts.append(detail)
+        if kind == "invalid" and count is not None and count > 1:
+            multiple.append(detail)
     return passed, "; ".join(counts), multiple
 
 
@@ -274,7 +329,7 @@ def discover(rule_path, language, source, promoted_id=None):
     ext = EXTENSIONS.get(language)
     if ext is None:
         return False, f"unsupported discovery language {language!r}; extend EXTENSIONS"
-    with tempfile.TemporaryDirectory(prefix="rule-probe-disc-", dir=ROOT) as name:
+    with tempfile.TemporaryDirectory(prefix="rule-probe-disc-") as name:
         directory = Path(name)
         (directory / "rules").mkdir()
         (directory / "rules" / rule_path.name).write_bytes(rule_path.read_bytes())
@@ -429,7 +484,9 @@ def literal_diagnostic(value):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n", maxsplit=1)[0])
     ap.add_argument("rule_id")
-    ap.add_argument("--json", action="store_true")
+    output = ap.add_mutually_exclusive_group()
+    output.add_argument("--json", action="store_true")
+    output.add_argument("--brief", action="store_true")
     ap.add_argument("--sexp", action="store_true")
     ap.add_argument("--snapshot", action="store_true")
     args = ap.parse_args()
@@ -445,12 +502,13 @@ def main() -> int:
 
     check("ast-grep-available", AST_GREP.is_file(), "run npm ci to install ast-grep")
     if not AST_GREP.is_file():
-        return finish(report, ok, args.json)
+        finish(report, ok, args.json, args.brief)
+        return 2
 
     # 1. layout and parseability -- the inventory test's contract
     inputs = load_inputs(rule_path, fixture_path, check)
     if inputs is None:
-        return finish(report, ok, args.json)
+        return finish(report, ok, args.json, args.brief)
     rule, valid, invalid = inputs
     # 2. literal diagnostics -- test_diagnostics compares emitted text to the YAML
     for field in ("message", "note"):
@@ -472,7 +530,7 @@ def main() -> int:
         update_snapshot(rule, report, check)
 
     if not check_snapshot(rule["id"], invalid, check):
-        return finish(report, ok, args.json)
+        return finish(report, ok, args.json, args.brief)
 
     # 4. isolated fixture run, then arm kills -- test_arm_coverage's contract
     iso = Isolated(rule_path, fixture_path)
@@ -495,22 +553,28 @@ def main() -> int:
     if args.sexp:
         report["sexp"] = pattern_expressions(rule, check)
 
-    return finish(report, ok, args.json)
+    return finish(report, ok, args.json, args.brief)
 
 
-def finish(report: dict, ok: bool, as_json: bool) -> int:
+def finish(report: dict, ok: bool, as_json: bool, brief: bool = False) -> int:
     report["ok"] = ok
     if as_json:
         print(json.dumps(report, indent=1))
     else:
         print(f"{report['rule']}: {'PASS' if ok else 'FAIL'}")
-        for c in report["checks"]:
+        checks = report["checks"] if not brief else brief_failures(report["checks"])
+        for c in checks:
             print(f"  [{'ok' if c['ok'] else 'FAIL'}] {c['name']}: {c['detail']}")
         for s in report.get("sexp", []):
             print(f"  sexp {s['pattern']!r}:\n    " + s["sexp"].replace("\n", "\n    "))
         if "snapshot" in report:
             print("  snapshot:\n    " + report["snapshot"].replace("\n", "\n    "))
     return 0 if ok else 1
+
+
+def brief_failures(checks: list[dict]) -> list[dict]:
+    """Return every failed gate; independent failures must remain actionable."""
+    return [check for check in checks if not check["ok"]]
 
 
 if __name__ == "__main__":

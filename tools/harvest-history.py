@@ -6,7 +6,7 @@ Why: mining a project's fix history for ast-grep rules is a recurring task
 expensive way; this script removes everything that is provably not a candidate
 so the model stages see a small, ranked corpus. It makes no judgement about
 whether a fix generalises -- that is the packet stage
-(harvest-packets.py). Pipeline: .claude/skills/astgrep-rules/references/harvest-pipeline.md
+(harvest-packets.py). Pipeline: docs/authoring.md#harvest-and-draft-pipeline
 
 Usage:
   harvest-history.py --root DIR --repos coraza coraza-nginx --out candidates.jsonl

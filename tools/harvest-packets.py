@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""harvest-packets.py -- stages 2-3 of a rule harvest: model packets and their gates.
+"""harvest-packets.py -- mechanically sift fixes and gate bounded model packets.
 
 Why: the judgement stages of a harvest (which fixes generalise, into which
 rule) cost model tokens per diff. This script keeps that spend bounded and
@@ -7,9 +7,10 @@ verifiable: it writes one packet file per unit of work, so a cheap subagent
 reads the diff and the orchestrator never does; it validates every reply
 against a schema and discards what does not conform; and it cross-checks cheap
 labels against the deterministic signals from harvest-history.py. Pipeline and
-model routing: .claude/skills/astgrep-rules/references/harvest-pipeline.md
+model routing: docs/authoring.md#harvest-and-draft-pipeline
 
 Usage:
+  harvest-packets.py cluster-emit --mechanical --corpus candidates.jsonl --work WORK
   harvest-packets.py label-emit   --corpus candidates.jsonl --work WORK
   harvest-packets.py label-ingest --corpus candidates.jsonl --work WORK
   harvest-packets.py cluster-emit --corpus candidates.jsonl --work WORK [--chunk 12]
@@ -24,7 +25,8 @@ Layout under WORK:
   cluster/packets/<key>.json    one (language, class) cluster, for a Sonnet agent
   cluster/replies/<key>.json    proposals for that cluster
   cluster/proposals.jsonl       validated proposals, one per line
-  dedupe.tsv                    proposal -> nearest shipped/rejected rule, score
+  cluster/dispositions.jsonl    one validated outcome per candidate
+  dedupe.tsv                    proposal digest -> nearest shipped/rejected rule, score
 
 Reply schemas (validated on ingest; anything else is rejected and listed):
   label:    {"id": short, "class": TAXONOMY member, "language": "go"|"c",
@@ -32,7 +34,8 @@ Reply schemas (validated on ingest; anything else is rejected and listed):
   cluster:  {"cluster": key, "proposals": [{"id": kebab-case, "language",
              "claim", "classification": "syntactic"|"taint"|"cross-function"|
              "noise", "positive": source, "near_miss": source,
-             "supporting": [shorts], "overlaps": [rule ids], "rationale"}]}
+             "supporting": [shorts], "overlaps": [rule ids], "rationale"}],
+             "dispositions": [[short, [proposal ids]] | [short, reason], ...]}
 Labels must match the corpus language hint. Proposal IDs must be globally
 unique across replies; reconcile duplicate replies before ingesting again.
 Each proposal must cite at least one supporting commit from its cluster.
@@ -48,6 +51,12 @@ replies. Each stage's manifest binds ingestion to the emitted packet set and
 exact UTF-8 prompt bytes in PROMPT.md; changed instructions require fresh work.
 Limits: dedupe is token overlap on ids, messages and rejected-candidate
 entries -- it ranks likely duplicates for a reader, it does not decide.
+Mechanical clustering preserves every candidate. It routes only simple,
+single-file, recognized-signal rewrites to a cheap proposal pass. Ambiguous,
+multi-file, many-hunk, truncated, insertion, and deletion shapes receive the
+fuller bounded diff and semantic review. Routes are workload hints, never
+finding verdicts. The complete post-proposal dedupe still checks every shipped
+and rejected ID.
 Extend: TAXONOMY and harvest-history.py:signal_terms() together; schemas in validate_*().
 """
 
@@ -83,6 +92,19 @@ TAXONOMY = {
     "other": None,
 }
 DIFF_LIMIT = 3000  # chars of diff per candidate inside a packet
+CHANGE_LIMIT = 1800
+CONTEXT_LINES = 2
+RELATED_LIMIT = 12
+CHEAP_HUNK_LIMIT = 2
+DISPOSITION_REASONS = {"duplicate", "noise", "no-generalization", "unclear"}
+SIGNAL_FAMILIES = {
+    "nil-deref": "memory", "alloc": "memory", "free": "memory",
+    "pool-reuse": "memory", "memcpy": "memory", "bounds": "bounds",
+    "int-cast": "bounds", "string-len": "bounds", "unchecked-err": "api",
+    "encoding": "api", "panic": "api", "concurrency": "concurrency",
+}
+STOP = {"the", "a", "an", "of", "in", "on", "to", "and", "or", "is", "for", "with",
+        "without", "not", "go", "c", "nginx", "rule", "call", "use", "uses", "used"}
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -98,11 +120,142 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
 
 
 def language_of(candidate: dict) -> str:
-    return "c" if any(f.endswith((".c", ".h")) for f in candidate["files"]) else "go"
+    files = candidate.get("files") if isinstance(candidate, dict) else None
+    if not isinstance(files, list) or not files or any(not isinstance(f, str) for f in files):
+        sys.exit("candidate files must be a nonempty list of strings")
+    has_c = any(f.endswith((".c", ".h")) for f in files)
+    has_go = any(f.endswith(".go") for f in files)
+    if has_c and has_go:
+        sys.exit("mixed Go/C candidates must be split before packet emission")
+    if has_c:
+        return "c"
+    if has_go:
+        return "go"
+    sys.exit("harvest packets support only Go and C source candidates")
+
+
+def cluster_corpus(path: Path) -> dict[str, dict]:
+    """Load the cluster-stage schema and reject duplicate or malformed candidates."""
+    rows = read_jsonl(path)
+    corpus = {}
+    for index, candidate in enumerate(rows, 1):
+        if not isinstance(candidate, dict):
+            sys.exit(f"candidate {index} is not an object")
+        required_strings = ("short", "subject", "diff", "url")
+        if any(not isinstance(candidate.get(field), str) for field in required_strings):
+            sys.exit(f"candidate {index} needs string short, subject, diff, and url")
+        rule_id = candidate["short"]
+        if not rule_id or rule_id in corpus:
+            sys.exit(f"candidate {index} has empty or duplicate short id {rule_id!r}")
+        language_of(candidate)
+        signals = candidate.get("signals")
+        if not isinstance(signals, list) or any(not isinstance(value, str) for value in signals):
+            sys.exit(f"candidate {rule_id!r} signals must be a list of strings")
+        density = candidate.get("density")
+        if isinstance(density, bool) or not isinstance(density, (int, float)):
+            sys.exit(f"candidate {rule_id!r} density must be numeric")
+        corpus[rule_id] = candidate
+    return corpus
 
 
 def trimmed_diff(diff: str) -> str:
     return diff if len(diff) <= DIFF_LIMIT else diff[:DIFF_LIMIT] + "\n[...truncated]"
+
+
+def tokens(text: str) -> set[str]:
+    return {t for t in re.split(r"[^a-z0-9]+", text.lower()) if len(t) > 2 and t not in STOP}
+
+
+def diff_line_sets(lines: list[str]) -> tuple[set[int], set[int]]:
+    """Return changed-content and pre-hunk metadata line indexes."""
+    changed: set[int] = set()
+    metadata: set[int] = set()
+    in_hunk = False
+    for index, line in enumerate(lines):
+        if line.startswith("diff --git "):
+            in_hunk = False
+        elif line.startswith("@@ "):
+            in_hunk = True
+        elif in_hunk and line.startswith(("+", "-")):
+            changed.add(index)
+        elif not in_hunk and line.startswith(("index ", "--- ", "+++ ")):
+            metadata.add(index)
+    return changed, metadata
+
+
+def changed_excerpt(diff: str) -> str:
+    """Keep changed lines, hunk identity, and two nearby context lines."""
+    lines = diff.splitlines()
+    changed, metadata = diff_line_sets(lines)
+    selected = {index for index, line in enumerate(lines)
+                if line.startswith(("diff --git ", "@@ "))}
+    for index in changed:
+        selected.update(range(max(0, index - CONTEXT_LINES),
+                              min(len(lines), index + CONTEXT_LINES + 1)))
+    selected_lines = [line for index, line in enumerate(lines)
+                      if index in selected and index not in metadata]
+    text = "\n".join(selected_lines)
+    return text if len(text) <= CHANGE_LIMIT else text[:CHANGE_LIMIT] + "\n[...truncated]"
+
+
+def edit_kind(diff: str) -> str:
+    """Classify the source edit shape without claiming what the defect means."""
+    lines = diff.splitlines()
+    changed, _metadata = diff_line_sets(lines)
+    added = any(lines[index].startswith("+") for index in changed)
+    removed = any(lines[index].startswith("-") for index in changed)
+    if added and removed:
+        return "rewrite"
+    if added:
+        return "insert"
+    if removed:
+        return "delete"
+    return "empty"
+
+
+def model_route(candidate: dict, kind: str, family: str) -> tuple[str, str]:
+    """Reserve cheap review for bounded, unambiguous rewrite evidence."""
+    if kind != "rewrite":
+        return "semantic-model", f"edit-{kind}"
+    if family == "general":
+        return "semantic-model", "unrecognized-signal"
+    if len(candidate["files"]) != 1:
+        return "semantic-model", "multi-file"
+    hunks = sum(line.startswith("@@ ") for line in candidate["diff"].splitlines())
+    if hunks < 1 or hunks > CHEAP_HUNK_LIMIT:
+        return "semantic-model", "complex-hunks"
+    if changed_excerpt(candidate["diff"]).endswith("\n[...truncated]"):
+        return "semantic-model", "excerpt-truncated"
+    return "cheap-model", "simple-rewrite"
+
+
+def signal_family(candidate: dict) -> str:
+    """Choose a broad deterministic batching hint, never a defect verdict."""
+    signals = candidate.get("signals", [])
+    return SIGNAL_FAMILIES.get(signals[0], "general") if signals else "general"
+
+
+def related_prior(candidates: list[dict], rules: list[dict],
+                  rejected: list[str]) -> tuple[list[dict], list[str]]:
+    """Return bounded hints; the later dedupe still evaluates the complete index."""
+    query = set()
+    for candidate in candidates:
+        query |= tokens(candidate["subject"] + " " + " ".join(candidate.get("signals", []))
+                        + " " + changed_excerpt(candidate["diff"]))
+    scored_rules = []
+    for rule in rules:
+        score = len(query & tokens(rule["id"] + " " + rule["message"]))
+        if score:
+            scored_rules.append((score, rule["id"], rule))
+    scored_rejected = []
+    for rule_id in rejected:
+        score = len(query & tokens(rule_id))
+        if score:
+            scored_rejected.append((score, rule_id))
+    scored_rules.sort(key=lambda row: (-row[0], row[1]))
+    scored_rejected.sort(key=lambda row: (-row[0], row[1]))
+    return ([row[2] for row in scored_rules[:RELATED_LIMIT]],
+            [row[1] for row in scored_rejected[:RELATED_LIMIT]])
 
 
 def label_packets(corpus):
@@ -252,10 +405,12 @@ def label_ingest(args) -> int:
 
 # -------------------------------------------------------------- cluster stage
 
-CLUSTER_PROMPT = """You propose ast-grep rules from a cluster of bug-fix commits
-that share one defect class and language. Read every diff. For each *reusable*
-defect shape you can state as a single-function syntactic claim, emit one
-proposal. Reply with exactly one JSON object and nothing else:
+CLUSTER_PROMPT = """You propose ast-grep rules from a same-language fix cluster.
+Its class is only a batching hint: either an AI defect label or a mechanical
+signal-family plus edit shape. The route selects model capacity, not a verdict.
+Read every subject and bounded diff. For every *reusable* defect shape you can
+state as a single-function syntactic claim, emit one proposal. Reply with
+exactly one JSON object and nothing else:
 {"cluster": "<the cluster field>", "proposals": [
   {"id": "<lang>-<kebab-case-defect>", "language": "go"|"c",
    "claim": "one sentence: the exact syntax shape that is reported",
@@ -265,12 +420,17 @@ proposal. Reply with exactly one JSON object and nothing else:
    "supporting": ["<commit shorts from this cluster that exhibit it>"],
    "overlaps": ["<ids from shipped_rules that cover the same ground, or empty>"],
    "rationale": "<=300 chars: why this generalises beyond the originating code"}
+], "dispositions": [
+  ["<candidate short>", ["<proposal ids supported by that candidate>"]],
+  ["<candidate short with no proposal>", "duplicate"|"noise"|"no-generalization"|"unclear"]
 ]}
 Rules: a claim that needs types, dataflow, ownership, reachability, or a guard
 elsewhere is "taint" or "cross-function" -- still emit it, with the reason, so
 it can be recorded as rejected and not re-mined. Do not repeat a shipped or
-rejected rule; cite it in overlaps instead. An empty proposals list is a valid
-answer. Do not write YAML."""
+rejected rule; cite it in overlaps instead. Account for every candidate exactly
+once in dispositions. Proposal references and supporting lists must agree in
+both directions. An empty proposals list is valid only with a reason for every
+candidate. Do not write YAML."""
 
 
 def shipped_rules(language: str) -> list[dict]:
@@ -318,45 +478,138 @@ def cluster_labels(args, corpus):
     return labels
 
 
-def cluster_emit(args) -> int:
-    corpus = {c["short"]: c for c in read_jsonl(args.corpus)}
+def candidate_groups(args, corpus: dict[str, dict], mechanical: bool):
+    """Build workload groups, using AI labels only on the legacy path."""
+    groups: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
+    if mechanical:
+        for candidate in corpus.values():
+            kind = edit_kind(candidate["diff"])
+            family = signal_family(candidate)
+            route, reason = model_route(candidate, kind, family)
+            groups[(language_of(candidate), f"{family}-{kind}", route)].append({
+                "id": candidate["short"], "language": language_of(candidate),
+                "class": f"{family}-{kind}", "edit": kind,
+                "density": candidate["density"],
+                "route": route, "route_reason": reason,
+            })
+        return groups
     labels = cluster_labels(args, corpus)
     if labels is None:
-        return 1
-    groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
-    for lb in labels:
-        cls = lb["class"] if lb["agreed"] or lb["class"] in ("other", "logic", "api-misuse") \
-            else "unresolved"
-        groups[(lb["language"], cls)].append(lb)
-    out = args.work / "cluster" / "packets"
-    expected = {}
-    n = 0
-    for (lang, cls), members in sorted(groups.items()):
-        if len(members) < args.min_size:
+        return None
+    for label in labels:
+        cls = label["class"] if label["agreed"] or label["class"] in \
+            ("other", "logic", "api-misuse") else "unresolved"
+        groups[(label["language"], cls, "semantic-model")].append(label)
+    return groups
+
+
+def packet_candidate(member: dict, corpus: dict[str, dict], mechanical: bool) -> dict:
+    """Render one legacy or mechanically sifted proposal input."""
+    candidate = corpus[member["id"]]
+    row = {"short": member["id"], "url": candidate["url"],
+           "subject": candidate["subject"]}
+    if mechanical:
+        row.update({"signals": candidate.get("signals", []), "edit": member["edit"],
+                    "route_reason": member["route_reason"],
+                    "diff": changed_excerpt(candidate["diff"])
+                    if member["route"] == "cheap-model"
+                    else trimmed_diff(candidate["diff"])})
+    else:
+        row.update({"summary": member["summary"], "diff": trimmed_diff(candidate["diff"])})
+    return row
+
+
+def write_sift_artifacts(work: Path, expected: dict[str, dict], corpus: dict[str, dict],
+                         groups: dict[tuple[str, str, str], list[dict]]) -> None:
+    """Persist a compact route ledger and reproducible size/count metrics."""
+    rows = ["candidate\tlanguage\tcluster\tedit\troute\treason\tpacket_bytes"]
+    for packet in (expected[key] for key in sorted(expected)):
+        size = len(json.dumps(packet, separators=(",", ":")).encode())
+        for candidate in packet["candidates"]:
+            rows.append(f"{candidate['short']}\t{packet['language']}\t{packet['class']}\t"
+                        f"{candidate['edit']}\t{packet['route']}\t"
+                        f"{candidate['route_reason']}\t{size}")
+    (work / "sift.tsv").write_text("\n".join(rows) + "\n")
+    raw_bytes = sum(len(candidate["diff"].encode()) for candidate in corpus.values())
+    packet_bytes = sum(len(json.dumps(packet, separators=(",", ":")).encode())
+                       for packet in expected.values())
+    cheap = sum(member["route"] == "cheap-model"
+                for members in groups.values() for member in members)
+    semantic_ids = {member["id"] for members in groups.values() for member in members
+                    if member["route"] == "semantic-model"}
+    reasons = Counter(member["route_reason"]
+                      for members in groups.values() for member in members)
+    metrics = {"candidates": len(corpus), "packets": len(expected),
+               "raw_diff_bytes": raw_bytes, "packet_bytes": packet_bytes,
+               "cheap_model": cheap, "semantic_model": len(semantic_ids),
+               "semantic_diff_truncated": sum(
+                   len(corpus[candidate_id]["diff"]) > DIFF_LIMIT
+                   for candidate_id in semantic_ids),
+               "route_reasons": dict(sorted(reasons.items()))}
+    (work / "sift-metrics.json").write_text(
+        json.dumps(metrics, sort_keys=True, separators=(",", ":")) + "\n")
+
+
+def cluster_parts(groups: dict[tuple[str, str, str], list[dict]], min_size: int, chunk: int):
+    """Yield stable bounded slices without mutating the route ledger."""
+    for (language, cls, route), members in sorted(groups.items()):
+        if len(members) < min_size:
             continue
-        members.sort(key=lambda m: -m["density"])
-        # A cluster larger than --chunk is split into numbered parts so one
-        # packet stays within a single bounded read; each part carries the
-        # same shipped/rejected context and is proposed on independently.
-        parts = [members[i:i + args.chunk] for i in range(0, len(members), args.chunk)]
-        for idx, part in enumerate(parts, 1):
-            key = f"{lang}-{cls}" + (f"-{idx}" if len(parts) > 1 else "")
-            packet = {
-                "cluster": key, "language": lang, "class": cls,
-                "part": f"{idx}/{len(parts)}",
-                "candidates": [{
-                    "short": m["id"], "url": m["url"], "subject": corpus[m["id"]]["subject"],
-                    "summary": m["summary"], "diff": trimmed_diff(corpus[m["id"]]["diff"]),
-                } for m in part],
-                "shipped_rules": shipped_rules(lang),
-                "rejected_candidates": rejected_entries(lang),
-            }
-            expected[key] = packet
-            n += 1
-            print(f"  {key:28s} {len(part):3d} candidates", file=sys.stderr)
+        ordered = sorted(members, key=lambda member: -member["density"])
+        total = (len(ordered) + chunk - 1) // chunk
+        for start in range(0, len(ordered), chunk):
+            yield language, cls, route, start // chunk + 1, total, ordered[start:start + chunk]
+
+
+def build_cluster_packets(groups: dict[tuple[str, str, str], list[dict]], corpus: dict[str, dict],
+                          mechanical: bool, min_size: int, chunk: int) -> dict[str, dict]:
+    """Build bounded packets while loading each language's prior-rule index once."""
+    expected: dict[str, dict] = {}
+    prior = {language: (shipped_rules(language), rejected_entries(language))
+             for language in {language for language, _, _ in groups}}
+    for language, cls, route, index, total, part in cluster_parts(groups, min_size, chunk):
+        route_key = "cheap" if route == "cheap-model" else "semantic"
+        key = f"{language}-{cls}" + (f"-{route_key}" if mechanical else "") \
+            + (f"-{index}" if total > 1 else "")
+        related_rules, related_rejected = related_prior(
+            [corpus[member["id"]] for member in part], *prior[language])
+        expected[key] = {
+            "cluster": key, "language": language, "class": cls, "route": route,
+            "part": f"{index}/{total}",
+            "candidates": [packet_candidate(member, corpus, mechanical) for member in part],
+            "shipped_rules": related_rules if mechanical else prior[language][0],
+            "rejected_candidates": related_rejected if mechanical else prior[language][1],
+        }
+        print(f"  {key:28s} {len(part):3d} candidates", file=sys.stderr)
+    return expected
+
+
+def cluster_emit(args) -> int:
+    corpus = cluster_corpus(args.corpus)
+    if args.chunk < 1 or args.min_size < 1:
+        print("--chunk and --min-size must be positive", file=sys.stderr)
+        return 1
+    mechanical = getattr(args, "mechanical", False)
+    if mechanical and args.min_size != 1:
+        print("--mechanical requires --min-size 1 so no candidate is omitted", file=sys.stderr)
+        return 1
+    groups = candidate_groups(args, corpus, mechanical)
+    if groups is None:
+        return 1
+    out = args.work / "cluster" / "packets"
+    expected = build_cluster_packets(
+        groups, corpus, mechanical, args.min_size, args.chunk)
+    if mechanical:
+        emitted = [candidate["short"] for packet in expected.values()
+                   for candidate in packet["candidates"]]
+        if len(emitted) != len(corpus) or set(emitted) != corpus.keys():
+            print("mechanical packet coverage is incomplete or duplicated", file=sys.stderr)
+            return 1
     if not emit_packets(args.work / "cluster", expected, CLUSTER_PROMPT):
         return 1
-    print(f"wrote {n} cluster packets to {out}", file=sys.stderr)
+    if mechanical:
+        write_sift_artifacts(args.work, expected, corpus, groups)
+    print(f"wrote {len(expected)} cluster packets to {out}", file=sys.stderr)
     return 0
 
 
@@ -403,6 +656,55 @@ def validate_proposal(proposal: dict, members: set[str]) -> str | None:
     return None
 
 
+def disposition_references(disposition, index: int, members: set[str], seen: set[str],
+                           proposal_ids: set[str]) -> tuple[str | None, str, set[str]]:
+    """Validate and normalize one compact [candidate, outcome] row."""
+    if not isinstance(disposition, list) or len(disposition) != 2:
+        return f"disposition {index}: expected [candidate, outcome]", "", set()
+    candidate, outcome = disposition
+    if not isinstance(candidate, str) or candidate not in members or candidate in seen:
+        return f"disposition {index}: candidate is foreign, invalid, or repeated", "", set()
+    if isinstance(outcome, str):
+        if outcome not in DISPOSITION_REASONS:
+            return f"disposition {index}: bad no-proposal reason", "", set()
+        return None, candidate, set()
+    valid_ids = isinstance(outcome, list) and bool(outcome) \
+        and all(isinstance(item, str) for item in outcome) \
+        and len(outcome) == len(set(outcome))
+    if not valid_ids:
+        return (f"disposition {index}: proposal ids must be a nonempty unique string list",
+                "", set())
+    references = set(outcome)
+    if not references <= proposal_ids:
+        return f"disposition {index}: references an unknown proposal", "", set()
+    return None, candidate, references
+
+
+def validate_dispositions(dispositions, members: set[str], proposals: list[dict]) -> str | None:
+    """Prove exact candidate coverage and both-direction proposal support."""
+    if not isinstance(dispositions, list):
+        return "dispositions is not a list"
+    proposal_by_id = {proposal["id"]: proposal for proposal in proposals}
+    seen: set[str] = set()
+    references: dict[str, set[str]] = {}
+    for index, disposition in enumerate(dispositions):
+        error, candidate, proposal_ids = disposition_references(
+            disposition, index, members, seen, set(proposal_by_id))
+        if error:
+            return error
+        seen.add(candidate)
+        references[candidate] = proposal_ids
+    if seen != members:
+        return "dispositions must account for every cluster candidate exactly once"
+    for proposal_id, proposal in proposal_by_id.items():
+        supported = set(proposal["supporting"])
+        referenced = {candidate for candidate, ids in references.items()
+                      if proposal_id in ids}
+        if referenced != supported:
+            return f"proposal {proposal_id!r}: supporting and dispositions disagree"
+    return None
+
+
 def validate_cluster(reply: dict, key: str, members: set[str],
                      language: str) -> tuple[str | None, list]:
     if not isinstance(reply, dict) or reply.get("cluster") != key:
@@ -416,7 +718,8 @@ def validate_cluster(reply: dict, key: str, members: set[str],
             return f"proposal {i}: {error}", []
         if p["language"] != language:
             return f"proposal {i}: language disagrees with cluster: expected {language!r}", []
-    return None, props
+    disposition_error = validate_dispositions(reply.get("dispositions"), members, props)
+    return (disposition_error, []) if disposition_error else (None, props)
 
 
 def cluster_manifest(stage):
@@ -429,7 +732,8 @@ def cluster_manifest(stage):
         return None
     packets = manifest.get("packets") if isinstance(manifest, dict) else None
     if not isinstance(packets, dict):
-        print("cluster manifest lacks packet mapping; use a fresh --work directory", file=sys.stderr)
+        print("cluster manifest lacks packet mapping; use a fresh --work directory",
+              file=sys.stderr)
         return None
     if not packet_state(stage, packets, CLUSTER_PROMPT):
         return None
@@ -437,7 +741,7 @@ def cluster_manifest(stage):
 
 
 def reject_duplicate_proposals(proposals, bad):
-    """Keep every ambiguous ID out of scaffold input and retain replies to reconcile."""
+    """Reject whole clusters with ambiguous IDs so aggregates stay self-consistent."""
     duplicates = {rule_id for rule_id, count in Counter(p["id"] for p in proposals).items()
                   if count > 1}
     by_cluster = defaultdict(set)
@@ -446,7 +750,8 @@ def reject_duplicate_proposals(proposals, bad):
             by_cluster[proposal["cluster"]].add(proposal["id"])
     for cluster, ids in sorted(by_cluster.items()):
         bad.append((cluster, f"duplicate proposal id: {', '.join(sorted(ids))}; reconcile replies"))
-    return [proposal for proposal in proposals if proposal["id"] not in duplicates]
+    affected = set(by_cluster)
+    return [proposal for proposal in proposals if proposal["cluster"] not in affected], affected
 
 
 def cluster_packet_fields(packet):
@@ -473,62 +778,81 @@ def cluster_packet_fields(packet):
         return None, f"invalid packet: {error}"
 
 
-def cluster_ingest(args) -> int:
-    packets = cluster_manifest(args.work / "cluster")
-    if packets is None:
-        return 1
-    proposals, bad, missing = [], [], []
+def read_cluster_reply(stage: Path, stem: str, packet) -> tuple[list, list, str | None]:
+    """Read and validate one reply; return `missing` separately from bad data."""
+    reply_path = stage / "replies" / f"{stem}.json"
+    if not reply_path.exists():
+        return [], [], "missing"
+    loaded, error = cluster_packet_fields(packet)
+    if error:
+        return [], [], error
+    members, language = loaded
+    try:
+        reply_text = reply_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as read_error:
+        return [], [], f"cannot read reply: {read_error}"
+    try:
+        reply = json.loads(reply_text)
+    except json.JSONDecodeError as json_error:
+        return [], [], f"invalid JSON: {json_error}"
+    error, proposals = validate_cluster(reply, stem, members, language)
+    if error:
+        return [], [], error
+    dispositions = [{"candidate": candidate, "outcome": outcome, "cluster": stem}
+                    for candidate, outcome in reply["dispositions"]]
+    return [{**proposal, "cluster": stem} for proposal in proposals], dispositions, None
+
+
+def collect_cluster_replies(stage: Path, packets: dict[str, dict]):
+    """Collect valid reply rows while retaining packet-local failures."""
+    proposals, dispositions, bad, missing = [], [], [], []
     for stem, packet in sorted(packets.items()):
-        reply_path = args.work / "cluster" / "replies" / f"{stem}.json"
-        if not reply_path.exists():
+        cluster_proposals, cluster_dispositions, error = read_cluster_reply(
+            stage, stem, packet)
+        if error == "missing":
             missing.append(stem)
             continue
-        loaded, error = cluster_packet_fields(packet)
         if error:
             bad.append((stem, error))
             continue
-        members, language = loaded
-        try:
-            reply_text = reply_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeError) as error:
-            bad.append((stem, f"cannot read reply: {error}"))
-            continue
-        try:
-            reply = json.loads(reply_text)
-        except json.JSONDecodeError as e:
-            bad.append((stem, f"invalid JSON: {e}"))
-            continue
-        err, props = validate_cluster(reply, stem, members, language)
-        if err:
-            bad.append((stem, err))
-            continue
-        for pr in props:
-            proposals.append({**pr, "cluster": stem})
-    proposals = reject_duplicate_proposals(proposals, bad)
-    write_jsonl(args.work / "cluster" / "proposals.jsonl", proposals)
-    hist: dict[str, int] = defaultdict(int)
-    for pr in proposals:
-        hist[pr["classification"]] += 1
-    print(f"proposals: {len(proposals)} from {len(packets) - len(bad) - len(missing)} clusters; "
+        proposals.extend(cluster_proposals)
+        dispositions.extend(cluster_dispositions)
+    return proposals, dispositions, bad, missing
+
+
+def report_cluster_ingest(proposals: list[dict], dispositions: list[dict],
+                          bad: list[tuple[str, str]], missing: list[str], total: int) -> None:
+    """Emit a bounded human summary after structured artifacts are written."""
+    hist = Counter(proposal["classification"] for proposal in proposals)
+    print(f"proposals: {len(proposals)} from {total - len(bad) - len(missing)} clusters; "
           f"{len(bad)} rejected, {len(missing)} missing", file=sys.stderr)
-    for k, n in sorted(hist.items()):
-        print(f"  {k:16s} {n}", file=sys.stderr)
+    for classification, count in sorted(hist.items()):
+        print(f"  {classification:16s} {count}", file=sys.stderr)
+    reasons = Counter(row["outcome"] for row in dispositions
+                      if isinstance(row["outcome"], str))
+    for reason, count in sorted(reasons.items()):
+        print(f"  no-rule/{reason:8s} {count}", file=sys.stderr)
     for stem, why in bad:
         print(f"REJECT {stem}: {why}", file=sys.stderr)
     for stem in missing:
         print(f"MISSING {stem}", file=sys.stderr)
+
+
+def cluster_ingest(args) -> int:
+    stage = args.work / "cluster"
+    packets = cluster_manifest(stage)
+    if packets is None:
+        return 1
+    proposals, dispositions, bad, missing = collect_cluster_replies(stage, packets)
+    proposals, duplicate_clusters = reject_duplicate_proposals(proposals, bad)
+    dispositions = [row for row in dispositions if row["cluster"] not in duplicate_clusters]
+    write_jsonl(args.work / "cluster" / "proposals.jsonl", proposals)
+    write_jsonl(args.work / "cluster" / "dispositions.jsonl", dispositions)
+    report_cluster_ingest(proposals, dispositions, bad, missing, len(packets))
     return 1 if bad or missing else 0
 
 
 # --------------------------------------------------------------------- dedupe
-
-STOP = {"the", "a", "an", "of", "in", "on", "to", "and", "or", "is", "for", "with",
-        "without", "not", "go", "c", "nginx", "rule", "call", "use", "uses", "used"}
-
-
-def tokens(text: str) -> set[str]:
-    return {t for t in re.split(r"[^a-z0-9]+", text.lower()) if len(t) > 2 and t not in STOP}
-
 
 def dedupe(args) -> int:
     """Rank each proposal against shipped and rejected rules by token containment.
@@ -545,7 +869,7 @@ def dedupe(args) -> int:
             index.append((r["id"], "shipped", tokens(r["id"] + " " + r["message"])))
         for rid in rejected_entries(lang):
             index.append((rid, "rejected", tokens(rid)))
-    rows = ["proposal\tclassification\tnearest\tkind\tscore\tdeclared\tflag"]
+    rows = ["proposal\tproposal_digest\tclassification\tnearest\tkind\tscore\tdeclared\tflag"]
     flagged = 0
     for p in proposals:
         mine = tokens(p["id"]) | tokens(p["claim"])
@@ -560,7 +884,9 @@ def dedupe(args) -> int:
         declared = ",".join(p.get("overlaps") or [])
         flag = "DUP?" if best[2] >= args.threshold or declared else ""
         flagged += bool(flag)
-        rows.append(f"{p['id']}\t{p['classification']}\t{best[0]}\t{best[1]}\t"
+        digest = hashlib.sha256(json.dumps(
+            p, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        rows.append(f"{p['id']}\t{digest}\t{p['classification']}\t{best[0]}\t{best[1]}\t"
                     f"{best[2]:.2f}\t{declared}\t{flag}")
     (args.work / "dedupe.tsv").write_text("\n".join(rows) + "\n")
     print(f"dedupe: {len(proposals)} proposals, {flagged} flagged (score >= {args.threshold} "
@@ -574,10 +900,23 @@ def status(args) -> int:
         return len(list(d.glob("*.json"))) if d.exists() else 0
     lab = args.work / "label" / "labels.jsonl"
     prop = args.work / "cluster" / "proposals.jsonl"
+    disposition = args.work / "cluster" / "dispositions.jsonl"
     print(f"label   packets={count('label/packets')} replies={count('label/replies')} "
           f"valid={len(read_jsonl(lab)) if lab.exists() else 0}")
     print(f"cluster packets={count('cluster/packets')} replies={count('cluster/replies')} "
-          f"proposals={len(read_jsonl(prop)) if prop.exists() else 0}")
+          f"proposals={len(read_jsonl(prop)) if prop.exists() else 0} "
+          f"dispositions={len(read_jsonl(disposition)) if disposition.exists() else 0}")
+    metrics = args.work / "sift-metrics.json"
+    if metrics.exists():
+        try:
+            row = json.loads(metrics.read_text(encoding="utf-8"))
+            print(f"sift    candidates={row['candidates']} packets={row['packets']} "
+                  f"cheap={row['cheap_model']} semantic={row['semantic_model']} "
+                  f"semantic_truncated={row.get('semantic_diff_truncated', 0)} "
+                  f"bytes={row['packet_bytes']}")
+        except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError) as error:
+            print(f"invalid sift metrics: {error}", file=sys.stderr)
+            return 1
     return 0
 
 
@@ -597,6 +936,8 @@ def main() -> int:
             sp.add_argument("--min-size", type=int, default=1)
             sp.add_argument("--chunk", type=int, default=12,
                             help="max candidates per packet; larger clusters split")
+            sp.add_argument("--mechanical", action="store_true",
+                            help="skip AI labels; bound context and cluster mechanically")
         if name == "dedupe":
             sp.add_argument("--threshold", type=float, default=0.5)
         sp.set_defaults(fn=fn)
