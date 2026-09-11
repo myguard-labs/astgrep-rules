@@ -42,7 +42,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCAFFOLD = ROOT / "tools" / "rule-scaffold.py"
 DRAFT = ROOT / "tools" / "rule-draft.py"
-PLAN_FIELDS = ("id", "category", "classification", "duplicate", "action", "detail")
+PLAN_FIELDS = ("id", "category", "classification", "duplicate", "proposal_digest",
+               "candidate_digest", "action", "detail")
 ACTIONABLE = {"AI-DRAFT", "SEEDED-PASS"}
 STATE_SPEC = importlib.util.spec_from_file_location("rule_draft_state", DRAFT)
 if STATE_SPEC is None or STATE_SPEC.loader is None:
@@ -181,7 +182,8 @@ def assess(proposals: list[dict], duplicates: set[str], proposal_path: Path,
         else:
             action, detail = seed_status(proposal_path, rule_id, category)
         rows.append({"id": rule_id, "category": category, "classification": classification,
-                     "duplicate": duplicate, "action": action, "detail": detail})
+                     "duplicate": duplicate, "proposal_digest": proposal_digest(proposal),
+                     "candidate_digest": "", "action": action, "detail": detail})
     return rows
 
 
@@ -222,6 +224,44 @@ def read_plan(path: Path) -> list[dict[str, str]]:
     if any(not rule_id for rule_id in ids) or len(ids) != len(set(ids)):
         raise BatchError(f"draft plan {path} has empty or duplicate ids")
     return rows
+
+
+def bind_candidate_digests(rows: list[dict[str, str]], proposals: list[dict],
+                           category: str) -> None:
+    """Snapshot the complete current probe-input identity into each plan row."""
+    by_id = {proposal.get("id"): proposal for proposal in proposals}
+    for row in rows:
+        language = by_id[row["id"]].get("language")
+        if not isinstance(language, str) or not language:
+            row["candidate_digest"] = ""
+            continue
+        rule = ROOT / "rules" / language / category / f"{row['id']}.yml"
+        fixture = ROOT / "tests" / language / category / f"{row['id']}.yml"
+        row["candidate_digest"] = candidate_digest(rule, fixture) or ""
+
+
+def preserve_actionable_routes(rows: list[dict[str, str]], plan_path: Path,
+                               work: Path) -> None:
+    """Keep only provenance-bound partial rules actionable across replanning."""
+    if not plan_path.is_file():
+        return
+    previous = {row["id"]: row for row in read_plan(plan_path)}
+    states = draft_states(work)
+    for row in rows:
+        prior = previous.get(row["id"])
+        if prior is None or row["action"] != "EXISTING-REVIEW":
+            continue
+        same_eligibility = all(prior[field] == row[field]
+                               for field in ("category", "classification", "duplicate",
+                                             "proposal_digest"))
+        attempts = states.get(row["id"], {}).get("attempts", [])
+        state_candidate = attempts[-1]["candidate"] if attempts else ""
+        current_candidate = row["candidate_digest"]
+        provenance_matches = bool(current_candidate) and current_candidate in {
+            prior["candidate_digest"], state_candidate}
+        if same_eligibility and provenance_matches and prior["action"] in ACTIONABLE:
+            row["action"] = prior["action"]
+            row["detail"] = prior["detail"]
 
 
 def draft_states(work: Path) -> dict[str, dict]:
@@ -279,6 +319,8 @@ def draft_tasks(work: Path, category: str) -> list[dict]:
         rule = ROOT / "rules" / language / category / f"{row['id']}.yml"
         fixture = ROOT / "tests" / language / category / f"{row['id']}.yml"
         proposal_hash = proposal_digest(proposal)
+        if row["proposal_digest"] != proposal_hash:
+            raise BatchError("draft plan proposal identity is stale; rerun rule-batch planning")
         fingerprint = candidate_digest(rule, fixture)
         attempts = state.get("attempts")
         state_fingerprint = attempts[-1].get("candidate") \
@@ -469,8 +511,11 @@ def main() -> int:
         rows = assess(proposals, duplicate_ids(args.work / "dedupe.tsv",
                                                proposal_ids(proposals)), proposal_path,
                       args.category)
+        bind_candidate_digests(rows, proposals, args.category)
+        preserve_actionable_routes(rows, args.work / "draft-plan.tsv", args.work)
         failures = apply_seeded(rows, proposal_path, args.work, args.category) \
             if args.apply_seeded else 0
+        bind_candidate_digests(rows, proposals, args.category)
         if not args.dry_run:
             write_plan(args.work / "draft-plan.tsv", rows)
     except (BatchError, OSError, UnicodeError) as error:

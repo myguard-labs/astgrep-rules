@@ -1043,12 +1043,21 @@ def queue(args) -> int:
     packets = cluster_manifest(stage)
     if packets is None:
         return 1
+    replies = {}
+    valid_proposals = []
+    for stem, packet in sorted(packets.items()):
+        proposals, _dispositions, error = read_cluster_reply(stage, stem, packet)
+        replies[stem] = error
+        valid_proposals.extend(proposals)
+    duplicate_errors: list[tuple[str, str]] = []
+    reject_duplicate_proposals(valid_proposals, duplicate_errors)
+    duplicate_by_cluster = dict(duplicate_errors)
     tasks = []
     for stem, packet in sorted(packets.items()):
         route = packet.get("route")
         if args.route not in ("all", route):
             continue
-        _proposals, _dispositions, error = read_cluster_reply(stage, stem, packet)
+        error = replies[stem] or duplicate_by_cluster.get(stem)
         if error is None:
             continue
         tasks.append({

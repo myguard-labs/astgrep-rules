@@ -1204,6 +1204,14 @@ class ReplyTests(unittest.TestCase):
                                        [proposal["id"]]]]}))
             self.assertEqual(PACKETS.cluster_ingest(SimpleNamespace(work=root)), 1)
             self.assertIn("duplicate proposal id", errors.getvalue())
+            queue_args = SimpleNamespace(work=root, route="all", limit=10, json=True)
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(PACKETS.queue(queue_args), 0)
+            queued = json.loads(output.getvalue())
+            self.assertEqual({task["cluster"] for task in queued["tasks"]}, set(packets))
+            self.assertTrue(all(task["state"] == "retry" for task in queued["tasks"]))
+            self.assertTrue(all("duplicate proposal id" in task["error"]
+                                for task in queued["tasks"]))
             proposals_path = stage / "proposals.jsonl"
             self.assertEqual(PACKETS.read_jsonl(proposals_path), [])
             with self.assertRaisesRegex(SystemExit, "no proposal"):

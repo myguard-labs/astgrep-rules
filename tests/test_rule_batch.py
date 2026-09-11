@@ -270,6 +270,142 @@ class RuleBatchTests(unittest.TestCase):
             BATCH.write_plan(path, rows)
             self.assertEqual(path.read_bytes(), first)
 
+    def test_replanning_preserves_batch_owned_actionable_rule(self):
+        proposal = {"id": "go-test-rule", "language": "go",
+                    "classification": "syntactic"}
+        for action in BATCH.ACTIONABLE:
+            with self.subTest(action=action), tempfile.TemporaryDirectory() as directory:
+                work = Path(directory)
+                root = work / "repo"
+                (work / "cluster").mkdir()
+                (work / "cluster/proposals.jsonl").write_text(
+                    json.dumps(proposal) + "\n", encoding="utf-8")
+                (work / "dedupe.tsv").write_text(
+                    "proposal\tproposal_digest\tflag\n"
+                    f"go-test-rule\t{BATCH.proposal_digest(proposal)}\t\n", encoding="utf-8")
+                BATCH.write_plan(work / "draft-plan.tsv", [{
+                    "id": "go-test-rule", "category": "correctness",
+                    "classification": "syntactic", "duplicate": "no",
+                    "proposal_digest": BATCH.proposal_digest(proposal),
+                    "candidate_digest": "", "action": action,
+                    "detail": "batch-owned partial rule"}])
+                rule = root / "rules/go/correctness/go-test-rule.yml"
+                fixture = root / "tests/go/correctness/go-test-rule.yml"
+                rule.parent.mkdir(parents=True)
+                fixture.parent.mkdir(parents=True)
+                rule.write_text("rule: {pattern: bad($X)}\n")
+                fixture.write_text("valid: [good(x)]\ninvalid: [bad(x)]\n")
+                fingerprint = BATCH.candidate_digest(rule, fixture, root)
+                plan = BATCH.read_plan(work / "draft-plan.tsv")
+                plan[0]["candidate_digest"] = fingerprint
+                BATCH.write_plan(work / "draft-plan.tsv", plan)
+                argv = ["rule-batch", "--work", str(work), "--category", "correctness"]
+                with patch.object(BATCH, "ROOT", root), patch("sys.argv", argv), \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(BATCH.main(), 0)
+                replanned = BATCH.read_plan(work / "draft-plan.tsv")
+                self.assertEqual(replanned[0]["action"], action)
+                self.assertEqual(replanned[0]["detail"], "batch-owned partial rule")
+
+    def test_replanning_rejects_stale_actionable_provenance(self):
+        prior = {"id": "go-test-rule", "category": "correctness",
+                 "classification": "syntactic", "duplicate": "no",
+                 "proposal_digest": "a" * 64, "candidate_digest": "b" * 64,
+                 "action": "AI-DRAFT", "detail": "old route"}
+        cases = (
+            ("a" * 64, "", "deleted candidate"),
+            ("a" * 64, "c" * 64, "replaced candidate"),
+            ("d" * 64, "b" * 64, "revised proposal"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            plan = work / "draft-plan.tsv"
+            BATCH.write_plan(plan, [prior])
+            for proposal_hash, candidate_hash, label in cases:
+                with self.subTest(label=label):
+                    rows = [{**prior, "proposal_digest": proposal_hash,
+                             "candidate_digest": candidate_hash,
+                             "action": "EXISTING-REVIEW", "detail": "existing"}]
+                    BATCH.preserve_actionable_routes(rows, plan, work)
+                    self.assertEqual(rows[0]["action"], "EXISTING-REVIEW")
+
+    def test_replanning_accepts_current_candidate_from_valid_draft_state(self):
+        prior = {"id": "go-test-rule", "category": "correctness",
+                 "classification": "syntactic", "duplicate": "no",
+                 "proposal_digest": "a" * 64, "candidate_digest": "b" * 64,
+                 "action": "AI-DRAFT", "detail": "continue drafting"}
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            BATCH.write_plan(work / "draft-plan.tsv", [prior])
+            state = work / "draft/go-test-rule.json"
+            state.parent.mkdir()
+            state.write_text(json.dumps({
+                "schema": 1, "rule": "go-test-rule", "status": "RETRY",
+                "attempts": [{"candidate": "c" * 64, "matcher": "pattern: bad($X)",
+                              "probe": "go-test-rule: FAIL"}],
+            }), encoding="utf-8")
+            rows = [{**prior, "candidate_digest": "c" * 64,
+                     "action": "EXISTING-REVIEW", "detail": "existing"}]
+            BATCH.preserve_actionable_routes(rows, work / "draft-plan.tsv", work)
+            self.assertEqual(rows[0]["action"], "AI-DRAFT")
+            self.assertEqual(rows[0]["detail"], "continue drafting")
+
+    def test_main_binds_candidate_created_by_seed_apply(self):
+        proposal = {"id": "go-test-rule", "language": "go",
+                    "classification": "syntactic"}
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            root = work / "repo"
+            (work / "cluster").mkdir()
+            (work / "cluster/proposals.jsonl").write_text(
+                json.dumps(proposal) + "\n", encoding="utf-8")
+            (work / "dedupe.tsv").write_text(
+                "proposal\tproposal_digest\tflag\n"
+                f"go-test-rule\t{BATCH.proposal_digest(proposal)}\t\n", encoding="utf-8")
+
+            def create_seed(rows, _proposal_path, _work, _category):
+                rule = root / "rules/go/correctness/go-test-rule.yml"
+                fixture = root / "tests/go/correctness/go-test-rule.yml"
+                rule.parent.mkdir(parents=True)
+                fixture.parent.mkdir(parents=True)
+                rule.write_text("rule: {pattern: bad($X)}\n")
+                fixture.write_text("valid: [good(x)]\ninvalid: [bad(x)]\n")
+                rows[0]["action"] = "SEEDED-PASS"
+                return 0
+
+            argv = ["rule-batch", "--work", str(work), "--category", "correctness",
+                    "--apply-seeded"]
+            with patch.object(BATCH, "ROOT", root), patch("sys.argv", argv), \
+                    patch.object(BATCH, "seed_status", return_value=("SEEDED-REVIEW", "seed")), \
+                    patch.object(BATCH, "apply_seeded", side_effect=create_seed), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(BATCH.main(), 0)
+            row = BATCH.read_plan(work / "draft-plan.tsv")[0]
+            self.assertEqual(row["action"], "SEEDED-PASS")
+            self.assertEqual(row["candidate_digest"], BATCH.candidate_digest(
+                root / "rules/go/correctness/go-test-rule.yml",
+                root / "tests/go/correctness/go-test-rule.yml", root))
+
+    def test_task_emission_rejects_revised_proposal_with_refreshed_dedupe(self):
+        proposal = {"id": "go-test-rule", "language": "go", "claim": "old",
+                    "classification": "syntactic"}
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            (work / "cluster").mkdir()
+            BATCH.write_plan(work / "draft-plan.tsv", [{
+                "id": "go-test-rule", "category": "correctness",
+                "classification": "syntactic", "duplicate": "no",
+                "proposal_digest": BATCH.proposal_digest(proposal),
+                "candidate_digest": "", "action": "AI-DRAFT", "detail": "draft"}])
+            proposal["claim"] = "revised"
+            (work / "cluster/proposals.jsonl").write_text(
+                json.dumps(proposal) + "\n", encoding="utf-8")
+            (work / "dedupe.tsv").write_text(
+                "proposal\tproposal_digest\tflag\n"
+                f"go-test-rule\t{BATCH.proposal_digest(proposal)}\t\n", encoding="utf-8")
+            with self.assertRaisesRegex(BATCH.BatchError, "proposal identity is stale"):
+                BATCH.draft_tasks(work, "correctness")
+
     def test_candidate_digest_tracks_every_probe_input(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -314,6 +450,8 @@ class RuleBatchTests(unittest.TestCase):
              "classification": "taint", "duplicate": "no",
              "action": "SEMANTIC-REVIEW", "detail": "needs judgment"},
         ]
+        for row, proposal in zip(rows, proposals, strict=True):
+            row["proposal_digest"] = BATCH.proposal_digest(proposal)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             root = work / "repo"
@@ -413,6 +551,7 @@ class RuleBatchTests(unittest.TestCase):
                 "proposal\tproposal_digest\tflag\n" + "".join(
                     f"{row['id']}\t{BATCH.proposal_digest(row)}\t\n" for row in proposals),
                 encoding="utf-8")
+            rows[1]["proposal_digest"] = BATCH.proposal_digest(finished)
             BATCH.write_plan(work / "draft-plan.tsv", rows)
             with patch.object(BATCH, "ROOT", root):
                 self.assertEqual(
