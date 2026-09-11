@@ -4,11 +4,14 @@ import contextlib
 import importlib.util
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("rule_draft", ROOT / "tools/rule-draft.py")
@@ -219,11 +222,42 @@ class RuleDraftTests(unittest.TestCase):
         with self.assertRaisesRegex(DRAFT.DraftError, "invalid verdict"):
             self.advance([unavailable])
         self.assertFalse((self.work / "draft/go-test-rule.json").exists())
-
         result, output, calls = self.advance([self.passed()])
         self.assertEqual(result, 0)
         self.assertEqual(len(calls), 1)
         self.assertIn("PASS 1/4", output)
+
+    def test_probe_timeout_covers_all_bounded_phases(self):
+        matcher = "any:\n- pattern: a\n- any:\n  - pattern: b\n  - pattern: c\n  - pattern: d\n"
+        fixture = b"valid: [a, b]\ninvalid: [c]\n"
+        self.assertEqual(DRAFT.probe_timeout(matcher, fixture, False), 396)
+        self.assertEqual(DRAFT.probe_timeout(matcher, fixture, True), 486)
+
+    def test_probe_timeout_has_a_distinct_diagnostic(self):
+        with patch.object(DRAFT.subprocess, "run",
+                          side_effect=subprocess.TimeoutExpired("probe", 396)), \
+                self.assertRaisesRegex(DRAFT.DraftError, "probe timed out after 396s"):
+            DRAFT.run_probe("go-test-rule", False, self.root, 396)
+
+    def test_advance_propagates_timeout_without_consuming_attempt(self):
+        expected = DRAFT.probe_timeout(
+            yaml.safe_dump(yaml.safe_load(self.rule.read_text())["rule"]),
+            self.fixture.read_bytes(), False)
+
+        def expire(_command, **kwargs):
+            self.assertEqual(kwargs["timeout"], expected)
+            raise subprocess.TimeoutExpired("probe", kwargs["timeout"])
+
+        with patch.object(DRAFT, "ROOT", self.root), \
+                patch.object(DRAFT, "PROBE", self.root / "tools/rule-probe.py"), \
+                patch.object(DRAFT.subprocess, "run", side_effect=expire), \
+                self.assertRaisesRegex(DRAFT.DraftError, f"timed out after {expected}s"):
+            DRAFT.advance("go-test-rule", self.work)
+        self.assertFalse((self.work / "draft/go-test-rule.json").exists())
+        result, _output, _calls = self.advance([self.passed()])
+        self.assertEqual(result, 0)
+        state = json.loads((self.work / "draft/go-test-rule.json").read_text())
+        self.assertEqual(len(state["attempts"]), 1)
 
     def test_parked_report_is_recreated_from_terminal_state(self):
         for attempt in range(4):

@@ -18,6 +18,7 @@ Side effects: WORK/draft/<id>.json, and <id>.md only on PARKED.
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -30,6 +31,11 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBE = ROOT / "tools" / "rule-probe.py"
+PROBE_SPEC = importlib.util.spec_from_file_location("rule_probe_contract", PROBE)
+if PROBE_SPEC is None or PROBE_SPEC.loader is None:
+    raise RuntimeError("cannot load rule-probe timeout contract")
+PROBE_STATE = importlib.util.module_from_spec(PROBE_SPEC)
+PROBE_SPEC.loader.exec_module(PROBE_STATE)
 MAX_ATTEMPTS = 4
 KEBAB = re.compile(r"^[a-z]+(?:-[a-z0-9]+)+$")
 TERMINAL = {"PASS", "PARKED"}
@@ -110,6 +116,15 @@ def snapshot_candidate(inputs: dict[Path, bytes | None], target: Path) -> None:
         destination = target / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(contents)
+
+
+def probe_timeout(matcher: str, fixture_bytes: bytes, sexp: bool) -> int:
+    """Parse captured inputs and apply rule-probe's shared timeout contract."""
+    try:
+        fixture = yaml.safe_load(fixture_bytes)
+    except yaml.YAMLError:
+        fixture = None
+    return PROBE_STATE.probe_timeout(yaml.safe_load(matcher), fixture, sexp)
 
 
 def load_state(path: Path, rule_id: str) -> dict:
@@ -219,14 +234,17 @@ def parked_report(rule_id: str, attempts: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def run_probe(rule_id: str, sexp: bool, input_root: Path) -> tuple[int, str]:
+def run_probe(rule_id: str, sexp: bool, input_root: Path,
+              timeout: int) -> tuple[int, str]:
     """Run the bounded probe and accept only its exact first-line verdict schema."""
     command = [sys.executable, str(PROBE), rule_id, "--brief", "--input-root", str(input_root)]
     if sexp:
         command.append("--sexp")
     try:
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
-                                timeout=120, check=False)
+                                timeout=timeout, check=False)
+    except subprocess.TimeoutExpired as error:
+        raise DraftError(f"probe timed out after {error.timeout}s") from error
     except (OSError, subprocess.SubprocessError) as error:
         raise DraftError(f"cannot run probe: {error}") from error
     output = result.stdout.strip()
@@ -277,7 +295,10 @@ def advance(rule_id: str, work: Path, sexp: bool = False) -> int:
     with tempfile.TemporaryDirectory(prefix="rule-draft-input-") as directory:
         input_root = Path(directory)
         snapshot_candidate(inputs, input_root)
-        returncode, output = run_probe(rule_id, sexp, input_root)
+        fixture_bytes = inputs[fixture.relative_to(ROOT)]
+        assert fixture_bytes is not None
+        timeout = probe_timeout(matcher, fixture_bytes, sexp)
+        returncode, output = run_probe(rule_id, sexp, input_root, timeout)
     attempts.append({"candidate": fingerprint, "matcher": matcher, "probe": output})
     if returncode == 0:
         state["status"] = "PASS"

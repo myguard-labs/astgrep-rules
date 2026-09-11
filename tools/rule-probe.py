@@ -49,6 +49,14 @@ EXTENSIONS = {"go": "go", "c": "c", "php": "php", "python": "py", "javascript": 
               "java": "java", "lua": "lua", "bash": "sh"}
 META = re.compile(r"\$\$?\$?[A-Z_][A-Z0-9_]*")
 COMPATIBILITY_ALIAS_IDS = {"nginx-string-sizeof-includes-nul"}
+STDIN_SCAN_TIMEOUT = 15
+FIXTURE_SCAN_BASE_TIMEOUT = 15
+FIXTURE_SCAN_PER_SOURCE_TIMEOUT = 2
+ISOLATED_TEST_TIMEOUT = 30
+DISCOVERY_TIMEOUT = 15
+PATTERN_TIMEOUT = 15
+PATTERN_LIMIT = 6
+ORCHESTRATION_MARGIN = 30
 
 
 def find_rule(rule_id: str, root: Path | None = None) -> tuple[Path, Path]:
@@ -115,7 +123,8 @@ def scan_stdin(rule: dict, source: str) -> tuple[int | None, str]:
     try:
         r = subprocess.run([AST_GREP, "scan", "--inline-rules", yaml.safe_dump(scanned_rule),
                             "--stdin", "--json=compact"],
-                           input=source, text=True, capture_output=True, timeout=15, check=False)
+                           input=source, text=True, capture_output=True,
+                           timeout=STDIN_SCAN_TIMEOUT, check=False)
     except subprocess.TimeoutExpired as error:
         return None, f"ast-grep timed out after {error.timeout}s"
     if r.returncode not in (0, 1):
@@ -131,7 +140,7 @@ def scan_stdin(rule: dict, source: str) -> tuple[int | None, str]:
 
 
 def run_source_scan(rule: dict, directory: Path,
-                    timeout: int = 15) -> tuple[object | None, str]:
+                    timeout: int = FIXTURE_SCAN_BASE_TIMEOUT) -> tuple[object | None, str]:
     """Run one bounded engine process for a directory of fixture snippets."""
     try:
         result = subprocess.run(
@@ -176,7 +185,8 @@ def scan_sources(rule: dict, sources: list[tuple[str, int, str]]) -> list[tuple[
             target.write_text(source)
         targets = [target.resolve() for target in targets]
         findings, message = run_source_scan(rule, directory,
-                                            timeout=15 + 2 * len(sources))
+                                            timeout=FIXTURE_SCAN_BASE_TIMEOUT
+                                            + FIXTURE_SCAN_PER_SOURCE_TIMEOUT * len(sources))
         counts = source_counts(findings, rule["id"], targets) if findings is not None else None
     if counts is None:
         return [(None, message or "findings for another rule or fixture")] * len(sources)
@@ -213,7 +223,8 @@ class Isolated:
         if not self.has_snapshot:
             cmd.append("--skip-snapshot-tests")
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+            r = subprocess.run(cmd, capture_output=True, text=True,
+                               timeout=ISOLATED_TEST_TIMEOUT, check=False)
         except subprocess.TimeoutExpired as error:
             return 124, f"ast-grep timed out after {error.timeout}s"
         return r.returncode, r.stdout + r.stderr
@@ -327,6 +338,22 @@ def check_arms(iso, rule, root: Path | None = None):
     return not survivors and not invalid_mutants, detail
 
 
+def probe_timeout(rule_body: object, fixture: object, sexp: bool) -> int:
+    """Return a wrapper budget above the sum of every bounded probe phase."""
+    values = (fixture.get("valid"), fixture.get("invalid")) \
+        if isinstance(fixture, dict) else ()
+    sources = sum(len(value) for value in values if isinstance(value, list))
+    arms = len(list(any_arms(rule_body)))
+    return (
+        ORCHESTRATION_MARGIN
+        + FIXTURE_SCAN_BASE_TIMEOUT + FIXTURE_SCAN_PER_SOURCE_TIMEOUT * sources
+        + ISOLATED_TEST_TIMEOUT
+        + arms * (ISOLATED_TEST_TIMEOUT + 2 * STDIN_SCAN_TIMEOUT)
+        + DISCOVERY_TIMEOUT
+        + (PATTERN_LIMIT * PATTERN_TIMEOUT if sexp else 0)
+    )
+
+
 def discover(rule_path, language, source, promoted_id=None):
     """Check discovery using a real source extension and a one-rule config."""
     ext = EXTENSIONS.get(language)
@@ -345,7 +372,7 @@ def discover(rule_path, language, source, promoted_id=None):
                 command.append(f"--error={promoted_id}")
             command.extend(["--json=compact", target])
             result = subprocess.run(command, capture_output=True, text=True,
-                                    timeout=15, check=False)
+                                    timeout=DISCOVERY_TIMEOUT, check=False)
         except subprocess.TimeoutExpired as error:
             return False, f"ast-grep timed out after {error.timeout}s"
         try:
@@ -374,12 +401,12 @@ def pattern_expressions(rule, check):
     """Return a bounded debug view; fragment ERROR nodes are diagnostic only."""
     expressions = []
     pats = [*patterns(rule.get("rule")), *patterns(rule.get("utils"))]
-    for pat in pats[:6]:
+    for pat in pats[:PATTERN_LIMIT]:
         try:
             result = subprocess.run(
                 [AST_GREP, "run", "-l", rule["language"], "-p", pat,
                  "--debug-query=sexp", "--stdin"], input="x", text=True,
-                capture_output=True, timeout=15, check=False)
+                capture_output=True, timeout=PATTERN_TIMEOUT, check=False)
         except subprocess.TimeoutExpired as error:
             check("pattern-expressions", False, f"ast-grep timed out after {error.timeout}s")
             return expressions
