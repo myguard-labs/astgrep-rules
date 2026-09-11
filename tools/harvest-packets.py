@@ -17,19 +17,21 @@ Usage:
   harvest-packets.py cluster-ingest --work WORK
   harvest-packets.py dedupe       --work WORK [--threshold 0.5]
   harvest-packets.py status       --work WORK
+  harvest-packets.py queue        --work WORK [--route semantic-model] [--json]
 
 Layout under WORK:
   label/packets/<short>.json    one candidate each, for a Haiku-class agent
   label/replies/<short>.json    the agent's reply (schema below)
   label/labels.jsonl            validated labels, one per candidate
   cluster/packets/<key>.json    one (language, class) cluster, for a Sonnet agent
+  cluster/evidence/<short>.json fuller diff, read only when a packet requests it
   cluster/replies/<key>.json    proposals for that cluster
   cluster/proposals.jsonl       validated proposals, one per line
   cluster/dispositions.jsonl    one validated outcome per candidate
   dedupe.tsv                    proposal digest -> nearest shipped/rejected rule, score
 
 Reply schemas (validated on ingest; anything else is rejected and listed):
-  label:    {"id": short, "class": TAXONOMY member, "language": "go"|"c",
+  label:    {"id": short, "class": TAXONOMY member, "language": native language,
              "confidence": "low"|"medium"|"high", "summary": <=160 chars}
   cluster:  {"cluster": key, "proposals": [{"id": kebab-case, "language",
              "claim", "classification": "syntactic"|"taint"|"cross-function"|
@@ -54,7 +56,8 @@ entries -- it ranks likely duplicates for a reader, it does not decide.
 Mechanical clustering preserves every candidate. It routes only simple,
 single-file, recognized-signal rewrites to a cheap proposal pass. Ambiguous,
 multi-file, many-hunk, truncated, insertion, and deletion shapes receive the
-fuller bounded diff and semantic review. Routes are workload hints, never
+semantic route. Small semantic diffs remain inline; larger ones use a changed-
+line excerpt and an on-demand evidence file. Routes are workload hints, never
 finding verdicts. The complete post-proposal dedupe still checks every shipped
 and rejected ID.
 Extend: TAXONOMY and harvest-history.py:signal_terms() together; schemas in validate_*().
@@ -96,6 +99,18 @@ CHANGE_LIMIT = 1800
 CONTEXT_LINES = 2
 RELATED_LIMIT = 12
 CHEAP_HUNK_LIMIT = 2
+LANGUAGE_SUFFIXES = {
+    ".bash": "bash", ".c": "c", ".h": "c", ".go": "go", ".java": "java",
+    ".js": "javascript", ".cjs": "javascript", ".mjs": "javascript",
+    ".jsx": "javascript", ".lua": "lua", ".php": "php", ".phtml": "php",
+    ".py": "python", ".sh": "bash",
+}
+ID_PREFIXES = {
+    "bash": ("sh-",), "c": ("c-", "nginx-", "zstd-"), "go": ("go-",),
+    "java": ("java-",), "javascript": ("js-",), "lua": ("lua-",),
+    "php": ("php-", "wp-"), "python": ("py-",),
+}
+NATIVE_LANGUAGES = tuple(ID_PREFIXES)
 DISPOSITION_REASONS = {"duplicate", "noise", "no-generalization", "unclear"}
 SIGNAL_FAMILIES = {
     "nil-deref": "memory", "alloc": "memory", "free": "memory",
@@ -123,15 +138,24 @@ def language_of(candidate: dict) -> str:
     files = candidate.get("files") if isinstance(candidate, dict) else None
     if not isinstance(files, list) or not files or any(not isinstance(f, str) for f in files):
         sys.exit("candidate files must be a nonempty list of strings")
-    has_c = any(f.endswith((".c", ".h")) for f in files)
-    has_go = any(f.endswith(".go") for f in files)
-    if has_c and has_go:
-        sys.exit("mixed Go/C candidates must be split before packet emission")
-    if has_c:
-        return "c"
-    if has_go:
-        return "go"
-    sys.exit("harvest packets support only Go and C source candidates")
+    languages = {
+        None if Path(filename).suffix == ".C"
+        else LANGUAGE_SUFFIXES.get(Path(filename).suffix.lower())
+        for filename in files
+    }
+    if None in languages:
+        sys.exit("candidate contains a source extension unsupported by the native rule pack")
+    declared = candidate.get("language")
+    if declared is not None and (not isinstance(declared, str) or declared not in ID_PREFIXES):
+        sys.exit(f"candidate has unsupported language {declared!r}")
+    if len(languages) != 1:
+        sys.exit("mixed-language candidates must be split before packet emission")
+    language = languages.pop()
+    if language is None:  # narrowed above at runtime; keep static checkers honest
+        sys.exit("candidate contains an unsupported source extension")
+    if declared is not None and declared != language:
+        sys.exit(f"candidate language disagrees with source paths: expected {language!r}")
+    return language
 
 
 def cluster_corpus(path: Path) -> dict[str, dict]:
@@ -268,11 +292,14 @@ def label_packets(corpus):
     } for c in corpus}
 
 
-def packet_state(stage: Path, expected: dict, prompt: str, allow_new: bool = False) -> bool:
+def packet_state(stage: Path, expected: dict, prompt: str, allow_new: bool = False,
+                 evidence: dict[str, dict] | None = None) -> bool:
     """Refuse stale/incomplete state without deleting any packets or replies."""
+    evidence = evidence or {}
     paths = sorted((stage / "packets").glob("*.json"))
     if (allow_new and not paths and not (stage / "manifest.json").exists()
             and not (stage / "PROMPT.md").exists()
+            and not any((stage / "evidence").glob("*.json"))
             and not any((stage / "replies").glob("*.json"))):
         return True
     if not allow_new and not (stage / "manifest.json").exists():
@@ -281,14 +308,19 @@ def packet_state(stage: Path, expected: dict, prompt: str, allow_new: bool = Fal
     actual = {}
     try:
         actual = {path.stem: json.loads(path.read_text()) for path in paths}
+        actual_evidence = {path.stem: json.loads(path.read_text())
+                           for path in sorted((stage / "evidence").glob("*.json"))}
         manifest = json.loads((stage / "manifest.json").read_text())
         prompt_bytes = (stage / "PROMPT.md").read_bytes()
     except (OSError, ValueError) as error:
         print(f"invalid packet state: {error}; use a fresh --work directory", file=sys.stderr)
         return False
     extra_replies = {p.stem for p in (stage / "replies").glob("*.json")} - expected.keys()
+    expected_manifest = {"packets": expected, "prompt": prompt}
+    if evidence:
+        expected_manifest["evidence"] = evidence
     if (actual != expected or extra_replies
-            or manifest != {"packets": expected, "prompt": prompt}
+            or actual_evidence != evidence or manifest != expected_manifest
             or prompt_bytes != prompt.encode("utf-8")):
         print("stale or incomplete packet state; use a fresh --work directory "
               "and regenerate replies (existing files preserved)", file=sys.stderr)
@@ -296,25 +328,44 @@ def packet_state(stage: Path, expected: dict, prompt: str, allow_new: bool = Fal
     return True
 
 
-def emit_packets(stage: Path, expected: dict, prompt: str) -> bool:
+def emit_packets(stage: Path, expected: dict, prompt: str,
+                 evidence: dict[str, dict] | None = None) -> bool:
     """Idempotent emission; incompatible prior work is retained and refused."""
-    if not packet_state(stage, expected, prompt, allow_new=True):
+    evidence = evidence or {}
+    if not packet_state(stage, expected, prompt, allow_new=True, evidence=evidence):
         return False
     (stage / "packets").mkdir(parents=True, exist_ok=True)
     (stage / "replies").mkdir(exist_ok=True)
     (stage / "PROMPT.md").write_bytes(prompt.encode("utf-8"))
     for key, packet in expected.items():
-        (stage / "packets" / f"{key}.json").write_text(json.dumps(packet, indent=1))
-    (stage / "manifest.json").write_text(json.dumps(
-        {"packets": expected, "prompt": prompt}, sort_keys=True))
+        (stage / "packets" / f"{key}.json").write_bytes(
+            packet_text(packet).encode("utf-8"))
+    if evidence:
+        (stage / "evidence").mkdir(exist_ok=True)
+        for key, record in evidence.items():
+            (stage / "evidence" / f"{key}.json").write_text(json.dumps(record, indent=1))
+    manifest = {"packets": expected, "prompt": prompt}
+    if evidence:
+        manifest["evidence"] = evidence
+    (stage / "manifest.json").write_text(json.dumps(manifest, sort_keys=True))
     return True
+
+
+def packet_text(packet: dict) -> str:
+    """Serialize exactly as persisted so accounting matches dispatched input."""
+    return json.dumps(packet, indent=1)
+
+
+def source_bytes(text: str) -> int:
+    """Count Git text while preserving bytes decoded with surrogateescape."""
+    return len(text.encode("utf-8", "surrogateescape"))
 
 
 # ---------------------------------------------------------------- label stage
 
 LABEL_PROMPT = """You classify one bug-fix commit into a fixed defect taxonomy.
 Read the diff. Reply with exactly one JSON object and nothing else:
-{"id": "<the id field>", "class": <one of the classes>, "language": "go"|"c",
+{"id": "<the id field>", "class": <one of the classes>, "language": <the language_hint>,
  "confidence": "low"|"medium"|"high", "summary": "<=160 chars: what was wrong>"}
 Classes: %s
 Rules: pick the class that names the defect the fix removes, not the code area.
@@ -339,7 +390,7 @@ def validate_label(reply: dict, packet_id: str) -> str | None:
         return f"id mismatch: {reply.get('id')!r}"
     if not isinstance(reply.get("class"), str) or reply["class"] not in TAXONOMY:
         return f"class not in taxonomy: {reply.get('class')!r}"
-    if reply.get("language") not in ("go", "c"):
+    if reply.get("language") not in NATIVE_LANGUAGES:
         return f"bad language: {reply.get('language')!r}"
     if reply.get("confidence") not in ("low", "medium", "high"):
         return f"bad confidence: {reply.get('confidence')!r}"
@@ -412,7 +463,7 @@ Read every subject and bounded diff. For every *reusable* defect shape you can
 state as a single-function syntactic claim, emit one proposal. Reply with
 exactly one JSON object and nothing else:
 {"cluster": "<the cluster field>", "proposals": [
-  {"id": "<lang>-<kebab-case-defect>", "language": "go"|"c",
+  {"id": "<repository prefix>-<kebab-case-defect>", "language": "<cluster language>",
    "claim": "one sentence: the exact syntax shape that is reported",
    "classification": "syntactic"|"taint"|"cross-function"|"noise",
    "positive": "<minimal inert source that must match>",
@@ -424,13 +475,15 @@ exactly one JSON object and nothing else:
   ["<candidate short>", ["<proposal ids supported by that candidate>"]],
   ["<candidate short with no proposal>", "duplicate"|"noise"|"no-generalization"|"unclear"]
 ]}
-Rules: a claim that needs types, dataflow, ownership, reachability, or a guard
-elsewhere is "taint" or "cross-function" -- still emit it, with the reason, so
+ID prefixes: sh- for bash, c-/nginx-/zstd- for C, go-, java-, js-, lua-,
+php-/wp-, and py-. Rules: a claim that needs types, dataflow, ownership,
+reachability, or a guard elsewhere is "taint" or "cross-function" -- still emit it, so
 it can be recorded as rejected and not re-mined. Do not repeat a shipped or
 rejected rule; cite it in overlaps instead. Account for every candidate exactly
 once in dispositions. Proposal references and supporting lists must agree in
 both directions. An empty proposals list is valid only with a reason for every
-candidate. Do not write YAML."""
+candidate. Start with each bounded diff excerpt. Read its `evidence` file only
+when the excerpt is truncated or does not establish the claim. Do not write YAML."""
 
 
 def shipped_rules(language: str) -> list[dict]:
@@ -509,30 +562,55 @@ def packet_candidate(member: dict, corpus: dict[str, dict], mechanical: bool) ->
     row = {"short": member["id"], "url": candidate["url"],
            "subject": candidate["subject"]}
     if mechanical:
+        full_diff = trimmed_diff(candidate["diff"])
+        needs_evidence = (member["route"] == "semantic-model"
+                          and len(candidate["diff"]) > CHANGE_LIMIT)
+        # Small semantic fixes are cheaper and safer to show in full. Larger
+        # ones get a bounded excerpt plus an explicit on-demand evidence file.
+        excerpt = changed_excerpt(candidate["diff"]) \
+            if member["route"] == "cheap-model" or needs_evidence else full_diff
         row.update({"signals": candidate.get("signals", []), "edit": member["edit"],
                     "route_reason": member["route_reason"],
-                    "diff": changed_excerpt(candidate["diff"])
-                    if member["route"] == "cheap-model"
-                    else trimmed_diff(candidate["diff"])})
+                    "diff": excerpt})
+        if needs_evidence:
+            row["evidence"] = f"cluster/evidence/{member['id']}.json"
     else:
         row.update({"summary": member["summary"], "diff": trimmed_diff(candidate["diff"])})
     return row
 
 
+def packet_evidence(packets: dict[str, dict], corpus: dict[str, dict]) -> dict[str, dict]:
+    """Store fuller diffs only where the bounded packet excerpt omits context."""
+    ids = {candidate["short"] for packet in packets.values()
+           for candidate in packet["candidates"] if "evidence" in candidate}
+    return {candidate_id: {
+        "short": candidate_id,
+        "files": corpus[candidate_id]["files"],
+        "diff": trimmed_diff(corpus[candidate_id]["diff"]),
+    } for candidate_id in sorted(ids)}
+
+
 def write_sift_artifacts(work: Path, expected: dict[str, dict], corpus: dict[str, dict],
                          groups: dict[tuple[str, str, str], list[dict]]) -> None:
     """Persist a compact route ledger and reproducible size/count metrics."""
-    rows = ["candidate\tlanguage\tcluster\tedit\troute\treason\tpacket_bytes"]
+    prompt_bytes = len(CLUSTER_PROMPT.encode("utf-8"))
+    rows = ["candidate\tlanguage\tcluster\tedit\troute\treason\tpacket_bytes\tinput_bytes"]
     for packet in (expected[key] for key in sorted(expected)):
-        size = len(json.dumps(packet, separators=(",", ":")).encode())
+        size = len(packet_text(packet).encode("utf-8"))
         for candidate in packet["candidates"]:
             rows.append(f"{candidate['short']}\t{packet['language']}\t{packet['class']}\t"
                         f"{candidate['edit']}\t{packet['route']}\t"
-                        f"{candidate['route_reason']}\t{size}")
+                        f"{candidate['route_reason']}\t{size}\t{size + prompt_bytes}")
     (work / "sift.tsv").write_text("\n".join(rows) + "\n")
-    raw_bytes = sum(len(candidate["diff"].encode()) for candidate in corpus.values())
-    packet_bytes = sum(len(json.dumps(packet, separators=(",", ":")).encode())
+    raw_bytes = sum(source_bytes(candidate["diff"]) for candidate in corpus.values())
+    packet_bytes = sum(len(packet_text(packet).encode("utf-8"))
                        for packet in expected.values())
+    deferred_diff_bytes = sum(
+        source_bytes(trimmed_diff(corpus[candidate["short"]]["diff"]))
+        - source_bytes(candidate["diff"])
+        for packet in expected.values() for candidate in packet["candidates"]
+        if "evidence" in candidate
+    )
     cheap = sum(member["route"] == "cheap-model"
                 for members in groups.values() for member in members)
     semantic_ids = {member["id"] for members in groups.values() for member in members
@@ -541,6 +619,12 @@ def write_sift_artifacts(work: Path, expected: dict[str, dict], corpus: dict[str
                       for members in groups.values() for member in members)
     metrics = {"candidates": len(corpus), "packets": len(expected),
                "raw_diff_bytes": raw_bytes, "packet_bytes": packet_bytes,
+               "prompt_bytes": prompt_bytes,
+               "dispatch_input_bytes": packet_bytes + prompt_bytes * len(expected),
+               "deferred_diff_bytes": deferred_diff_bytes,
+               "on_demand_evidence": sum(
+                   "evidence" in candidate for packet in expected.values()
+                   for candidate in packet["candidates"]),
                "cheap_model": cheap, "semantic_model": len(semantic_ids),
                "semantic_diff_truncated": sum(
                    len(corpus[candidate_id]["diff"]) > DIFF_LIMIT
@@ -599,13 +683,14 @@ def cluster_emit(args) -> int:
     out = args.work / "cluster" / "packets"
     expected = build_cluster_packets(
         groups, corpus, mechanical, args.min_size, args.chunk)
+    evidence = packet_evidence(expected, corpus) if mechanical else {}
     if mechanical:
         emitted = [candidate["short"] for packet in expected.values()
                    for candidate in packet["candidates"]]
         if len(emitted) != len(corpus) or set(emitted) != corpus.keys():
             print("mechanical packet coverage is incomplete or duplicated", file=sys.stderr)
             return 1
-    if not emit_packets(args.work / "cluster", expected, CLUSTER_PROMPT):
+    if not emit_packets(args.work / "cluster", expected, CLUSTER_PROMPT, evidence=evidence):
         return 1
     if mechanical:
         write_sift_artifacts(args.work, expected, corpus, groups)
@@ -613,9 +698,7 @@ def cluster_emit(args) -> int:
     return 0
 
 
-# Harvest proposals cover Go/C only; rule-scaffold also accepts other languages
-# and shorter names for manually authored rules.
-KEBAB = re.compile(r"^(go|c|nginx)-[a-z0-9]+(-[a-z0-9]+)+$")
+KEBAB = re.compile(r"^[a-z][a-z0-9]*-[a-z0-9]+(?:-[a-z0-9]+)+$")
 
 
 def proposal_shape(proposal) -> str | None:
@@ -642,8 +725,8 @@ def validate_proposal(proposal: dict, members: set[str]) -> str | None:
     if not KEBAB.fullmatch(proposal["id"]):
         return f"id {proposal['id']!r} is not <lang>-kebab-case"
     language = proposal["language"]
-    prefixes = ("c-", "nginx-") if language == "c" else ("go-",)
-    if language not in ("go", "c") or not proposal["id"].startswith(prefixes):
+    prefixes = ID_PREFIXES.get(language, ())
+    if not prefixes or not proposal["id"].startswith(prefixes):
         return "language and id prefix disagree"
     if proposal["classification"] not in ("syntactic", "taint", "cross-function", "noise"):
         return "bad classification"
@@ -735,7 +818,12 @@ def cluster_manifest(stage):
         print("cluster manifest lacks packet mapping; use a fresh --work directory",
               file=sys.stderr)
         return None
-    if not packet_state(stage, packets, CLUSTER_PROMPT):
+    evidence = manifest.get("evidence", {})
+    if not isinstance(evidence, dict):
+        print("cluster manifest has invalid evidence mapping; use a fresh --work directory",
+              file=sys.stderr)
+        return None
+    if not packet_state(stage, packets, CLUSTER_PROMPT, evidence=evidence):
         return None
     return packets
 
@@ -864,7 +952,7 @@ def dedupe(args) -> int:
     """
     proposals = read_jsonl(args.work / "cluster" / "proposals.jsonl")
     index: list[tuple[str, str, set[str]]] = []
-    for lang in ("go", "c"):
+    for lang in NATIVE_LANGUAGES:
         for r in shipped_rules(lang):
             index.append((r["id"], "shipped", tokens(r["id"] + " " + r["message"])))
         for rid in rejected_entries(lang):
@@ -913,10 +1001,53 @@ def status(args) -> int:
             print(f"sift    candidates={row['candidates']} packets={row['packets']} "
                   f"cheap={row['cheap_model']} semantic={row['semantic_model']} "
                   f"semantic_truncated={row.get('semantic_diff_truncated', 0)} "
-                  f"bytes={row['packet_bytes']}")
+                  f"evidence={row.get('on_demand_evidence', 0)} "
+                  f"packet_bytes={row['packet_bytes']} prompt_bytes={row.get('prompt_bytes', 0)} "
+                  f"dispatch_bytes={row.get('dispatch_input_bytes', row['packet_bytes'])} "
+                  f"deferred={row.get('deferred_diff_bytes', 0)}")
         except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError) as error:
             print(f"invalid sift metrics: {error}", file=sys.stderr)
             return 1
+    return 0
+
+
+def queue(args) -> int:
+    """List only packet replies that still need work, without reading packet bodies."""
+    if args.limit < 1:
+        print("--limit must be positive", file=sys.stderr)
+        return 1
+    stage = (args.work / "cluster").resolve()
+    packets = cluster_manifest(stage)
+    if packets is None:
+        return 1
+    tasks = []
+    for stem, packet in sorted(packets.items()):
+        route = packet.get("route")
+        if args.route not in ("all", route):
+            continue
+        _proposals, _dispositions, error = read_cluster_reply(stage, stem, packet)
+        if error is None:
+            continue
+        tasks.append({
+            "cluster": stem,
+            "route": route,
+            "candidates": len(packet.get("candidates", [])),
+            "state": "missing" if error == "missing" else "retry",
+            "error": "" if error == "missing" else error[:160],
+            "prompt": str(stage / "PROMPT.md"),
+            "packet": str(stage / "packets" / f"{stem}.json"),
+            "reply": str(stage / "replies" / f"{stem}.json"),
+        })
+    selected = tasks[:args.limit]
+    if args.json:
+        print(json.dumps({"tasks": selected, "remaining": len(tasks) - len(selected)},
+                         separators=(",", ":"), sort_keys=True))
+    else:
+        for task in selected:
+            print(f"{task['route']}\t{task['state']}\t{task['cluster']}\t"
+                  f"{task['packet']}\t{task['reply']}")
+        print(f"queue: shown={len(selected)} remaining={len(tasks) - len(selected)}",
+              file=sys.stderr)
     return 0
 
 
@@ -926,7 +1057,7 @@ def main() -> int:
     for name, fn, needs_corpus in (
         ("label-emit", label_emit, True), ("label-ingest", label_ingest, True),
         ("cluster-emit", cluster_emit, True), ("cluster-ingest", cluster_ingest, False),
-        ("dedupe", dedupe, False), ("status", status, False),
+        ("dedupe", dedupe, False), ("status", status, False), ("queue", queue, False),
     ):
         sp = sub.add_parser(name)
         sp.add_argument("--work", type=Path, required=True)
@@ -940,6 +1071,11 @@ def main() -> int:
                             help="skip AI labels; bound context and cluster mechanically")
         if name == "dedupe":
             sp.add_argument("--threshold", type=float, default=0.5)
+        if name == "queue":
+            sp.add_argument("--route", default="all",
+                            choices=("all", "cheap-model", "semantic-model"))
+            sp.add_argument("--limit", type=int, default=20)
+            sp.add_argument("--json", action="store_true")
         sp.set_defaults(fn=fn)
     args = ap.parse_args()
     return args.fn(args)

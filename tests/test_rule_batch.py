@@ -20,6 +20,21 @@ def completed(returncode=0, stdout="", stderr=""):
     return subprocess.CompletedProcess([], returncode, stdout, stderr)
 
 
+def pass_state(rule_id, candidate):
+    return {"schema": 1, "rule": rule_id, "status": "PASS", "attempts": [{
+        "candidate": candidate, "matcher": "pattern: bad($X)",
+        "probe": f"{rule_id}: PASS"}]}
+
+
+def parked_state(rule_id, candidate):
+    attempts = [{"candidate": char * 64, "matcher": f"pattern: bad{index}($X)",
+                 "probe": f"{rule_id}: FAIL"}
+                for index, char in enumerate("abc", 1)]
+    attempts.append({"candidate": candidate, "matcher": "pattern: bad4($X)",
+                     "probe": f"{rule_id}: FAIL"})
+    return {"schema": 1, "rule": rule_id, "status": "PARKED", "attempts": attempts}
+
+
 class RuleBatchTests(unittest.TestCase):
     def test_header_only_dedupe_is_valid(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -121,7 +136,9 @@ class RuleBatchTests(unittest.TestCase):
             {"id": "go-seeded-rule", "action": "SEEDED-REVIEW", "detail": ""},
             {"id": "go-manual-rule", "action": "AI-DRAFT", "detail": ""},
         ]
-        with patch.object(BATCH, "run", side_effect=[
+        proposal = {"id": "go-seeded-rule"}
+        with patch.object(BATCH, "read_jsonl", return_value=[proposal]), \
+                patch.object(BATCH, "run", side_effect=[
                 completed(stdout="wrote pair\n"),
                 completed(stdout="go-seeded-rule: PASS 1/4\n")]) as runner, \
                 patch.object(BATCH, "probe_passed", return_value=True):
@@ -136,11 +153,28 @@ class RuleBatchTests(unittest.TestCase):
         self.assertEqual(rows[1]["action"], "AI-DRAFT")
 
         rows[0]["action"] = "SEEDED-REVIEW"
-        with patch.object(BATCH, "run", side_effect=[completed(), completed(stdout="")]), \
+        with patch.object(BATCH, "read_jsonl", return_value=[proposal]), \
+                patch.object(BATCH, "run", side_effect=[completed(), completed(stdout="")]), \
                 patch.object(BATCH, "probe_passed", return_value=False):
             self.assertEqual(BATCH.apply_seeded(rows, Path("p"), Path("w"), "correctness"), 1)
         self.assertEqual(rows[0]["action"], "PROBE-FAILED")
         self.assertIn("scaffolded pair and rule count retained", rows[0]["detail"])
+
+    def test_apply_seeded_clears_provisional_terminal_state(self):
+        rows = [{"id": "go-seeded-rule", "action": "SEEDED-REVIEW", "detail": ""}]
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            state = work / "draft/go-seeded-rule.json"
+            state.parent.mkdir()
+            state.write_text('{"rule":"go-seeded-rule","status":"PASS"}\n')
+            with patch.object(BATCH, "read_jsonl",
+                              return_value=[{"id": "go-seeded-rule"}]), \
+                    patch.object(BATCH, "run", side_effect=[completed(), completed()]), \
+                    patch.object(BATCH, "probe_passed", return_value=True):
+                self.assertEqual(BATCH.apply_seeded(
+                    rows, Path("proposals"), work, "correctness"), 0)
+            self.assertFalse(state.exists())
+            self.assertEqual(rows[0]["action"], "SEEDED-PASS")
 
     def test_apply_seeded_records_subprocess_exceptions_per_candidate(self):
         for results, expected in (
@@ -148,8 +182,10 @@ class RuleBatchTests(unittest.TestCase):
                 ([completed(stdout="wrote pair\n"), BATCH.BatchError("probe timed out")],
                  "PROBE-FAILED")):
             rows = [{"id": "go-seeded-rule", "action": "SEEDED-REVIEW", "detail": ""}]
-            with self.subTest(expected=expected), patch.object(
-                    BATCH, "run", side_effect=results):
+            with self.subTest(expected=expected), \
+                    patch.object(BATCH, "read_jsonl",
+                                 return_value=[{"id": "go-seeded-rule"}]), \
+                    patch.object(BATCH, "run", side_effect=results):
                 failures = BATCH.apply_seeded(
                     rows, Path("p"), Path("w"), "correctness")
             self.assertEqual(failures, 1)
@@ -217,7 +253,8 @@ class RuleBatchTests(unittest.TestCase):
             self.assertFalse((work / "draft-plan.tsv").exists())
 
     def test_write_plan_is_reproducible(self):
-        rows = [{"id": "go-test-rule", "classification": "syntactic", "duplicate": "no",
+        rows = [{"id": "go-test-rule", "category": "correctness",
+                 "classification": "syntactic", "duplicate": "no",
                  "action": "AI-DRAFT", "detail": "needs matcher"}]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "draft-plan.tsv"
@@ -225,6 +262,206 @@ class RuleBatchTests(unittest.TestCase):
             first = path.read_bytes()
             BATCH.write_plan(path, rows)
             self.assertEqual(path.read_bytes(), first)
+
+    def test_queue_and_task_hide_unrelated_proposals_and_terminal_drafts(self):
+        proposals = [
+            {"id": "go-first-rule", "language": "go", "claim": "first claim",
+             "classification": "syntactic", "positive": "bad(x)",
+             "near_miss": "good(x)", "rationale": "first reason"},
+            {"id": "go-finished-rule", "language": "go", "claim": "finished claim",
+             "classification": "syntactic", "positive": "old(x)",
+             "near_miss": "new(x)", "rationale": "finished reason"},
+            {"id": "go-semantic-rule", "language": "go", "claim": "semantic claim",
+             "classification": "taint", "positive": "sink(x)",
+             "near_miss": "sink(safe)", "rationale": "semantic reason"},
+        ]
+        rows = [
+            {"id": "go-first-rule", "category": "correctness",
+             "classification": "syntactic", "duplicate": "no",
+             "action": "AI-DRAFT", "detail": "needs matcher"},
+            {"id": "go-finished-rule", "category": "correctness",
+             "classification": "syntactic", "duplicate": "no",
+             "action": "SEEDED-PASS", "detail": "seeded"},
+            {"id": "go-semantic-rule", "category": "correctness",
+             "classification": "taint", "duplicate": "no",
+             "action": "SEMANTIC-REVIEW", "detail": "needs judgment"},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            root = work / "repo"
+            (work / "cluster").mkdir()
+            (work / "cluster/proposals.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in proposals), encoding="utf-8")
+            (work / "dedupe.tsv").write_text(
+                "proposal\tproposal_digest\tflag\n" + "".join(
+                    f"{row['id']}\t{BATCH.proposal_digest(row)}\t\n" for row in proposals),
+                encoding="utf-8")
+            BATCH.write_plan(work / "draft-plan.tsv", rows)
+            (work / "draft").mkdir()
+            rule = root / "rules/go/correctness/go-finished-rule.yml"
+            fixture = root / "tests/go/correctness/go-finished-rule.yml"
+            rule.parent.mkdir(parents=True)
+            fixture.parent.mkdir(parents=True)
+            rule.write_text("rule: {pattern: bad($X)}\n")
+            fixture.write_text("valid: [good(x)]\ninvalid: [bad(x)]\n")
+            finished = proposals[1]
+            finished_fingerprint = BATCH.candidate_digest(rule, fixture)
+            finished_state = work / "draft/go-finished-rule.json"
+            finished_state.write_text(json.dumps(pass_state(
+                "go-finished-rule", finished_fingerprint)), encoding="utf-8")
+            (work / "draft/go-first-rule.json").write_text(json.dumps({
+                "rule": "go-first-rule", "status": []}), encoding="utf-8")
+            with patch.object(BATCH, "ROOT", root), \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(BATCH.emit_tasks(work, "correctness", None, True), 0)
+            self.assertNotIn("go-first-rule", BATCH.draft_states(work),
+                             "partial state must fail the authoritative schema")
+            queue = json.loads(output.getvalue())
+            self.assertEqual(queue["tasks"], [
+                {"action": "AI-DRAFT", "id": "go-first-rule"},
+                {"action": "SEEDED-PASS", "id": "go-finished-rule"},
+            ])
+            with patch.object(BATCH, "ROOT", root), \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(BATCH.emit_tasks(
+                    work, "correctness", "go-first-rule", True), 0)
+            task = json.loads(output.getvalue())
+            self.assertEqual(task["claim"], "first claim")
+            self.assertEqual(task["focus"], "author and probe the matcher")
+            self.assertNotIn("finished claim", output.getvalue())
+            self.assertNotIn("semantic claim", output.getvalue())
+            self.assertEqual(task["draft_command"][-3:],
+                             ["go-first-rule", "--work", str(work)])
+            with patch.object(BATCH, "ROOT", root), \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(BATCH.emit_tasks(
+                    work, "correctness", "go-finished-rule", True), 0)
+            seeded = json.loads(output.getvalue())
+            self.assertIn("review provisional seed matcher", seeded["focus"])
+            self.assertEqual(seeded["reviewed_command"][-2:],
+                             ["--mark-reviewed", "go-finished-rule"])
+            with patch.object(BATCH, "ROOT", root), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(BATCH.mark_reviewed(
+                    work, "correctness", "go-finished-rule"), 0)
+            reviewed = json.loads((work / "draft-reviewed/go-finished-rule.json").read_text())
+            self.assertEqual(reviewed["proposal_digest"], BATCH.proposal_digest(finished))
+            with patch.object(BATCH, "ROOT", root):
+                self.assertEqual(
+                    [task["id"] for task in BATCH.draft_tasks(work, "correctness")],
+                    ["go-first-rule"])
+            finished_state.write_text(json.dumps(parked_state(
+                "go-finished-rule", finished_fingerprint)), encoding="utf-8")
+            with patch.object(BATCH, "ROOT", root):
+                self.assertEqual(
+                    [task["id"] for task in BATCH.draft_tasks(work, "correctness")],
+                    ["go-first-rule"], "acknowledged PARKED state should be terminal")
+            first_rule = root / "rules/go/correctness/go-first-rule.yml"
+            first_fixture = root / "tests/go/correctness/go-first-rule.yml"
+            first_rule.write_text("rule: {pattern: bad($X)}\n")
+            first_fixture.write_text("valid: [good(x)]\ninvalid: [bad(x)]\n")
+            first_fingerprint = BATCH.candidate_digest(first_rule, first_fixture)
+            (work / "draft/go-first-rule.json").write_text(json.dumps(pass_state(
+                "go-first-rule", first_fingerprint)), encoding="utf-8")
+            with patch.object(BATCH, "ROOT", root):
+                self.assertEqual(
+                    [task["id"] for task in BATCH.draft_tasks(work, "correctness")],
+                    ["go-first-rule"], "a PASS still needs explicit review acknowledgment")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(BATCH.mark_reviewed(
+                        work, "correctness", "go-first-rule"), 0)
+                self.assertEqual(BATCH.draft_tasks(work, "correctness"), [])
+            saved_state = finished_state.read_text()
+            finished_state.unlink()
+            with patch.object(BATCH, "ROOT", root):
+                self.assertEqual(
+                    [task["id"] for task in BATCH.draft_tasks(work, "correctness")],
+                    ["go-finished-rule"], "acknowledgment cannot replace PASS evidence")
+            finished_state.write_text(saved_state)
+            finished["claim"] = "revised finished claim"
+            (work / "cluster/proposals.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in proposals), encoding="utf-8")
+            (work / "dedupe.tsv").write_text(
+                "proposal\tproposal_digest\tflag\n" + "".join(
+                    f"{row['id']}\t{BATCH.proposal_digest(row)}\t\n" for row in proposals),
+                encoding="utf-8")
+            BATCH.write_plan(work / "draft-plan.tsv", rows)
+            with patch.object(BATCH, "ROOT", root):
+                self.assertEqual(
+                    [task["id"] for task in BATCH.draft_tasks(work, "correctness")],
+                    ["go-finished-rule"])
+
+    def test_task_emission_rejects_stale_plan_coverage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            (work / "cluster").mkdir()
+            (work / "cluster/proposals.jsonl").write_text(json.dumps({
+                "id": "go-test-rule", "language": "go"}) + "\n", encoding="utf-8")
+            proposal = {"id": "go-test-rule", "language": "go"}
+            (work / "dedupe.tsv").write_text(
+                "proposal\tproposal_digest\tflag\n"
+                f"go-test-rule\t{BATCH.proposal_digest(proposal)}\t\n", encoding="utf-8")
+            BATCH.write_plan(work / "draft-plan.tsv", [])
+            with self.assertRaisesRegex(BATCH.BatchError, "does not exactly cover"):
+                BATCH.draft_tasks(work, "security")
+
+    def test_task_emission_rejects_stale_proposal_content(self):
+        proposal = {"id": "go-test-rule", "language": "go",
+                    "classification": "syntactic"}
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            (work / "cluster").mkdir()
+            (work / "cluster/proposals.jsonl").write_text(
+                json.dumps(proposal) + "\n", encoding="utf-8")
+            (work / "dedupe.tsv").write_text(
+                "proposal\tproposal_digest\tflag\n"
+                f"go-test-rule\t{'0' * 64}\t\n", encoding="utf-8")
+            BATCH.write_plan(work / "draft-plan.tsv", [{
+                "id": "go-test-rule", "category": "security",
+                "classification": "syntactic",
+                "duplicate": "no", "action": "AI-DRAFT", "detail": "draft"}])
+            with self.assertRaisesRegex(BATCH.BatchError, "stale"):
+                BATCH.draft_tasks(work, "security")
+
+    def test_task_emission_rechecks_actionable_eligibility(self):
+        for classification, duplicate in (("taint", "no"), ("syntactic", "yes")):
+            with self.subTest(classification=classification, duplicate=duplicate), \
+                    tempfile.TemporaryDirectory() as directory:
+                work = Path(directory)
+                (work / "cluster").mkdir()
+                proposal = {"id": "go-test-rule", "language": "go",
+                            "classification": classification}
+                (work / "cluster/proposals.jsonl").write_text(
+                    json.dumps(proposal) + "\n", encoding="utf-8")
+                flag = "DUP?" if duplicate == "yes" else ""
+                (work / "dedupe.tsv").write_text(
+                    "proposal\tproposal_digest\tflag\n"
+                    f"go-test-rule\t{BATCH.proposal_digest(proposal)}\t{flag}\n",
+                    encoding="utf-8")
+                BATCH.write_plan(work / "draft-plan.tsv", [{
+                    "id": "go-test-rule", "category": "security",
+                    "classification": classification,
+                    "duplicate": duplicate, "action": "AI-DRAFT", "detail": "tampered"}])
+                with self.assertRaisesRegex(BATCH.BatchError, "ineligible"):
+                    BATCH.draft_tasks(work, "security")
+
+    def test_task_emission_rejects_plan_category_replay(self):
+        proposal = {"id": "go-test-rule", "language": "go",
+                    "classification": "syntactic"}
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            (work / "cluster").mkdir()
+            (work / "cluster/proposals.jsonl").write_text(
+                json.dumps(proposal) + "\n", encoding="utf-8")
+            (work / "dedupe.tsv").write_text(
+                "proposal\tproposal_digest\tflag\n"
+                f"go-test-rule\t{BATCH.proposal_digest(proposal)}\t\n", encoding="utf-8")
+            BATCH.write_plan(work / "draft-plan.tsv", [{
+                "id": "go-test-rule", "category": "correctness",
+                "classification": "syntactic", "duplicate": "no",
+                "action": "AI-DRAFT", "detail": "draft"}])
+            with self.assertRaisesRegex(BATCH.BatchError, "category is stale"):
+                BATCH.draft_tasks(work, "security")
 
     def test_main_bounds_plan_write_failure(self):
         argv = ["rule-batch", "--work", "work", "--category", "correctness"]

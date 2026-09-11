@@ -9,14 +9,20 @@ shipping reviewer. Contract: docs/authoring.md#harvest-and-draft-pipeline.
 Usage:
   rule-batch.py --work WORK --category correctness [--dry-run] [--json]
   rule-batch.py --work WORK --category security --apply-seeded
+  rule-batch.py --work WORK --category correctness --queue [--json]
+  rule-batch.py --work WORK --category correctness --task RULE-ID
+  rule-batch.py --work WORK --category correctness --mark-reviewed RULE-ID
 
 Inputs: WORK/cluster/proposals.jsonl and WORK/dedupe.tsv.
 Output: a bounded summary, plus WORK/draft-plan.tsv unless --dry-run. JSON mode
-prints only the summary object. Exit 0 when planning/apply succeeds, 1 if any
-candidate is blocked or an apply/probe fails, 2 for invalid inputs.
+prints only the summary object. Queue mode lists only unfinished actionable
+rows; task mode emits one compact, self-contained drafting packet. Exit 0 when
+planning/apply succeeds, 1 if any candidate is blocked or an apply/probe fails,
+2 for invalid inputs.
 Side effects: default writes only the plan under WORK. --apply-seeded invokes
-rule-scaffold.py and rule-draft.py for SEEDED-REVIEW rows. It has no network and
-never edits semantic-only, duplicate, already-existing, or unseeded proposals.
+rule-scaffold.py and rule-draft.py for SEEDED-REVIEW rows; --mark-reviewed writes
+a proposal- and candidate-bound acknowledgment under WORK. It has no network
+and never edits semantic-only, duplicate, already-existing, or unseeded proposals.
 Limits: fixture separation is not semantic correctness or shipping approval.
 Extend: add routing states in assess(); keep subprocess output captured/bounded.
 """
@@ -24,6 +30,7 @@ Extend: add routing states in assess(); keep subprocess output captured/bounded.
 import argparse
 import csv
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -35,7 +42,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCAFFOLD = ROOT / "tools" / "rule-scaffold.py"
 DRAFT = ROOT / "tools" / "rule-draft.py"
-PLAN_FIELDS = ("id", "classification", "duplicate", "action", "detail")
+PLAN_FIELDS = ("id", "category", "classification", "duplicate", "action", "detail")
+ACTIONABLE = {"AI-DRAFT", "SEEDED-PASS"}
+STATE_SPEC = importlib.util.spec_from_file_location("rule_draft_state", DRAFT)
+if STATE_SPEC is None or STATE_SPEC.loader is None:
+    raise RuntimeError("cannot load rule-draft state contract")
+DRAFT_STATE = importlib.util.module_from_spec(STATE_SPEC)
+STATE_SPEC.loader.exec_module(DRAFT_STATE)
 
 
 class BatchError(ValueError):
@@ -55,6 +68,15 @@ def proposal_digest(proposal: dict) -> str:
     """Match the canonical digest emitted by the complete-index dedupe stage."""
     encoded = json.dumps(proposal, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def candidate_digest(rule: Path, fixture: Path) -> str | None:
+    """Mirror rule-draft's byte identity when the pair exists."""
+    try:
+        material = rule.read_bytes() + b"\0" + fixture.read_bytes()
+    except OSError:
+        return None
+    return hashlib.sha256(material).hexdigest()
 
 
 def read_dedupe_rows(path: Path) -> list[dict[str, str]]:
@@ -154,7 +176,7 @@ def assess(proposals: list[dict], duplicates: set[str], proposal_path: Path,
             action, detail = "SEMANTIC-REVIEW", f"{classification} needs rejection/ship judgment"
         else:
             action, detail = seed_status(proposal_path, rule_id, category)
-        rows.append({"id": rule_id, "classification": classification,
+        rows.append({"id": rule_id, "category": category, "classification": classification,
                      "duplicate": duplicate, "action": action, "detail": detail})
     return rows
 
@@ -178,6 +200,169 @@ def write_plan(path: Path, rows: list[dict[str, str]]) -> None:
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
+
+
+def read_plan(path: Path) -> list[dict[str, str]]:
+    """Load the exact current task ledger without exposing unrelated proposals."""
+    try:
+        with path.open(encoding="utf-8", newline="") as source:
+            reader = csv.DictReader(source, delimiter="\t")
+            rows = list(reader)
+    except (OSError, UnicodeError, csv.Error) as error:
+        raise BatchError(f"cannot read {path}: {error}") from error
+    if tuple(reader.fieldnames or ()) != PLAN_FIELDS:
+        raise BatchError(f"invalid draft plan {path}")
+    if any(any(not isinstance(row.get(field), str) for field in PLAN_FIELDS) for row in rows):
+        raise BatchError(f"draft plan {path} has a truncated field")
+    ids = [row["id"] for row in rows]
+    if any(not rule_id for rule_id in ids) or len(ids) != len(set(ids)):
+        raise BatchError(f"draft plan {path} has empty or duplicate ids")
+    return rows
+
+
+def draft_states(work: Path) -> dict[str, dict]:
+    """Reuse rule-draft's strict state contract; malformed state stays actionable."""
+    states = {}
+    for path in (work / "draft").glob("*.json"):
+        try:
+            state = DRAFT_STATE.load_state(path, path.stem)
+        except (DRAFT_STATE.DraftError, OSError, UnicodeError):
+            continue
+        states[path.stem] = state
+    return states
+
+
+def reviewed_state(work: Path, rule_id: str) -> dict | None:
+    """Load one bounded review acknowledgment; malformed data is not completion."""
+    path = work / "draft-reviewed" / f"{rule_id}.json"
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    expected = {"rule", "proposal_digest", "candidate_digest"}
+    return state if isinstance(state, dict) and set(state) == expected else None
+
+
+def draft_tasks(work: Path, category: str) -> list[dict]:
+    """Join plan and proposals into minimal per-rule authoring packets."""
+    proposals = read_jsonl(work / "cluster" / "proposals.jsonl")
+    by_id = {proposal["id"]: proposal for proposal in proposals
+             if isinstance(proposal, dict) and isinstance(proposal.get("id"), str)}
+    if len(by_id) != len(proposals):
+        raise BatchError("proposals need unique string ids before task emission")
+    current_duplicates = duplicate_ids(work / "dedupe.tsv", proposal_ids(proposals))
+    rows = read_plan(work / "draft-plan.tsv")
+    if {row["id"] for row in rows} != set(by_id):
+        raise BatchError("draft plan does not exactly cover current proposals")
+    states = draft_states(work)
+    tasks = []
+    for row in rows:
+        proposal = by_id[row["id"]]
+        if row["category"] != category:
+            raise BatchError("draft plan category is stale; rerun rule-batch planning")
+        expected_duplicate = "yes" if row["id"] in current_duplicates else "no"
+        if row["duplicate"] != expected_duplicate \
+                or row["classification"] != proposal.get("classification"):
+            raise BatchError("draft plan is stale; rerun rule-batch planning")
+        if row["action"] in ACTIONABLE and (expected_duplicate != "no"
+                                             or proposal["classification"] != "syntactic"):
+            raise BatchError("draft plan assigns generation to an ineligible proposal")
+        state = states.get(row["id"], {})
+        status = state.get("status")
+        language = proposal.get("language")
+        if not isinstance(language, str) or not language:
+            raise BatchError(f"proposal {row['id']!r} needs a language")
+        rule = ROOT / "rules" / language / category / f"{row['id']}.yml"
+        fixture = ROOT / "tests" / language / category / f"{row['id']}.yml"
+        proposal_hash = proposal_digest(proposal)
+        fingerprint = candidate_digest(rule, fixture)
+        attempts = state.get("attempts")
+        state_fingerprint = attempts[-1].get("candidate") \
+            if isinstance(attempts, list) and attempts and isinstance(attempts[-1], dict) else None
+        current_terminal = isinstance(status, str) and status in {"PASS", "PARKED"} \
+            and fingerprint is not None and state_fingerprint == fingerprint
+        review = reviewed_state(work, row["id"])
+        current_review = fingerprint is not None and review == {
+            "rule": row["id"], "proposal_digest": proposal_hash,
+            "candidate_digest": fingerprint}
+        complete = current_terminal and current_review
+        if row["action"] not in ACTIONABLE or complete:
+            continue
+        tasks.append({
+            "id": row["id"], "action": row["action"],
+            "claim": proposal.get("claim"), "classification": proposal.get("classification"),
+            "positive": proposal.get("positive"), "near_miss": proposal.get("near_miss"),
+            "rationale": proposal.get("rationale"),
+            "focus": ("review parked attempts and acknowledge or reset explicitly"
+                      if status == "PARKED" and current_terminal else
+                      "review provisional seed matcher generality and semantic value"
+                      if row["action"] == "SEEDED-PASS" else "author and probe the matcher"),
+            "proposal_digest": proposal_hash, "candidate_digest": fingerprint,
+            "rule": str(rule), "fixture": str(fixture),
+            "draft_command": [sys.executable, str(DRAFT), row["id"], "--work", str(work)],
+        })
+        tasks[-1]["reviewed_command"] = [
+            sys.executable, str(Path(__file__).resolve()), "--work", str(work),
+            "--category", category, "--mark-reviewed", row["id"]]
+    return tasks
+
+
+def mark_reviewed(work: Path, category: str, rule_id: str) -> int:
+    """Acknowledge review of any actionable current PASS or PARKED task."""
+    task = next((row for row in draft_tasks(work, category) if row["id"] == rule_id), None)
+    states = draft_states(work)
+    state = states.get(rule_id)
+    attempts = state.get("attempts") if isinstance(state, dict) else None
+    fingerprint = attempts[-1].get("candidate") \
+        if isinstance(attempts, list) and attempts and isinstance(attempts[-1], dict) else None
+    if task is None or not isinstance(state, dict) \
+            or state.get("status") not in {"PASS", "PARKED"} \
+            or fingerprint != task["candidate_digest"]:
+        print(f"rule-batch: no reviewable terminal task {rule_id!r}", file=sys.stderr)
+        return 1
+    review_path = work / "draft-reviewed" / f"{rule_id}.json"
+    review_path.parent.mkdir(parents=True, exist_ok=True)
+    review = {"rule": rule_id, "proposal_digest": task["proposal_digest"],
+              "candidate_digest": task["candidate_digest"]}
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=review_path.parent,
+                                         prefix=f".{review_path.name}.", delete=False) as output:
+            temporary = Path(output.name)
+            json.dump(review, output, separators=(",", ":"), sort_keys=True)
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+        temporary.replace(review_path)
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    print(f"reviewed\t{rule_id}")
+    return 0
+
+
+def emit_tasks(work: Path, category: str, rule_id: str | None, json_output: bool) -> int:
+    """Print a compact queue or one self-contained authoring task."""
+    tasks = draft_tasks(work, category)
+    if rule_id:
+        task = next((row for row in tasks if row["id"] == rule_id), None)
+        if task is None:
+            print(f"rule-batch: no actionable task {rule_id!r}", file=sys.stderr)
+            return 1
+        print(json.dumps(task, separators=(",", ":"), sort_keys=True))
+        return 0
+    queue_tasks = [{"id": row["id"], "action": row["action"]} for row in tasks]
+    queue = {"tasks": queue_tasks,
+             "task_command": [sys.executable, str(Path(__file__).resolve()),
+                              "--work", str(work), "--category", category, "--task", "<id>"]}
+    if json_output:
+        print(json.dumps(queue, separators=(",", ":"), sort_keys=True))
+    else:
+        for task in queue_tasks:
+            print(f"{task['action']}\t{task['id']}")
+        print(f"queue: actionable={len(tasks)}", file=sys.stderr)
+    return 0
 
 
 def probe_passed(work: Path, rule_id: str, probe: subprocess.CompletedProcess[str]) -> bool:
@@ -232,8 +417,12 @@ def apply_seeded(rows: list[dict[str, str]], proposal_path: Path, work: Path,
                 else "probe/state mismatch without diagnostic")
             failures += 1
         else:
+            # The apply probe proves only fixture separation. Do not make that
+            # provisional input terminal: the reviewer must be able to edit it
+            # and run rule-draft from a fresh state before acknowledging it.
+            (work / "draft" / f"{row['id']}.json").unlink(missing_ok=True)
             row["action"] = "SEEDED-PASS"
-            row["detail"] = "generated pair passed probe; AI review still required"
+            row["detail"] = "provisional pair passed probe; generality review required"
     return failures
 
 
@@ -244,11 +433,32 @@ def main() -> int:
     parser.add_argument("--category", required=True, choices=("security", "correctness"))
     parser.add_argument("--apply-seeded", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    task_mode = parser.add_mutually_exclusive_group()
+    task_mode.add_argument("--queue", action="store_true",
+                           help="list only actionable, nonterminal draft ids")
+    task_mode.add_argument("--task", metavar="ID",
+                           help="emit one self-contained authoring task as compact JSON")
+    task_mode.add_argument("--mark-reviewed", metavar="ID",
+                           help="acknowledge review of an actionable PASS or PARKED task")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
-    if args.apply_seeded and args.dry_run:
-        parser.error("--apply-seeded and --dry-run are mutually exclusive")
+    if args.apply_seeded and (args.dry_run or args.queue or args.task or args.mark_reviewed):
+        parser.error("--apply-seeded cannot be combined with another mode")
+    if args.dry_run and (args.queue or args.task or args.mark_reviewed):
+        parser.error("--dry-run cannot be combined with another mode")
     args.work = args.work.resolve()
+    if args.mark_reviewed:
+        try:
+            return mark_reviewed(args.work, args.category, args.mark_reviewed)
+        except (BatchError, OSError, UnicodeError) as error:
+            print(f"rule-batch: ERROR: {error}", file=sys.stderr)
+            return 2
+    if args.queue or args.task:
+        try:
+            return emit_tasks(args.work, args.category, args.task, args.json)
+        except (BatchError, OSError, UnicodeError) as error:
+            print(f"rule-batch: ERROR: {error}", file=sys.stderr)
+            return 2
     proposal_path = args.work / "cluster" / "proposals.jsonl"
     try:
         proposals = read_jsonl(proposal_path)

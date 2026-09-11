@@ -331,66 +331,60 @@ process.stdout.write(JSON.stringify(urls.map(raw => {
             self.assertIn("incomplete harvest", stderr.getvalue())
 
     def test_dedupe_sha_aliases_preserve_first_repo_and_packet_uniqueness(self):
-        for phase in ("show", "patch-id"):
-            for order in (("fast", "slow"), ("slow", "fast"), ("fast", "alias", "slow")):
-                with self.subTest(phase=phase, order=order):
-                    candidates = [{"repo": repo,
-                                   "sha": ("a" if repo == "fast" and len(order) == 3
-                                           else "b") * 40,
-                                   "short": ("a" if repo == "fast" and len(order) == 3
-                                             else "b") * 12,
-                                   "subject": "fix bounds", "files": ["x.c"],
-                                   "diff": "-old\n+new"} for repo in order]
+        for order in (("fast", "slow"), ("slow", "fast"), ("fast", "alias", "slow")):
+            with self.subTest(order=order):
+                candidates = [{"repo": repo,
+                               "sha": ("a" if repo == "fast" and len(order) == 3
+                                       else "b") * 40,
+                               "short": ("a" if repo == "fast" and len(order) == 3
+                                         else "b") * 12,
+                               "subject": "fix bounds", "files": ["x.c"],
+                               "diff": "-old\n+new"} for repo in order]
 
-                    def show(repo, *_args, target=phase):
-                        if repo.name == "slow" and target == "show":
-                            raise subprocess.TimeoutExpired(["git", "show"], 60)
-                        return repo.name
+                def patch_id(command, **_kwargs):
+                    return subprocess.CompletedProcess(command, 0, b"same-patch\n")
 
-                    def patch_id(command, *, target=phase, **kwargs):
-                        if kwargs["input"] == b"slow" and target == "patch-id":
-                            raise subprocess.TimeoutExpired(command, 60)
-                        return subprocess.CompletedProcess(command, 0, b"same-patch\n")
-
-                    with patch.object(HISTORY, "run", side_effect=show), \
-                            patch.object(HISTORY.subprocess, "run", side_effect=patch_id), \
-                            contextlib.redirect_stderr(io.StringIO()):
-                        result = HISTORY.dedupe_by_patch_id(ROOT, candidates)
-                    self.assertEqual(len(result), 1)
-                    self.assertIs(result[0], candidates[0])
-                    self.assertEqual(result[0]["repo"], order[0])
-                    self.assertEqual(result[0]["also_in"], list(order[1:]))
-                    packets = PACKETS.label_packets(result)
-                    self.assertEqual(len(packets), 1)
-                    self.assertEqual(next(iter(packets.values()))["repo"], order[0])
+                with patch.object(HISTORY.subprocess, "run", side_effect=patch_id), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    result = HISTORY.dedupe_by_patch_id(ROOT, candidates)
+                self.assertEqual(len(result), 1)
+                self.assertIs(result[0], candidates[0])
+                self.assertEqual(result[0]["repo"], order[0])
+                self.assertEqual(result[0]["also_in"], list(order[1:]))
+                packets = PACKETS.label_packets(result)
+                self.assertEqual(len(packets), 1)
+                self.assertEqual(next(iter(packets.values()))["repo"], order[0])
 
     def test_dedupe_timeouts_preserve_candidates_with_sha_identity(self):
-        for phase in ("show", "patch-id"):
-            with self.subTest(phase=phase):
-                candidates = [{"repo": repo, "sha": sha * 40}
-                              for repo, sha in (("first", "a"), ("slow", "b"),
-                                                ("last", "c"), ("fork", "b"))]
+        candidates = [{"repo": repo, "sha": sha * 40, "language": "c", "diff": repo}
+                      for repo, sha in (("first", "a"), ("slow", "b"),
+                                        ("last", "c"), ("fork", "b"))]
 
-                def show(repo, *_args, target=phase):
-                    if repo.name in ("slow", "fork") and target == "show":
-                        raise subprocess.TimeoutExpired(["git", "show"], 60)
-                    return repo.name
+        def patch_id(command, **kwargs):
+            if kwargs["input"] == b"slow":
+                raise subprocess.TimeoutExpired(command, 60)
+            return subprocess.CompletedProcess(command, 0, kwargs["input"] + b"\n")
 
-                def patch_id(command, *, target=phase, **kwargs):
-                    if kwargs["input"] in (b"slow", b"fork") and target == "patch-id":
-                        raise subprocess.TimeoutExpired(command, 60)
-                    return subprocess.CompletedProcess(command, 0, kwargs["input"] + b"\n")
+        with patch.object(HISTORY.subprocess, "run", side_effect=patch_id), \
+                contextlib.redirect_stderr(io.StringIO()) as stderr:
+            result = HISTORY.dedupe_by_patch_id(ROOT, candidates)
+        self.assertEqual([row["repo"] for row in result], ["first", "slow", "last"])
+        self.assertIs(result[1], candidates[1])
+        self.assertEqual(result[1]["also_in"], ["fork"])
+        self.assertIn("using SHA fallback", stderr.getvalue())
+        # The fork's known SHA bypasses a second identity lookup and timeout.
+        self.assertIn("timed-out-candidates=1", stderr.getvalue())
 
-                with patch.object(HISTORY, "run", side_effect=show), \
-                        patch.object(HISTORY.subprocess, "run", side_effect=patch_id), \
-                        contextlib.redirect_stderr(io.StringIO()) as stderr:
-                    result = HISTORY.dedupe_by_patch_id(ROOT, candidates)
-                self.assertEqual([row["repo"] for row in result], ["first", "slow", "last"])
-                self.assertIs(result[1], candidates[1])
-                self.assertEqual(result[1]["also_in"], ["fork"])
-                self.assertIn("using SHA fallback", stderr.getvalue())
-                # The fork's known SHA bypasses a second identity lookup and timeout.
-                self.assertIn("timed-out-candidates=1", stderr.getvalue())
+    def test_dedupe_keeps_identical_patches_for_different_languages(self):
+        candidates = [
+            {"repo": "mixed", "sha": "a" * 40, "language": language,
+             "diff": "-old\n+new"}
+            for language in ("c", "go")
+        ]
+        completed = subprocess.CompletedProcess(
+            ["git", "patch-id", "--stable"], 0, b"same-patch\n")
+        with patch.object(HISTORY.subprocess, "run", return_value=completed):
+            self.assertEqual(HISTORY.dedupe_by_patch_id(ROOT, candidates), candidates)
 
     def test_history_listing_timeout_reports_incomplete_corpus(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -455,7 +449,7 @@ process.stdout.write(JSON.stringify(urls.map(raw => {
                 self.assertIn("skip sample:" + "b" * 40, stderr.getvalue())
 
     def test_timeouts_retain_candidates_and_report_incomplete_repos(self):
-        for phase in ("harvest", "show", "patch-id"):
+        for phase in ("harvest", "patch-id"):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 for name in ("first", "slow", "last"):
@@ -464,12 +458,10 @@ process.stdout.write(JSON.stringify(urls.map(raw => {
                 def harvest(_repo, name, *_args, target=phase):
                     if name == "slow" and target == "harvest":
                         raise subprocess.TimeoutExpired(["git", "log"], 60)
-                    return [{"repo": name, "sha": name, "signals": [], "churn": 1}], 0
-
-                def show(repo, *_args, target=phase):
-                    if repo.name == "slow" and target == "show":
-                        raise subprocess.TimeoutExpired(["git", "show"], 60)
-                    return repo.name
+                    return [{"repo": name, "sha": name, "short": name,
+                             "subject": "fix", "date": "2026-09-11", "language": "c",
+                             "files": ["x.c"], "url": "", "diff": name,
+                             "signals": [], "churn": 1}], 0
 
                 def patch_id(command, *, target=phase, **kwargs):
                     if kwargs["input"] == b"slow" and target == "patch-id":
@@ -477,7 +469,6 @@ process.stdout.write(JSON.stringify(urls.map(raw => {
                     return subprocess.CompletedProcess(command, 0, kwargs["input"] + b"\n")
 
                 with patch.object(HISTORY, "harvest", side_effect=harvest), \
-                        patch.object(HISTORY, "run", side_effect=show), \
                         patch.object(HISTORY.subprocess, "run", side_effect=patch_id), \
                         patch("sys.argv", ["harvest", "--root", str(root), "--repos",
                                            "first", "slow", "last"]), \
@@ -499,7 +490,8 @@ process.stdout.write(JSON.stringify(urls.map(raw => {
         raw_subject = "fix café ".encode() + b"\xff"
         candidate = {"short": "abc", "sha": "a" * 40, "repo": "sample",
                      "subject": raw_subject.decode("utf-8", "surrogateescape"),
-                     "churn": 1, "signals": [], "url": "", "diff": "+new\udcfe\n"}
+                     "churn": 1, "signals": [], "url": "", "diff": "+new\udcfe\n",
+                     "language": "c", "files": ["x.c"]}
         for file_output in (False, True):
             with self.subTest(file_output=file_output), \
                     tempfile.TemporaryDirectory() as directory, \
@@ -526,6 +518,16 @@ process.stdout.write(JSON.stringify(urls.map(raw => {
                 self.assertEqual(row["subject"].encode("utf-8", "surrogateescape"), raw_subject)
                 self.assertEqual(row["diff"], candidate["diff"])
                 self.assertIn(raw_subject, index.read_bytes())
+                if file_output:
+                    args = SimpleNamespace(work=root / "packets", corpus=output,
+                                           chunk=12, min_size=1, mechanical=True)
+                    with patch.object(PACKETS, "shipped_rules", return_value=[]), \
+                            patch.object(PACKETS, "rejected_entries", return_value=[]), \
+                            contextlib.redirect_stderr(io.StringIO()):
+                        self.assertEqual(PACKETS.cluster_emit(args), 0)
+                    metrics = json.loads(
+                        (args.work / "sift-metrics.json").read_text())
+                    self.assertEqual(metrics["raw_diff_bytes"], len(b"+new\xfe\n"))
 
     def test_git_subprocesses_have_bounded_timeouts(self):
         def timeout(command, **kwargs):
@@ -542,8 +544,8 @@ process.stdout.write(JSON.stringify(urls.map(raw => {
                 patch.object(HISTORY.subprocess, "run", side_effect=timeout), \
                 contextlib.redirect_stderr(io.StringIO()) as stderr:
             self.assertEqual(HISTORY.dedupe_by_patch_id(
-                ROOT, [{"repo": "sample", "sha": "a" * 40}]),
-                [{"repo": "sample", "sha": "a" * 40}])
+                ROOT, [{"repo": "sample", "sha": "a" * 40, "diff": "diff"}]),
+                [{"repo": "sample", "sha": "a" * 40, "diff": "diff"}])
             self.assertIn("timed-out-candidates=1", stderr.getvalue())
 
     def test_unattributable_commit_does_not_abort_other_commits_or_repos(self):
@@ -642,7 +644,7 @@ process.stdout.write(JSON.stringify(urls.map(raw => {
                             capture_output=True, check=True).stdout
         with patch.object(HISTORY, "run", return_value=diff), \
                 patch.object(HISTORY.subprocess, "run", wraps=real_run) as runner:
-            candidate = {"repo": "sample", "sha": "a" * 40}
+            candidate = {"repo": "sample", "sha": "a" * 40, "diff": diff}
             self.assertEqual(HISTORY.dedupe_by_patch_id(ROOT, [candidate]), [candidate])
         self.assertEqual(runner.call_args.kwargs["input"], raw)
         self.assertTrue(expected.strip(), "control patch must have a real patch-id")
@@ -652,6 +654,47 @@ process.stdout.write(JSON.stringify(urls.map(raw => {
         with patch.object(HISTORY, "run", return_value=numstat):
             self.assertEqual(HISTORY.changed_source_files(ROOT, "HEAD"),
                              [HISTORY.SourceChange("main.go", 1, 1)])
+
+    def test_source_filter_accepts_every_native_rule_language(self):
+        paths = ("main.sh", "main.c", "main.go", "Main.java", "main.js", "main.lua",
+                 "main.php", "main.py")
+        numstat = "".join(f"1\t0\t{path}\0" for path in (*paths, "main.rs"))
+        with patch.object(HISTORY, "run", return_value=numstat):
+            changes = HISTORY.changed_source_files(ROOT, "HEAD")
+        self.assertEqual([change.path for change in changes], list(paths))
+
+    def test_source_filter_rejects_uppercase_c_as_cpp(self):
+        with patch.object(HISTORY, "run", return_value="1\t0\tmain.C\0"):
+            self.assertEqual(HISTORY.changed_source_files(ROOT, "HEAD"), [])
+
+    def test_source_filter_rejects_cross_language_renames(self):
+        numstat = ("1\t1\t\0old.go\0new.py\0"
+                   "1\t1\t\0old.go\0new.go\0")
+        with patch.object(HISTORY, "run", return_value=numstat):
+            self.assertEqual(HISTORY.changed_source_files(ROOT, "HEAD"), [
+                HISTORY.SourceChange("new.go", 1, 1, "old.go")])
+
+    def test_harvest_splits_a_mixed_language_commit(self):
+        sha = "a" * 40
+        changes = [HISTORY.SourceChange("main.go", 2, 1),
+                   HISTORY.SourceChange("helper.py", 1, 1)]
+
+        def diff(_repo, _sha, paths):
+            return f"diff --git a/{paths[0]} b/{paths[0]}\n@@ -1 +1 @@\n-old\n+new\n"
+
+        with patch.object(HISTORY, "commit_url_prefix", return_value=None), \
+                patch.object(HISTORY, "run",
+                             return_value=f"{sha}\x1ffix mixed bug\x1f2026-09-11"), \
+                patch.object(HISTORY, "changed_source_files", return_value=changes), \
+                patch.object(HISTORY, "diff_body", side_effect=diff), \
+                patch.object(HISTORY, "cosmetic_commit", return_value=False), \
+                contextlib.redirect_stderr(io.StringIO()):
+            rows, incomplete = HISTORY.harvest(ROOT, "sample", 3, 60, None)
+        self.assertEqual(incomplete, 0)
+        self.assertEqual([row["language"] for row in rows], ["go", "python"])
+        self.assertEqual([row["files"] for row in rows], [["main.go"], ["helper.py"]])
+        self.assertEqual([row["short"] for row in rows],
+                         [f"{sha[:12]}-go", f"{sha[:12]}-python"])
 
     def test_truncated_rename_numstat_is_an_explicit_error(self):
         prefix = "1\t0\tvalid.go\0"
@@ -829,6 +872,67 @@ class ReplyTests(unittest.TestCase):
             self.assertEqual(metrics["semantic_diff_truncated"], 0)
             self.assertEqual(metrics["route_reasons"],
                              {"edit-insert": 1, "simple-rewrite": 1})
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(PACKETS.queue(SimpleNamespace(
+                    work=root, route="all", limit=1, json=True)), 0)
+            queued = json.loads(output.getvalue())
+            self.assertEqual(len(queued["tasks"]), 1)
+            self.assertEqual(queued["remaining"], 1)
+            self.assertTrue(queued["tasks"][0]["packet"].endswith(".json"))
+
+    def test_semantic_packet_defers_fuller_diff_and_binds_evidence(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                contextlib.redirect_stderr(io.StringIO()):
+            work = Path(directory)
+            corpus_path = work / "corpus.jsonl"
+            diff = "@@ -1 +1 @@\n-old()\n+new()\n" + "far context\n" * 300
+            candidate = {"short": "abc", "repo": "sample", "subject": "fix logic",
+                         "language": "go", "files": ["x.go"], "diff": diff,
+                         "signals": [], "density": 1, "url": ""}
+            PACKETS.write_jsonl(corpus_path, [candidate])
+            args = SimpleNamespace(work=work, corpus=corpus_path, chunk=12,
+                                   min_size=1, mechanical=True)
+            with patch.object(PACKETS, "shipped_rules", return_value=[]), \
+                    patch.object(PACKETS, "rejected_entries", return_value=[]):
+                self.assertEqual(PACKETS.cluster_emit(args), 0)
+            packet_path = next((work / "cluster/packets").glob("*.json"))
+            packet = json.loads(packet_path.read_text())
+            self.assertEqual(packet_path.read_bytes(),
+                             PACKETS.packet_text(packet).encode("utf-8"))
+            rendered = packet["candidates"][0]
+            self.assertLess(rendered["diff"].count("far context"), 300)
+            evidence_path = work / rendered["evidence"]
+            self.assertIn("far context", json.loads(evidence_path.read_text())["diff"])
+            metrics = json.loads((work / "sift-metrics.json").read_text())
+            self.assertEqual(metrics["on_demand_evidence"], 1)
+            self.assertGreater(metrics["deferred_diff_bytes"], 0)
+            packet_bytes = sum(path.stat().st_size
+                               for path in (work / "cluster/packets").glob("*.json"))
+            prompt_bytes = (work / "cluster/PROMPT.md").stat().st_size
+            self.assertEqual(metrics["packet_bytes"], packet_bytes)
+            self.assertEqual(metrics["prompt_bytes"], prompt_bytes)
+            self.assertEqual(metrics["dispatch_input_bytes"], packet_bytes + prompt_bytes)
+            evidence_path.write_text("{}", encoding="utf-8")
+            self.assertIsNone(PACKETS.cluster_manifest(work / "cluster"))
+
+    def test_native_languages_and_repository_id_prefixes_are_consistent(self):
+        cases = {
+            "bash": ("x.sh", "sh-test-rule"), "c": ("x.c", "nginx-test-rule"),
+            "go": ("x.go", "go-test-rule"), "java": ("X.java", "java-test-rule"),
+            "javascript": ("x.js", "js-test-rule"), "lua": ("x.lua", "lua-test-rule"),
+            "php": ("x.php", "wp-test-rule"), "python": ("x.py", "py-test-rule"),
+        }
+        for language, (filename, rule_id) in cases.items():
+            with self.subTest(language=language):
+                candidate = {"files": [filename], "language": language}
+                self.assertEqual(PACKETS.language_of(candidate), language)
+                proposal = {"id": rule_id, "language": language, "claim": "claim",
+                            "classification": "syntactic", "positive": "bad()",
+                            "near_miss": "good()", "rationale": "reason",
+                            "supporting": ["abc"], "overlaps": []}
+                self.assertIsNone(PACKETS.validate_proposal(proposal, {"abc"}))
+        with self.assertRaisesRegex(SystemExit, "unsupported"):
+            PACKETS.language_of({"files": ["source.C"]})
 
     def test_mechanical_route_escalates_ambiguous_context_and_keeps_fuller_diff(self):
         base = {"short": "abc", "repo": "sample", "subject": "fix bounds",
@@ -853,11 +957,17 @@ class ReplyTests(unittest.TestCase):
                 self.assertEqual(PACKETS.model_route(
                     candidate, kind, PACKETS.signal_family(candidate)), (route, reason))
 
-        candidate = {**base, "diff": "@@ -1 +1 @@\n-old()\n+new()\n context\nfar context\n"}
+        candidate = {**base, "diff":
+                     "@@ -1 +1 @@\n-old()\n+new()\n context one\n context two\n"
+                     + "far context\n" * 300}
         member = {"id": "abc", "edit": "rewrite", "route": "semantic-model",
                   "route_reason": "unrecognized-signal"}
         rendered = PACKETS.packet_candidate(member, {"abc": candidate}, True)
-        self.assertIn("far context", rendered["diff"])
+        self.assertNotIn("far context", rendered["diff"])
+        self.assertEqual(rendered["evidence"], "cluster/evidence/abc.json")
+        evidence = PACKETS.packet_evidence(
+            {"go-general": {"candidates": [rendered]}}, {"abc": candidate})
+        self.assertIn("far context", evidence["abc"]["diff"])
 
     def test_mechanical_cluster_rejects_zero_chunk_and_malformed_corpus(self):
         with tempfile.TemporaryDirectory() as directory, \
@@ -2401,7 +2511,10 @@ class ScaffoldTests(unittest.TestCase):
     def test_language_prefix_boundary(self):
         for language, rule_id, valid in (("go", "golang-test-rule", False),
                 ("c", "cast-test-rule", False), ("java", "javascript-test-rule", False),
-                ("go", "go-check", True), ("c", "c-check", True), ("c", "nginx-check", True)):
+                ("go", "go-check", True), ("c", "c-check", True),
+                ("c", "nginx-check", True), ("c", "zstd-check", True),
+                ("javascript", "js-check", True), ("python", "py-check", True),
+                ("php", "wp-check", True), ("bash", "sh-check", True)):
             args = SimpleNamespace(id=rule_id, language=language, proposal=None,
                                    positive="bad(x)", near_miss="good(x)", claim="Check",
                                    category="security", matcher=None, severity="warning")
@@ -2574,7 +2687,11 @@ class ScaffoldTests(unittest.TestCase):
                 patch.object(SCAFFOLD, "ROOT", Path(directory)), \
                 self.assertRaisesRegex(SystemExit, "run npm ci"):
             SCAFFOLD.seed_oracle(rule, "bad(x)", ["good(x)"])
-        unsupported = {**rule, "language": "python"}
+        self.assertEqual(set(SCAFFOLD.EXTENSIONS), set(SCAFFOLD.LANGUAGES))
+        self.assertEqual(SCAFFOLD.EXTENSIONS, PROBE.EXTENSIONS)
+        self.assertEqual(SCAFFOLD.ID_PREFIXES, PACKETS.ID_PREFIXES)
+        self.assertEqual(HISTORY.SOURCE_LANGUAGES, PACKETS.LANGUAGE_SUFFIXES)
+        unsupported = {**rule, "language": "powershell"}
         with self.assertRaisesRegex(SystemExit, "no fixture oracle"):
             SCAFFOLD.seed_oracle(unsupported, "bad(x)", ["good(x)"])
 

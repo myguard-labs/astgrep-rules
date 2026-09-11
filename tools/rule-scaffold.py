@@ -61,9 +61,15 @@ CLEANUP_INTERRUPT_RETRIES = 3
 ROOT = Path(__file__).resolve().parents[1]
 CATEGORIES = ("security", "correctness")
 LANGUAGES = ("go", "c", "php", "python", "javascript", "java", "lua", "bash")
-EXTENSIONS = {"go": "go", "c": "c"}
-# Unlike harvest-packets' Go/C proposal grammar, manual scaffolds support all
-# LANGUAGES and one defect segment (for example go-check).
+EXTENSIONS = {"go": "go", "c": "c", "php": "php", "python": "py",
+              "javascript": "js", "java": "java", "lua": "lua", "bash": "sh"}
+ID_PREFIXES = {
+    "bash": ("sh-",), "c": ("c-", "nginx-", "zstd-"), "go": ("go-",),
+    "java": ("java-",), "javascript": ("js-",), "lua": ("lua-",),
+    "php": ("php-", "wp-"), "python": ("py-",),
+}
+# Harvest proposals and manual scaffolds support every native ast-grep language
+# pack and repository-specific ID aliases (for example nginx- and wp-).
 KEBAB = re.compile(r"^[a-z]+(-[a-z0-9]+)+$")
 
 
@@ -183,7 +189,7 @@ def scaffold_inputs(args):
         sys.exit("need language, positive, near-miss and claim (flags or --proposal)")
     if language not in LANGUAGES:
         sys.exit(f"unsupported language {language!r}")
-    prefixes = ("c-", "nginx-") if language == "c" else (f"{language}-",)
+    prefixes = ID_PREFIXES[language]
     if not args.id.startswith(prefixes):
         sys.exit(f"id {args.id!r} must be prefixed with its language")
     return prop, language, positive, near_miss, claim
