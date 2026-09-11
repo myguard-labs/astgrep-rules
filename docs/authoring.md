@@ -21,7 +21,9 @@ in Git.
    duplicates and semantic-only proposals, and tests whether syntactic
    proposals have a safe fixture seed. Review `draft-plan.tsv` before using
    `--apply-seeded`. `--queue` lists only unfinished actionable rules and
-   `--task ID` emits one compact drafting packet without loading the full plan.
+   `--task ID` emits one compact drafting packet. Both modes revalidate the
+   full plan against the current proposal and deduplication ledgers, and fail
+   when that plan is stale.
    After reviewing a task's `PASS`, or explicitly accepting its `PARKED` report,
    use the emitted `--mark-reviewed ID` command to remove that exact proposal
    and rule/fixture version from the queue.

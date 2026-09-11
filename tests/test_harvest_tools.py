@@ -1062,6 +1062,50 @@ class ReplyTests(unittest.TestCase):
                 self.assertTrue(PACKETS.packet_state(stage, packets, prompt))
                 self.assertTrue(PACKETS.emit_packets(stage, packets, prompt))
 
+    def test_emission_rejects_label_and_evidence_path_keys(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            root = Path(directory)
+            corpus_path = root / "corpus.jsonl"
+            candidate = {"short": "../../target", "repo": "sample",
+                         "subject": "fix", "files": ["x.c"], "language": "c",
+                         "diff": "+guard();", "signals": [], "density": 1,
+                         "url": ""}
+            PACKETS.write_jsonl(corpus_path, [candidate])
+            self.assertEqual(PACKETS.label_emit(SimpleNamespace(
+                work=root, corpus=corpus_path, chunk=12)), 1)
+            self.assertFalse((root / "target.json").exists())
+
+            packets = {"safe": {"candidates": [{
+                "short": candidate["short"], "evidence": "cluster/evidence/x.json"}]}}
+            evidence = PACKETS.packet_evidence(
+                packets, {candidate["short"]: candidate})
+            self.assertFalse(PACKETS.emit_packets(
+                root / "cluster", packets, PACKETS.CLUSTER_PROMPT, evidence=evidence))
+            self.assertFalse((root / "target.json").exists())
+            self.assertGreaterEqual(errors.getvalue().count("basename identifier"), 2)
+
+            boundary = "a" * 250
+            boundary_stage = root / "boundary"
+            self.assertTrue(PACKETS.emit_packets(
+                boundary_stage, {boundary: {"id": boundary}}, PACKETS.CLUSTER_PROMPT))
+            self.assertTrue((boundary_stage / "packets" / f"{boundary}.json").is_file())
+            for key in ("a" * 251, "NUL", "com1.log"):
+                stage = root / f"invalid-{len(key)}-{key[:4]}"
+                self.assertFalse(PACKETS.emit_packets(
+                    stage, {key: {"id": key}}, PACKETS.CLUSTER_PROMPT))
+                self.assertFalse((stage / "PROMPT.md").exists())
+
+            collision = {"abc": {}, "ABC": {}}
+            cases = (("packets", collision, {}),
+                     ("evidence", {"safe": {}}, collision))
+            for namespace, packets, evidence in cases:
+                with self.subTest(namespace=namespace):
+                    stage = root / f"collision-{namespace}"
+                    self.assertFalse(PACKETS.emit_packets(
+                        stage, packets, PACKETS.CLUSTER_PROMPT, evidence=evidence))
+                    self.assertFalse((stage / "PROMPT.md").exists())
+
     def test_prompt_changes_refuse_stale_replies_without_overwriting_evidence(self):
         for stage_name, constant in (("label", "LABEL_PROMPT"), ("cluster", "CLUSTER_PROMPT")):
             with self.subTest(stage=stage_name), tempfile.TemporaryDirectory() as directory, \

@@ -328,10 +328,33 @@ def packet_state(stage: Path, expected: dict, prompt: str, allow_new: bool = Fal
     return True
 
 
+WINDOWS_DEVICE_STEMS = ({"CON", "PRN", "AUX", "NUL"}
+                        | {f"COM{i}" for i in range(1, 10)}
+                        | {f"LPT{i}" for i in range(1, 10)})
+
+
+def emission_key(key: object) -> bool:
+    """Accept a portable basename after the `.json` suffix is added."""
+    return (isinstance(key, str)
+            and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", key) is not None
+            and len(key.encode("ascii")) + len(".json") <= 255
+            and key.split(".", 1)[0].upper() not in WINDOWS_DEVICE_STEMS)
+
+
+def emission_keys(keys) -> bool:
+    """Validate components and case-insensitive uniqueness within one directory."""
+    return (all(emission_key(key) for key in keys)
+            and len({key.casefold() for key in keys}) == len(keys))
+
+
 def emit_packets(stage: Path, expected: dict, prompt: str,
                  evidence: dict[str, dict] | None = None) -> bool:
     """Idempotent emission; incompatible prior work is retained and refused."""
     evidence = evidence or {}
+    if not emission_keys(expected) or not emission_keys(evidence):
+        print("invalid packet or evidence key; expected a basename identifier",
+              file=sys.stderr)
+        return False
     if not packet_state(stage, expected, prompt, allow_new=True, evidence=evidence):
         return False
     (stage / "packets").mkdir(parents=True, exist_ok=True)
