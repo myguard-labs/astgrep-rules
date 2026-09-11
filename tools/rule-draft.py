@@ -51,8 +51,8 @@ def find_pair(rule_id: str) -> tuple[Path, Path]:
     return rule, fixture
 
 
-def candidate(rule: Path, fixture: Path) -> tuple[str, str]:
-    """Return the byte identity and matcher recorded in a parked report."""
+def candidate(rule: Path, fixture: Path) -> tuple[str, str, bytes, bytes]:
+    """Capture the exact candidate bytes, their identity, and matcher."""
     rule_bytes = rule.read_bytes()
     fixture_bytes = fixture.read_bytes()
     try:
@@ -63,7 +63,30 @@ def candidate(rule: Path, fixture: Path) -> tuple[str, str]:
         raise DraftError("rule YAML must be a mapping")
     fingerprint = hashlib.sha256(rule_bytes + b"\0" + fixture_bytes).hexdigest()
     matcher = yaml.safe_dump(document.get("rule"), sort_keys=True).strip()
-    return fingerprint, matcher
+    return fingerprint, matcher, rule_bytes, fixture_bytes
+
+
+def snapshot_candidate(rule: Path, fixture: Path, rule_bytes: bytes,
+                       fixture_bytes: bytes, target: Path) -> None:
+    """Materialize immutable probe inputs from the bytes that were fingerprinted."""
+    rule_target = target / rule.relative_to(ROOT)
+    fixture_target = target / fixture.relative_to(ROOT)
+    rule_target.parent.mkdir(parents=True)
+    fixture_target.parent.mkdir(parents=True)
+    rule_target.write_bytes(rule_bytes)
+    fixture_target.write_bytes(fixture_bytes)
+    supporting = (
+        ROOT / "tests" / "__snapshots__" / f"{rule.stem}-snapshot.yml",
+        ROOT / "tests" / "arm_coverage.json",
+    )
+    for source in supporting:
+        try:
+            contents = source.read_bytes()
+        except FileNotFoundError:
+            continue
+        destination = target / source.relative_to(ROOT)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(contents)
 
 
 def load_state(path: Path, rule_id: str) -> dict:
@@ -173,9 +196,9 @@ def parked_report(rule_id: str, attempts: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def run_probe(rule_id: str, sexp: bool) -> tuple[int, str]:
+def run_probe(rule_id: str, sexp: bool, input_root: Path) -> tuple[int, str]:
     """Run the bounded probe and accept only its exact first-line verdict schema."""
-    command = [sys.executable, str(PROBE), rule_id, "--brief"]
+    command = [sys.executable, str(PROBE), rule_id, "--brief", "--input-root", str(input_root)]
     if sexp:
         command.append("--sexp")
     try:
@@ -219,7 +242,7 @@ def advance(rule_id: str, work: Path, sexp: bool = False) -> int:
     state = load_state(state_path, rule_id)
     attempts = state["attempts"]
     rule, fixture = find_pair(rule_id)
-    fingerprint, matcher = candidate(rule, fixture)
+    fingerprint, matcher, rule_bytes, fixture_bytes = candidate(rule, fixture)
     terminal = terminal_result(state, rule_id, fingerprint, report_path)
     if terminal is not None:
         return terminal
@@ -228,7 +251,10 @@ def advance(rule_id: str, work: Path, sexp: bool = False) -> int:
         print(f"{rule_id}: REPEATED {len(attempts)}/{MAX_ATTEMPTS}; edit rule or fixture")
         return 2
 
-    returncode, output = run_probe(rule_id, sexp)
+    with tempfile.TemporaryDirectory(prefix="rule-draft-input-") as directory:
+        input_root = Path(directory)
+        snapshot_candidate(rule, fixture, rule_bytes, fixture_bytes, input_root)
+        returncode, output = run_probe(rule_id, sexp, input_root)
     attempts.append({"candidate": fingerprint, "matcher": matcher, "probe": output})
     if returncode == 0:
         state["status"] = "PASS"

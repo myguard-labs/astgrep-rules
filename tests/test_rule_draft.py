@@ -105,6 +105,28 @@ class RuleDraftTests(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertEqual(output, "go-test-rule: PASS 1/4\n")
 
+    def test_probe_uses_fingerprinted_bytes_during_aba_edit(self):
+        observed = {}
+
+        def probe(command, **_kwargs):
+            input_root = Path(command[command.index("--input-root") + 1])
+            observed["rule"] = (input_root / self.rule.relative_to(self.root)).read_bytes()
+            observed["fixture"] = (input_root / self.fixture.relative_to(self.root)).read_bytes()
+            self.rule.write_text(self.initial_rule + "# raced\n", encoding="utf-8")
+            self.rule.write_text(self.initial_rule, encoding="utf-8")
+            return self.passed()
+
+        with patch.object(DRAFT, "ROOT", self.root), \
+                patch.object(DRAFT, "PROBE", self.root / "tools/rule-probe.py"), \
+                patch.object(DRAFT.subprocess, "run", side_effect=probe), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(DRAFT.advance("go-test-rule", self.work), 0)
+        self.assertEqual(observed["rule"], self.initial_rule.encode())
+        self.assertEqual(observed["fixture"], self.fixture.read_bytes())
+        state = json.loads((self.work / "draft/go-test-rule.json").read_text())
+        expected = DRAFT.candidate(self.rule, self.fixture)[0]
+        self.assertEqual(state["attempts"][0]["candidate"], expected)
+
     def test_failed_verdict_without_gate_details_prints_one_line(self):
         failed = SimpleNamespace(
             returncode=1,

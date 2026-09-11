@@ -2007,6 +2007,28 @@ class ProbeTests(unittest.TestCase):
         for name in ("fixture-counts", "fixture-run", "arm-kills", "discovery"):
             self.assertTrue(checks[name], name)
 
+    def test_real_rule_accepts_an_immutable_input_root(self):
+        rule_path, fixture_path = PROBE.find_rule("go-tls-min-version")
+        snapshot = ROOT / "tests/__snapshots__/go-tls-min-version-snapshot.yml"
+        private_id = "go-immutable-input-root"
+        with tempfile.TemporaryDirectory() as directory:
+            input_root = Path(directory)
+            renamed = {
+                rule_path: Path("rules/go/security") / f"{private_id}.yml",
+                fixture_path: Path("tests/go/security") / f"{private_id}.yml",
+                snapshot: Path("tests/__snapshots__") / f"{private_id}-snapshot.yml",
+            }
+            for source, relative in renamed.items():
+                destination = input_root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_text(source.read_text().replace("go-tls-min-version", private_id))
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "tools/rule-probe.py"),
+                 private_id, "--json", "--input-root", str(input_root)],
+                capture_output=True, text=True, check=False, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertTrue(json.loads(result.stdout)["ok"])
+
     def test_real_rule_brief_pass_is_one_line(self):
         result = subprocess.run(
             [sys.executable, str(ROOT / "tools/rule-probe.py"),

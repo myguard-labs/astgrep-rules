@@ -51,12 +51,13 @@ META = re.compile(r"\$\$?\$?[A-Z_][A-Z0-9_]*")
 COMPATIBILITY_ALIAS_IDS = {"nginx-string-sizeof-includes-nul"}
 
 
-def find_rule(rule_id: str) -> tuple[Path, Path]:
-    hits = [p for p in (ROOT / "rules").rglob("*.yml") if p.stem == rule_id]
+def find_rule(rule_id: str, root: Path | None = None) -> tuple[Path, Path]:
+    root = ROOT if root is None else root
+    hits = [p for p in (root / "rules").rglob("*.yml") if p.stem == rule_id]
     if len(hits) != 1:
         sys.exit(f"expected exactly one rule file for {rule_id!r}, found {len(hits)}")
     rule = hits[0]
-    fixture = ROOT / "tests" / rule.relative_to(ROOT / "rules")
+    fixture = root / "tests" / rule.relative_to(root / "rules")
     return rule, fixture
 
 
@@ -185,7 +186,8 @@ def scan_sources(rule: dict, sources: list[tuple[str, int, str]]) -> list[tuple[
 class Isolated:
     """A throwaway sgconfig with exactly one rule, fixture and optional snapshot."""
 
-    def __init__(self, rule_path: Path, fixture_path: Path):
+    def __init__(self, rule_path: Path, fixture_path: Path, root: Path | None = None):
+        root = ROOT if root is None else root
         self.tmp = tempfile.TemporaryDirectory(prefix="rule-probe-")
         d = Path(self.tmp.name)
         (d / "rules").mkdir()
@@ -197,7 +199,7 @@ class Isolated:
         else:
             self.rule.write_bytes(rule_path.read_bytes())
         (d / "tests" / rule_path.name).write_bytes(fixture_path.read_bytes())
-        snap = ROOT / "tests" / "__snapshots__" / f"{rule_path.stem}-snapshot.yml"
+        snap = root / "tests" / "__snapshots__" / f"{rule_path.stem}-snapshot.yml"
         self.has_snapshot = snap.exists()
         if self.has_snapshot:
             (d / "tests" / "__snapshots__" / snap.name).write_bytes(snap.read_bytes())
@@ -267,9 +269,10 @@ def validate_witness_case(case):
             raise ValueError(f"witness {field} must be a nonnegative integer")
 
 
-def arm_witnesses(rule):
+def arm_witnesses(rule, root: Path | None = None):
     """Index retained witnesses by their current arm path and integer index."""
-    coverage = ROOT / "tests/arm_coverage.json"
+    root = ROOT if root is None else root
+    coverage = root / "tests/arm_coverage.json"
     document = json.loads(coverage.read_text()) if coverage.is_file() else {"cases": []}
     if not isinstance(document, dict) or not isinstance(document.get("cases"), list):
         raise TypeError("expected an object with a cases list")
@@ -286,11 +289,11 @@ def arm_witnesses(rule):
             if case["rule"] == rule.get("id") and case["classification"] != "equivalent"}
 
 
-def check_arms(iso, rule):
+def check_arms(iso, rule, root: Path | None = None):
     """Require a fixture failure or a validated count witness for each arm."""
     arms = list(any_arms(rule["rule"]))
     try:
-        witnesses = arm_witnesses(rule)
+        witnesses = arm_witnesses(rule, root)
     except (OSError, UnicodeError, ValueError, TypeError) as error:
         return False, f"invalid arm_coverage.json: {str(error)[:300]}"
     survivors, invalid_mutants, validated = [], [], []
@@ -399,9 +402,10 @@ def load_mapping(path, check, name):
     return value
 
 
-def check_snapshot(rule_id, invalid, check):
+def check_snapshot(rule_id, invalid, check, root: Path | None = None):
     """Match the inventory contract: snapshot mapping keys equal invalid fixtures."""
-    path = ROOT / "tests" / "__snapshots__" / f"{rule_id}-snapshot.yml"
+    root = ROOT if root is None else root
+    path = root / "tests" / "__snapshots__" / f"{rule_id}-snapshot.yml"
     if not path.exists():
         return True  # New rules can still use --skip-snapshot-tests.
     document = load_mapping(path, check, "snapshot-shape")
@@ -422,19 +426,20 @@ def fixture_shape(fixture, rule_id):
             and not set(valid) & set(invalid))
 
 
-def load_inputs(rule_path, fixture_path, check):
+def load_inputs(rule_path, fixture_path, check, root: Path | None = None):
     """Validate local rule/fixture shape before running external checks."""
     rule = load_mapping(rule_path, check, "rule-shape")
     if rule is None:
         return None
-    parts = rule_path.relative_to(ROOT / "rules").parts
+    root = ROOT if root is None else root
+    parts = rule_path.relative_to(root / "rules").parts
     layout_ok = (len(parts) == 3 and parts[0] == rule.get("language")
                  and rule_path.stem == rule.get("id"))
     check("layout", layout_ok,
           f"rules/<language>/<category>/<id>.yml with matching id/language; got {parts}")
     if not layout_ok:
         return None
-    check("fixture-exists", fixture_path.is_file(), str(fixture_path.relative_to(ROOT)))
+    check("fixture-exists", fixture_path.is_file(), str(fixture_path.relative_to(root)))
     if not fixture_path.is_file():
         return None
     fixture = load_mapping(fixture_path, check, "fixture-shape")
@@ -489,10 +494,15 @@ def main() -> int:
     output.add_argument("--brief", action="store_true")
     ap.add_argument("--sexp", action="store_true")
     ap.add_argument("--snapshot", action="store_true")
+    ap.add_argument("--input-root", type=Path, help=argparse.SUPPRESS)
     args = ap.parse_args()
 
-    rule_path, fixture_path = find_rule(args.rule_id)
-    report: dict = {"rule": str(rule_path.relative_to(ROOT)), "checks": []}
+    if args.snapshot and args.input_root is not None:
+        ap.error("--snapshot cannot be combined with --input-root")
+    input_root = ROOT if args.input_root is None else args.input_root.resolve()
+
+    rule_path, fixture_path = find_rule(args.rule_id, input_root)
+    report: dict = {"rule": str(rule_path.relative_to(input_root)), "checks": []}
     ok = True
 
     def check(name: str, passed: bool, detail: str = ""):
@@ -506,7 +516,7 @@ def main() -> int:
         return 2
 
     # 1. layout and parseability -- the inventory test's contract
-    inputs = load_inputs(rule_path, fixture_path, check)
+    inputs = load_inputs(rule_path, fixture_path, check, input_root)
     if inputs is None:
         return finish(report, ok, args.json, args.brief)
     rule, valid, invalid = inputs
@@ -529,11 +539,11 @@ def main() -> int:
     if args.snapshot:
         update_snapshot(rule, report, check)
 
-    if not check_snapshot(rule["id"], invalid, check):
+    if not check_snapshot(rule["id"], invalid, check, input_root):
         return finish(report, ok, args.json, args.brief)
 
     # 4. isolated fixture run, then arm kills -- test_arm_coverage's contract
-    iso = Isolated(rule_path, fixture_path)
+    iso = Isolated(rule_path, fixture_path, input_root)
     try:
         tested_rule = runnable_rule(rule)
         rc, out = iso.test()
@@ -541,7 +551,7 @@ def main() -> int:
         check("fixture-run", rc == 0 and "1 passed; 0 failed" in out,
               ("snapshot present" if iso.has_snapshot else "no snapshot: --skip-snapshot-tests")
               + ("" if rc == 0 else " :: " + tail))
-        check("arm-kills", *check_arms(iso, tested_rule))
+        check("arm-kills", *check_arms(iso, tested_rule, input_root))
     finally:
         iso.close()
 
