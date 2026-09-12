@@ -35,8 +35,9 @@ Mutation preflight batches all loadable candidates into one pinned-engine test
 process. An engine-load failure is bisected only far enough to attribute the
 invalid or erroneous candidate; ordinary killed and surviving mutants retain
 their stable mutation paths. All batches share the plan's cumulative deadline.
-`rule-plan.py PLAN --telemetry FILE.json` records deterministic engine-process
-and mutant counts alongside explicitly informational wall-clock phase timings.
+`rule-plan.py PLAN --telemetry FILE.json` records deterministic plan, case,
+exclusion, input-byte, engine-process, and mutant counts alongside explicitly
+informational wall-clock phase timings.
 The mutation limit counts required mutants, while documented exclusions remain
 batch-validated outside that budget. Timed-out engine invocations terminate
 their complete process groups. The compiler validates and renders one

@@ -100,8 +100,9 @@ ERROR or MISSING nodes.
 Plan mutation checks use one pinned-engine batch in the normal case and bisect
 only engine-load failures for exact attribution. Use
 `python3 tools/rule-plan.py PLAN --telemetry /tmp/plan.json` when measuring the
-mechanics: `counts.engine_processes` is the deterministic throughput evidence;
-the phase durations are labeled wall-clock informational data. Mutation limits
+mechanics: `counts` includes stable plan, valid/invalid case, exclusion,
+input-byte, engine-process, and mutant totals; the phase durations are labeled
+wall-clock informational data. Mutation limits
 apply to required mutations; documented exclusions are still executed in the
 same batch. A timeout kills the engine's complete process group.
 

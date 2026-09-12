@@ -17,6 +17,9 @@ from time import perf_counter
 from types import MappingProxyType
 
 import yaml
+from rule_plan_telemetry import PhaseTelemetry
+from rule_plan_transforms import metamorphic_source as _metamorphic_source
+from rule_plan_transforms import regex_alternatives as _regex_alternatives
 
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE = ROOT / "node_modules" / ".bin" / "ast-grep"
@@ -95,37 +98,6 @@ def thaw(value):
     return copy.deepcopy(value)
 
 
-@dataclass
-class PhaseTelemetry:
-    """Deterministic work counters plus informational wall-clock time."""
-
-    engine_processes: int = 0
-    mutants: int = 0
-    surviving_mutants: int = 0
-    invalid_mutants: int = 0
-    error_mutants: int = 0
-    load_validate_ms: int = 0
-    render_ms: int = 0
-    preflight_ms: int = 0
-    wall_ms: int = 0
-
-    def report(self) -> dict:
-        return {
-            "version": 1,
-            "counts": {
-                "engine_processes": self.engine_processes,
-                "mutants": self.mutants,
-                "survived": self.surviving_mutants,
-                "invalid": self.invalid_mutants,
-                "errors": self.error_mutants,
-            },
-            "wall_clock_ms_informational": {
-                "load_validate": self.load_validate_ms,
-                "render": self.render_ms,
-                "preflight": self.preflight_ms,
-                "batched_engine": self.wall_ms,
-            },
-        }
 RULE_CONFIG_KEYS = (
     "constraints", "utils", "transform", "fix", "rewriters", "labels", "files",
     "ignores", "url", "metadata",
@@ -500,67 +472,6 @@ def validate_metamorphic(plan: dict, cases: dict[str, list[str]]) -> None:
         seen.add(identity)
 
 
-def _metamorphic_source(source: str, transform: str) -> str:
-    if transform == "parenthesized":
-        return f"({source})"
-    if transform == "callee-parenthesized":
-        changed, count = re.subn(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()",
-                                 r"(\1)", source, count=1)
-    elif transform in {"qualified-name-spacing", "member-access-spacing"}:
-        changed, count = re.subn(r"\s*(->|\.)\s*", r" \1 ", source, count=1)
-    elif transform == "qualified-name":
-        changed, count = re.subn(r"(?<!:)\b([A-Za-z_]\w*::)", r"::\1", source, count=1)
-    elif transform == "member-access-swap":
-        changed, count = re.subn(r"->|\.", lambda match: "." if match[0] == "->" else "->",
-                                 source, count=1)
-    elif transform == "literal-concatenation":
-        changed, count = re.subn(
-            r'"([^"\\]+)"', lambda match: f'"{match[1]}" ""', source, count=1)
-    elif transform == "literal-spacing":
-        changed, count = re.subn(r"(['\"])\s+(['\"])", r"\1   \2", source, count=1)
-    elif transform == "format-width":
-        changed, count = _transform_format_conversion(source, precision=False)
-    elif transform == "format-precision":
-        changed, count = _transform_format_conversion(source, precision=True)
-    else:  # validate_metamorphic owns the closed transform set.
-        raise ValueError(f"unsupported metamorphic transform: {transform}")
-    if count != 1 or changed == source:
-        raise ValueError(f"metamorphic transform {transform} is not applicable")
-    return changed
-
-
-FORMAT_CONVERSION = re.compile(
-    r"%(?!%)(?P<flags>[-+ #0]*)(?P<width>\d+|\*)?"
-    r"(?P<precision>\.(?:\d+|\*))?(?P<length>hh|ll|[hljztL])?"
-    r"(?P<conversion>[diuoxXfFeEgGaAcspn])")
-
-
-def _transform_format_conversion(source: str, *, precision: bool) -> tuple[str, int]:
-    match = next((candidate for candidate in FORMAT_CONVERSION.finditer(source)
-                  if _preceding_percent_count(source, candidate.start()) % 2 == 0), None)
-    if match is None:
-        return source, 0
-    parts = match.groupdict(default="")
-    if precision:
-        if parts["precision"]:
-            return source, 0
-        parts["precision"] = ".3"
-    else:
-        if parts["width"]:
-            return source, 0
-        parts["width"] = "20"
-    replacement = (f"%{parts['flags']}{parts['width']}{parts['precision']}"
-                   f"{parts['length']}{parts['conversion']}")
-    return source[:match.start()] + replacement + source[match.end():], 1
-
-
-def _preceding_percent_count(source: str, offset: int) -> int:
-    count = 0
-    while offset > count and source[offset - count - 1] == "%":
-        count += 1
-    return count
-
-
 def expanded_cases(plan: dict, cases: dict[str, list[str]]) -> dict[str, list[str]]:
     """Add declared equivalent and outcome-changing derived syntax cases."""
     result = {key: list(values) for key, values in cases.items()}
@@ -822,59 +733,6 @@ def _qualified_pattern_mutations(pattern: str):
     yield "member", f"{receiver}.$_({arguments})"
 
 
-def _regex_alternatives(pattern: str, *, verbose: bool = False) -> list[str]:
-    """Split only top-level regex alternatives, preserving all syntax verbatim."""
-    scan = _mask_verbose_comments(pattern) if verbose or "(?x" in pattern else pattern
-    parts, start, depth, escaped, in_class = [], 0, 0, False, False
-    for index, character in enumerate(scan):
-        escaped, in_class, depth, separator = _regex_state(
-            character, escaped, in_class, depth)
-        if separator:
-            parts.append(pattern[start:index])
-            start = index + 1
-    parts.append(pattern[start:])
-    return parts if len(parts) > 1 and all(parts) else []
-
-
-def _mask_verbose_comments(pattern: str) -> str:
-    output, escaped, in_class, in_comment = [], False, False, False
-    for character in pattern:
-        if in_comment:
-            output.append("\n" if character == "\n" else " ")
-            in_comment = character != "\n"
-        else:
-            output.append(character)
-            if escaped:
-                escaped = False
-            elif character == "\\":
-                escaped = True
-            elif character == "[":
-                in_class = True
-            elif character == "]":
-                in_class = False
-            elif character == "#" and not in_class:
-                in_comment = True
-    return "".join(output)
-
-
-def _regex_state(character: str, escaped: bool, in_class: bool,
-                 depth: int) -> tuple[bool, bool, int, bool]:
-    if escaped:
-        return False, in_class, depth, False
-    if character == "\\":
-        return True, in_class, depth, False
-    if character == "[":
-        return False, True, depth, False
-    if character == "]" and in_class:
-        return False, False, depth, False
-    if not in_class and character == "(":
-        return False, in_class, depth + 1, False
-    if not in_class and character == ")":
-        return False, in_class, max(0, depth - 1), False
-    separator = not in_class and depth == 0 and character == "|"
-    return False, in_class, depth, separator
-
-
 def _regex_alternative_mutations(pattern: str):
     alternatives = _regex_alternatives(pattern)
     prefix = suffix = ""
@@ -1018,6 +876,43 @@ def compiled_mutations(plan: dict, matcher: dict) -> list[tuple[str, str]]:
     return candidates
 
 
+def _selected_mutations(plan: dict, matcher: dict):
+    candidates = compiled_mutations(plan, matcher)
+    exclusions = set(plan.get("mutation_exclusions", {}))
+    unknown = sorted(exclusions - {path for path, _rule in candidates})
+    if unknown:
+        raise RuntimeError(f"UNKNOWN_MUTATION_EXCLUSION: {', '.join(unknown)}")
+    required = [(path, rule) for path, rule in candidates if path not in exclusions]
+    limit = plan.get("mutation_limit", MAX_MUTATIONS)
+    if len(required) > limit:
+        raise RuntimeError(f"MUTATION_BUDGET_EXCEEDED: {len(required)} exceeds {limit}")
+    return candidates, required, exclusions
+
+
+def _record_mutation_outcomes(telemetry: PhaseTelemetry, outcomes: dict,
+                              selected_count: int) -> None:
+    telemetry.mutants = selected_count
+    telemetry.surviving_mutants = sum(
+        outcome == "survived" for outcome, _detail in outcomes.values())
+    telemetry.invalid_mutants = sum(
+        outcome == "invalid" for outcome, _detail in outcomes.values())
+    telemetry.error_mutants = sum(
+        outcome == "error" for outcome, _detail in outcomes.values())
+
+
+def _validate_mutation_outcomes(required, exclusions, outcomes) -> None:
+    for path in sorted(exclusions):
+        outcome, detail = outcomes[path]
+        if outcome != "survived":
+            raise RuntimeError(f"INVALID_MUTATION_EXCLUSION: {path}: {detail}")
+    for path, _rule_text in required:
+        outcome, detail = outcomes[path]
+        if outcome == "survived":
+            raise RuntimeError(f"MUTATION_SURVIVED: {path}")
+        if outcome == "error":
+            raise RuntimeError(f"MUTATION_PREFLIGHT_ERROR: {path}: {detail}")
+
+
 def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]],
               telemetry: PhaseTelemetry | None = None,
               deadline: float | None = None) -> PhaseTelemetry:
@@ -1032,38 +927,10 @@ def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]],
     if not passed:
         raise RuntimeError(f"CONTRAST_PREFLIGHT_FAILED: {detail}")
     _preflight_named_branches(plan, cases, deadline, telemetry)
-    candidates = compiled_mutations(plan, matcher)
-    exclusions = set(plan.get("mutation_exclusions", {}))
-    indexed = dict(candidates)
-    unknown = sorted(exclusions - set(indexed))
-    if unknown:
-        raise RuntimeError(f"UNKNOWN_MUTATION_EXCLUSION: {', '.join(unknown)}")
-    selected = candidates
-    required = [(path, rule) for path, rule in candidates if path not in exclusions]
-    if len(required) > plan.get("mutation_limit", MAX_MUTATIONS):
-        raise RuntimeError(
-            f"MUTATION_BUDGET_EXCEEDED: {len(required)} exceeds "
-            f"{plan.get('mutation_limit', MAX_MUTATIONS)}")
-    outcomes = _run_mutant_batch(selected, cases, plan["id"], deadline, telemetry)
-    telemetry.mutants = len(selected)
-    telemetry.surviving_mutants = sum(
-        outcome == "survived" for outcome, _detail in outcomes.values())
-    telemetry.invalid_mutants = sum(
-        outcome == "invalid" for outcome, _detail in outcomes.values())
-    telemetry.error_mutants = sum(
-        outcome == "error" for outcome, _detail in outcomes.values())
-    for path in sorted(exclusions):
-        outcome, mutation_detail = outcomes[path]
-        if outcome != "survived":
-            raise RuntimeError(f"INVALID_MUTATION_EXCLUSION: {path}: {mutation_detail}")
-    for path, _rule_text in required:
-        outcome, mutation_detail = outcomes[path]
-        if outcome == "survived":
-            raise RuntimeError(f"MUTATION_SURVIVED: {path}")
-        if outcome == "invalid":
-            continue
-        if outcome == "error":
-            raise RuntimeError(f"MUTATION_PREFLIGHT_ERROR: {path}: {mutation_detail}")
+    candidates, required, exclusions = _selected_mutations(plan, matcher)
+    outcomes = _run_mutant_batch(candidates, cases, plan["id"], deadline, telemetry)
+    _record_mutation_outcomes(telemetry, outcomes, len(candidates))
+    _validate_mutation_outcomes(required, exclusions, outcomes)
     return telemetry
 
 
@@ -1075,6 +942,11 @@ def compile_plan_ir(path: Path, *, run_checks=True,
     deadline = started + MAX_PREFLIGHT_SECONDS if run_checks else None
     plan = load_plan(path)
     matcher, cases = validate_plan(plan)
+    telemetry.plans = 1
+    telemetry.valid_cases = len(cases["valid"])
+    telemetry.invalid_cases = len(cases["invalid"])
+    telemetry.exclusions = len(plan.get("mutation_exclusions", {}))
+    telemetry.bytes = path.stat().st_size
     telemetry.load_validate_ms += int((perf_counter() - started) * 1000)
     started = perf_counter()
     rule_text, fixture_text = render_rule(plan, matcher), render_fixture(plan, cases)

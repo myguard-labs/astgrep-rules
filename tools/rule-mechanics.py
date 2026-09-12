@@ -60,12 +60,11 @@ def plan_paths() -> list[Path]:
 
 def _compiled_plan_artifacts(path: Path, *, preflight: bool = True, compiled=None):
     compiled = compiled or PLAN.compile_plan_ir(path, run_checks=False)
+    plan = PLAN.thaw(compiled.plan)
     if preflight:
         if not PLAN.ENGINE.is_file():
             raise RuntimeError(f"pinned engine missing: {PLAN.ENGINE}; run npm ci")
-        PLAN.preflight(PLAN.thaw(compiled.plan), PLAN.thaw(compiled.matcher),
-                       PLAN.thaw(compiled.cases))
-    plan = PLAN.thaw(compiled.plan)
+        PLAN.preflight(plan, PLAN.thaw(compiled.matcher), PLAN.thaw(compiled.cases))
     rule_text, fixture_text = compiled.rule_text, compiled.fixture_text
     expected_plan = ROOT / "plans" / plan["language"] / plan["category"] / f"{plan['id']}.yml"
     if path.resolve() != expected_plan.resolve():
