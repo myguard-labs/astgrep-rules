@@ -24,6 +24,7 @@ MAX_MUTATIONS = 256
 MAX_PREFLIGHT_SECONDS = 300
 MAX_ENGINE_SECONDS = 20
 UTILITY_ID = re.compile(r"^[a-z][a-z0-9-]*$")
+PLAN_ID = re.compile(r"^[a-z][a-z0-9_-]*$")
 PLAN_KEYS = {
     "version", "id", "language", "category", "severity", "message", "note",
     "match", "rule", "utils", "constraints", "labels", "fix",
@@ -111,8 +112,11 @@ def validate_header(plan: dict) -> None:
     for key in ("id", "message", "note"):
         if not isinstance(plan[key], str) or not plan[key].strip():
             raise ValueError(f"plan {key} must be a non-empty string")
-    if not UTILITY_ID.fullmatch(plan["id"]):
-        raise ValueError("plan id must use lowercase letters, digits and hyphens")
+    if not PLAN_ID.fullmatch(plan["id"]):
+        raise ValueError(
+            "plan id must start with a lowercase letter and use only "
+            "lowercase letters, digits, underscores and hyphens"
+        )
     if plan["language"] not in LANGUAGES:
         raise ValueError(f"unsupported plan language: {plan['language']}")
     if plan["category"] not in CATEGORIES:

@@ -72,9 +72,11 @@ class RulePlanTests(unittest.TestCase):
     def test_plan_id_is_safe_for_preflight_paths(self):
         for rule_id in ("../outside", "/outside", "py/sample", "UPPER"):
             with self.subTest(rule_id=rule_id), \
-                    self.assertRaisesRegex(ValueError, "plan id must use"):
+                    self.assertRaisesRegex(ValueError, "plan id must start"):
                 PLAN.validate_plan(minimal_plan(id=rule_id))
-        matcher, _cases = PLAN.validate_plan(minimal_plan(id="py-safe-2"))
+        matcher, _cases = PLAN.validate_plan(
+            minimal_plan(id="avoid_app_run_with_bad_host-python")
+        )
         self.assertEqual(matcher, {"pattern": "danger()"})
 
     def test_provenance_comments_and_extensions_render_without_overrides(self):
@@ -449,6 +451,20 @@ class RuleMechanicsTests(unittest.TestCase):
 
 
 class ChangedGateTests(unittest.TestCase):
+    def test_powershell_script_runs_built_parser_arm_coverage(self):
+        scripts = json.loads((ROOT / "package.json").read_text())["scripts"]
+        command = scripts["test:powershell"]
+        self.assertIn(
+            "tests.test_arm_coverage.ArmCoverageTests."
+            "test_current_matcher_arm_inventory_powershell",
+            command,
+        )
+        self.assertIn(
+            "tests.test_arm_coverage.ArmCoverageTests."
+            "test_classified_arms_have_distinguishing_counts_powershell",
+            command,
+        )
+
     def test_workflow_skips_duplicate_mechanics_after_infrastructure_gate(self):
         workflow = (ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
         self.assertIn("if: steps.changed.outputs.mechanics_ran != 'true'", workflow)
