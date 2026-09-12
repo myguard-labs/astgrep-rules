@@ -12,4 +12,14 @@ note: >-
   opening the name; merely checking that the path does not exist does not close that
   race.
 rule:
-  pattern: tempfile.mktemp($$$ARGS)
+  kind: call
+  has:
+    field: function
+    kind: attribute
+    all:
+    - has:
+        field: object
+        regex: ^tempfile$
+    - has:
+        field: attribute
+        regex: ^mktemp$

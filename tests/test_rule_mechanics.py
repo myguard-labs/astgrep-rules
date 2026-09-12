@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import stat
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -79,6 +80,33 @@ class RulePlanTests(unittest.TestCase):
         self.assertTrue(yaml.safe_load(rendered)["upstream-pack"])
         with self.assertRaisesRegex(ValueError, "non-reserved"):
             PLAN.validate_plan(minimal_plan(extensions={"rule": {"pattern": "safe()"}}))
+        with self.assertRaisesRegex(ValueError, "single-line"):
+            PLAN.validate_plan(minimal_plan(comments=["trusted\rinjected: true"]))
+
+    def test_mutation_limit_cannot_disable_or_truncate_mutations(self):
+        with self.assertRaisesRegex(ValueError, "from 1"):
+            PLAN.validate_plan(minimal_plan(mutation_limit=0))
+        plan = minimal_plan(mutation_limit=1)
+        matcher, cases = PLAN.validate_plan(plan)
+        with patch.object(PLAN, "compiled_mutations",
+                          return_value=[("one", "rule"), ("two", "rule")]), \
+                patch.object(PLAN, "run_preflight", return_value=(True, "ok")), \
+                self.assertRaisesRegex(RuntimeError, "MUTATION_BUDGET_EXCEEDED"):
+            PLAN.preflight(plan, matcher, cases)
+
+    def test_mutation_exclusions_must_exist_and_survive(self):
+        matcher, cases = PLAN.validate_plan(minimal_plan())
+        unknown = minimal_plan(mutation_exclusions={"missing": "reason"})
+        with patch.object(PLAN, "compiled_mutations", return_value=[("one", "rule")]), \
+                patch.object(PLAN, "run_preflight", return_value=(True, "ok")), \
+                self.assertRaisesRegex(RuntimeError, "UNKNOWN_MUTATION_EXCLUSION"):
+            PLAN.preflight(unknown, matcher, cases)
+        killed = minimal_plan(mutation_exclusions={"one": "reason"})
+        with patch.object(PLAN, "compiled_mutations", return_value=[("one", "rule")]), \
+                patch.object(PLAN, "run_preflight",
+                             side_effect=[(True, "ok"), (False, "test-failure")]), \
+                self.assertRaisesRegex(RuntimeError, "INVALID_MUTATION_EXCLUSION"):
+            PLAN.preflight(killed, matcher, cases)
 
     def test_utility_graph_rejects_undefined_cycle_and_unreachable(self):
         cases = [
@@ -142,12 +170,12 @@ class RulePlanTests(unittest.TestCase):
                      "witness": "second()"},
                 ],
             },
-            mutation_limit=0,
             cases={"invalid": ["first()", "second()"], "valid": ["safe()"]},
         )
         del plan["rule"]
         matcher, cases = PLAN.validate_plan(plan)
-        with patch.object(PLAN, "run_preflight",
+        with patch.object(PLAN, "compiled_mutations", return_value=[]), \
+                patch.object(PLAN, "run_preflight",
                           side_effect=[(True, "ok"), (False, "test-failure"),
                                        (False, "test-failure")]) as preflight:
             PLAN.preflight(plan, matcher, cases)
@@ -201,6 +229,7 @@ class RuleMechanicsTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "refusing to overwrite"), \
                     patch.object(MECHANICS, "ROOT", root), \
                     patch.object(MECHANICS, "plan_paths", return_value=[plan_path]), \
+                    patch.object(MECHANICS, "validate_plan_id_ownership"), \
                     patch.object(MECHANICS, "compile_plan",
                                  return_value=(rule_path, fixture_path, generated, generated)):
                 MECHANICS.plans_command(True)
@@ -213,6 +242,35 @@ class RuleMechanicsTests(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertIsNone(MECHANICS.generated_owner(path))
+
+    def test_deleted_plan_is_reported_as_stale_generated_artifact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rule = root / "rules/python/security/py-removed.yml"
+            fixture = root / "tests/python/security/py-removed.yml"
+            for path in (rule, fixture):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(
+                    "# Generated from: plans/python/security/py-removed.yml\nid: py-removed\n",
+                    encoding="utf-8",
+                )
+            with patch.object(MECHANICS, "ROOT", root), \
+                    patch.object(MECHANICS, "plan_paths", return_value=[]), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(MECHANICS.plans_command(False), 1)
+
+    def test_duplicate_plan_ids_are_rejected_before_generation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = []
+            for language in ("python", "javascript"):
+                path = root / f"plans/{language}/security/shared.yml"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(yaml.safe_dump(minimal_plan(id="shared", language=language)))
+                paths.append(path)
+            with patch.object(MECHANICS, "ROOT", root), \
+                    self.assertRaisesRegex(RuntimeError, "PLAN_ID_COLLISION"):
+                MECHANICS.validate_plan_id_ownership(paths)
 
     def test_fix_output_mismatch_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -284,6 +342,15 @@ class RuleMechanicsTests(unittest.TestCase):
                     Path("config"), Path("corpus"), expected, False)
             self.assertEqual(status, 1)
 
+    def test_versioned_corpus_rejects_malformed_shape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            expected = Path(directory) / "expected.json"
+            expected.write_text("[]", encoding="utf-8")
+            with patch.object(MECHANICS, "normalized_findings", return_value=[]), \
+                    self.assertRaisesRegex(RuntimeError, "version 1"):
+                MECHANICS.baseline_command(
+                    Path("config"), Path("corpus"), expected, False)
+
     def test_corpus_file_bound_fails_before_engine_run(self):
         with tempfile.TemporaryDirectory() as directory:
             (Path(directory) / "a.py").write_text("x")
@@ -292,6 +359,17 @@ class RuleMechanicsTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "corpus exceeds 0 files"):
                     MECHANICS.normalized_findings(Path("engine"), Path("config"), Path(directory))
                 run.assert_not_called()
+
+    def test_scan_output_bound_terminates_oversized_output(self):
+        with patch.object(MECHANICS, "MAX_SCAN_OUTPUT_BYTES", 10), \
+                self.assertRaisesRegex(RuntimeError, "scan output exceeds"):
+            MECHANICS.bounded_scan_output(
+                [sys.executable, "-c", "print('x' * 100)"])
+
+    def test_scan_output_bound_terminates_stalled_process(self):
+        with self.assertRaisesRegex(RuntimeError, "scan exceeded"):
+            MECHANICS.bounded_scan_output(
+                [sys.executable, "-c", "import time; time.sleep(2)"], timeout=0.05)
 
 
 class ChangedGateTests(unittest.TestCase):
@@ -317,9 +395,13 @@ class ChangedGateTests(unittest.TestCase):
                 patch("sys.argv", ["test-changed.py", *paths]):
             self.assertEqual(CHANGED.main(), 0)
         commands = [call.args[0] for call in run.call_args_list]
-        self.assertIn([CHANGED.sys.executable, "-m", "unittest", "tests.test_inventory"],
+        self.assertIn([CHANGED.sys.executable, "-m", "unittest", "tests.test_inventory",
+                       "tests.test_diagnostics", "tests.test_coderabbit_provenance"],
                       commands)
         self.assertIn([CHANGED.sys.executable, "tools/rule-probe.py", "py-one"], commands)
+        diagnostic = next(call for call in run.call_args_list
+                          if "tests.test_diagnostics" in call.args[0])
+        self.assertEqual(diagnostic.args[1], {"ASTGREP_RULE_IDS": "py-one"})
 
     def test_change_discovery_includes_deletions(self):
         result = SimpleNamespace(returncode=0, stdout="tests/test_removed.py\n", stderr="")

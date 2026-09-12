@@ -39,8 +39,9 @@ def requires_full_suite(paths: list[str]) -> bool:
                for path in paths)
 
 
-def run(command: list[str]) -> None:
-    result = subprocess.run(command, cwd=ROOT, timeout=300, check=False)
+def run(command: list[str], env: dict[str, str] | None = None) -> None:
+    result = subprocess.run(command, cwd=ROOT, timeout=300, check=False,
+                            env={**os.environ, **(env or {})})
     if result.returncode:
         raise SystemExit(result.returncode)
 
@@ -53,16 +54,17 @@ def main() -> int:
     paths = args.paths or changed_paths(args.base)
     if requires_full_suite(paths):
         run(["npm", "test"])
-        run([sys.executable, "tools/rule-mechanics.py", "check-plans"])
-        run([sys.executable, "tools/rule-mechanics.py", "validate-fixes"])
+        run(["npm", "run", "test:mechanics"])
         print("fast gate escalated to full suite for infrastructure changes")
         return 0
     # Inventory enforces whole-pack layout, IDs, fixtures, snapshots and docs.
     # Each focused probe then enforces that rule's diagnostics, exact counts,
     # discovery and arm mutations without rescanning every rule in the pack.
-    run([sys.executable, "-m", "unittest", "tests.test_inventory"])
-    run([sys.executable, "tools/rule-mechanics.py", "check-plans"])
     ids = rule_ids(paths)
+    run([sys.executable, "-m", "unittest", "tests.test_inventory",
+         "tests.test_diagnostics", "tests.test_coderabbit_provenance"],
+        {"ASTGREP_RULE_IDS": ",".join(ids)})
+    run([sys.executable, "tools/rule-mechanics.py", "check-plans"])
     for rule_id in ids:
         if any((ROOT / "rules").glob(f"*/*/{rule_id}.yml")):
             run([sys.executable, "tools/rule-probe.py", rule_id])

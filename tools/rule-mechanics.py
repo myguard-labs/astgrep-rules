@@ -7,10 +7,12 @@ import importlib.util
 import json
 import os
 import re
+import selectors
 import stat
 import subprocess
 import sys
 import tempfile
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -19,8 +21,9 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE = ROOT / "node_modules" / ".bin" / "ast-grep"
 MAX_FILES = 20_000
-MAX_FINDINGS = 100_000
+MAX_FINDINGS = 65_534
 MAX_CORPUS_BYTES = 256 * 1024 * 1024
+MAX_SCAN_OUTPUT_BYTES = 64 * 1024 * 1024
 DIFFERENTIAL_ROOT = ROOT / "tests" / "differential" / "v1"
 
 
@@ -135,6 +138,39 @@ def generated_owner(path: Path) -> str | None:
     return None
 
 
+def stale_generated_artifacts(paths: list[Path]) -> list[str]:
+    """Find generated artifacts whose owner vanished or no longer targets them."""
+    expected = {}
+    for plan_path in paths:
+        rule_path, fixture_path, _rule, _fixture = compile_plan(plan_path, preflight=False)
+        owner = f"# Generated from: {plan_path.relative_to(ROOT).as_posix()}"
+        expected[rule_path.resolve()] = owner
+        expected[fixture_path.resolve()] = owner
+    stale = []
+    for root in (ROOT / "rules", ROOT / "tests"):
+        for artifact in root.glob("*/*/*.yml"):
+            found_owner = generated_owner(artifact)
+            if found_owner is not None and expected.get(artifact.resolve()) != found_owner:
+                stale.append(artifact.relative_to(ROOT).as_posix())
+    return sorted(stale)
+
+
+def validate_plan_id_ownership(paths: list[Path]) -> None:
+    """Reject duplicate plan IDs and collisions with handcrafted rules."""
+    owners: dict[str, str] = {}
+    for plan_path in paths:
+        plan = PLAN.load_plan(plan_path)
+        rule_id = plan["id"]
+        if rule_id in owners:
+            raise RuntimeError(f"PLAN_ID_COLLISION: {rule_id}: {owners[rule_id]}")
+        owners[rule_id] = plan_path.relative_to(ROOT).as_posix()
+        expected = ROOT / "rules" / plan["language"] / plan["category"] / f"{rule_id}.yml"
+        collisions = [path for path in (ROOT / "rules").glob(f"*/*/{rule_id}.yml")
+                      if path != expected]
+        if collisions:
+            raise RuntimeError(f"PLAN_ID_COLLISION: {rule_id}: {collisions[0]}")
+
+
 def _changed_plan_artifacts(paths: list[Path], write: bool):
     drift, updates = [], []
     for path in paths:
@@ -158,8 +194,28 @@ def _write_plan_artifacts(updates: list[tuple[Path, str, str]]) -> None:
         write_atomic(target, content)
 
 
+def validate_plan_fixes(paths: list[Path]) -> int:
+    """Validate every exact fixed-output oracle owned by canonical plans."""
+    checked = 0
+    for plan_path in paths:
+        plan = PLAN.load_plan(plan_path)
+        if "fix" not in plan:
+            continue
+        rule_path = ROOT / "rules" / plan["language"] / plan["category"] / f"{plan['id']}.yml"
+        for source, oracle in plan.get("oracles", {}).items():
+            if "fixed" in oracle:
+                validate_fix(rule_path, source, oracle["fixed"])
+                checked += 1
+    return checked
+
+
 def plans_command(write: bool) -> int:
     paths = plan_paths()
+    validate_plan_id_ownership(paths)
+    stale = stale_generated_artifacts(paths)
+    if stale:
+        print("stale generated artifacts: " + ", ".join(stale), file=sys.stderr)
+        return 1
     drift, updates = _changed_plan_artifacts(paths, write)
     if write:
         with SCAFFOLD.cli_scaffold_lock():
@@ -172,8 +228,10 @@ def plans_command(write: bool) -> int:
     if drift and not write:
         print("generated drift: " + ", ".join(drift), file=sys.stderr)
         return 1
+    fixed = validate_plan_fixes(paths)
     print(f"{'regenerated' if write else 'verified'} {len(paths)} canonical plan(s)"
-          + (f"; {len(drift)} artifact(s) updated" if write else ""))
+          + (f"; {len(drift)} artifact(s) updated" if write else "")
+          + f"; {fixed} exact fix oracle(s)")
     return 0
 
 
@@ -265,7 +323,7 @@ def validate_fix(rule_path: Path, source: str, expected: str | None = None) -> N
             raise RuntimeError(f"FIX_PARSE_FAILED: {rule['id']}")
 
 
-def fixes_command(rule_id: str | None) -> int:
+def fixes_command(rule_id: str | None, skip_planned: bool = False) -> int:
     paths = (list(ROOT.glob(f"rules/*/*/{rule_id}.yml")) if rule_id else
              sorted((ROOT / "rules").glob("*/*/*.yml")))
     if rule_id and not paths:
@@ -275,8 +333,10 @@ def fixes_command(rule_id: str | None) -> int:
         rule = yaml.safe_load(path.read_text(encoding="utf-8"))
         if "fix" not in rule:
             continue
-        fixture = yaml.safe_load((ROOT / "tests" / path.relative_to(ROOT / "rules")).read_text())
         plan_path = ROOT / "plans" / path.relative_to(ROOT / "rules")
+        if skip_planned and plan_path.is_file():
+            continue
+        fixture = yaml.safe_load((ROOT / "tests" / path.relative_to(ROOT / "rules")).read_text())
         fixed_oracles = {}
         if plan_path.is_file():
             plan = PLAN.load_plan(plan_path)
@@ -290,6 +350,42 @@ def fixes_command(rule_id: str | None) -> int:
     return 0
 
 
+def bounded_scan_output(command: list[str], timeout: float = 300) -> bytes:
+    """Capture engine JSON while enforcing a hard output-byte ceiling."""
+    with tempfile.TemporaryFile() as errors:
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors) as process:
+            output = bytearray()
+            assert process.stdout is not None
+            deadline = time.monotonic() + timeout
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ)
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0 or not selector.select(remaining):
+                        process.kill()
+                        process.wait(timeout=10)
+                        raise RuntimeError(f"scan exceeded {timeout:g} seconds")
+                    chunk = os.read(process.stdout.fileno(), 64 * 1024)
+                    if not chunk:
+                        break
+                    output.extend(chunk)
+                    if len(output) > MAX_SCAN_OUTPUT_BYTES:
+                        process.kill()
+                        process.wait(timeout=10)
+                        raise RuntimeError(f"scan output exceeds {MAX_SCAN_OUTPUT_BYTES} bytes")
+            try:
+                returncode = process.wait(timeout=max(0.1, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired as error:
+                process.kill()
+                process.wait(timeout=10)
+                raise RuntimeError(f"scan exceeded {timeout:g} seconds") from error
+        errors.seek(0)
+        error_text = errors.read().decode("utf-8", errors="replace")
+    if returncode not in (0, 1):
+        raise RuntimeError(error_text[-500:])
+    return bytes(output)
+
+
 def normalized_findings(engine: Path, config: Path, corpus: Path) -> list[tuple]:
     files = [path for path in corpus.rglob("*") if path.is_file()]
     if len(files) > MAX_FILES:
@@ -297,12 +393,11 @@ def normalized_findings(engine: Path, config: Path, corpus: Path) -> list[tuple]
     size = sum(path.stat().st_size for path in files)
     if size > MAX_CORPUS_BYTES:
         raise RuntimeError(f"corpus exceeds {MAX_CORPUS_BYTES} bytes")
-    result = subprocess.run([str(engine), "scan", "-c", str(config), "--json=compact",
-                             "--threads", "1", str(corpus)], text=True,
-                            capture_output=True, timeout=300, check=False)
-    if result.returncode not in (0, 1):
-        raise RuntimeError(result.stderr[-500:])
-    findings = json.loads(result.stdout or "[]")
+    output = bounded_scan_output(
+        [str(engine), "scan", "-c", str(config), "--json=compact", "--threads", "1",
+         "--max-results", str(MAX_FINDINGS + 1), str(corpus)],
+    )
+    findings = json.loads(output or b"[]")
     if len(findings) > MAX_FINDINGS:
         raise RuntimeError(f"scan exceeds {MAX_FINDINGS} findings")
     root = corpus.resolve()
@@ -332,8 +427,16 @@ def baseline_command(config: Path, corpus: Path, expected: Path, write: bool) ->
         wanted = json.loads(expected.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise RuntimeError(f"cannot read differential baseline: {error}") from error
+    if (not isinstance(wanted, dict) or wanted.get("version") != 1
+            or not isinstance(wanted.get("findings"), list)):
+        raise RuntimeError("differential baseline must contain version 1 and a findings list")
     if wanted != observed:
-        print(json.dumps({"expected": wanted, "observed": observed}, indent=1), file=sys.stderr)
+        print(json.dumps({"expected_count": len(wanted.get("findings", [])),
+                          "observed_count": len(findings),
+                          "expected_sample": wanted.get("findings", [])[:10],
+                          "observed_sample": [list(finding) for finding in findings[:10]]},
+                         indent=1),
+              file=sys.stderr)
         return 1
     print(f"verified differential baseline with {len(findings)} finding(s)")
     return 0
@@ -350,7 +453,9 @@ def differential_command(old: Path, new: Path, config: Path, corpus: Path) -> in
     print(json.dumps({"old_sha256": hashlib.sha256(old.read_bytes()).hexdigest(),
                       "new_sha256": hashlib.sha256(new.read_bytes()).hexdigest(),
                       "before": len(before), "after": len(after),
-                      "removed": removed, "added": added}, indent=1))
+                      "removed_count": sum(item["count"] for item in removed),
+                      "added_count": sum(item["count"] for item in added),
+                      "removed": removed[:10], "added": added[:10]}, indent=1))
     return int(bool(removed or added))
 
 
@@ -363,6 +468,7 @@ def main() -> int:
     metamorph.add_argument("plan", type=Path)
     fixes = sub.add_parser("validate-fixes")
     fixes.add_argument("--rule-id")
+    fixes.add_argument("--unplanned-only", action="store_true")
     diff = sub.add_parser("differential")
     diff.add_argument("--old-engine", type=Path, required=True)
     diff.add_argument("--new-engine", type=Path, default=ENGINE)
@@ -382,7 +488,7 @@ def main() -> int:
     if args.command == "metamorph":
         return metamorph_command(args.plan)
     if args.command == "validate-fixes":
-        return fixes_command(args.rule_id)
+        return fixes_command(args.rule_id, args.unplanned_only)
     if args.command in ("corpus-check", "corpus-update"):
         return baseline_command(args.config, args.corpus, args.expected,
                                 args.command == "corpus-update")

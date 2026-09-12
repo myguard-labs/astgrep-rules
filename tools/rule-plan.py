@@ -24,9 +24,9 @@ MAX_MUTATIONS = 256
 UTILITY_ID = re.compile(r"^[a-z][a-z0-9-]*$")
 PLAN_KEYS = {
     "version", "id", "language", "category", "severity", "message", "note",
-    "source", "match", "rule", "utils", "constraints", "labels", "fix",
+    "match", "rule", "utils", "constraints", "labels", "fix",
     "transform", "rewriters", "files", "ignores", "url", "metadata", "cases",
-    "archetype", "mutation_limit", "oracles", "comments", "extensions",
+    "mutation_limit", "mutation_exclusions", "oracles", "comments", "extensions",
 }
 RULE_CONFIG_KEYS = (
     "constraints", "utils", "transform", "fix", "rewriters", "labels", "files",
@@ -75,7 +75,8 @@ def _validate_comments_extensions(plan: dict) -> None:
     """Validate generated comments and non-native top-level rule keys."""
     comments = plan.get("comments", [])
     if (not isinstance(comments, list)
-            or any(not isinstance(item, str) or not item.strip() or "\n" in item
+            or any(not isinstance(item, str) or not item.strip()
+                   or item.splitlines() != [item]
                    for item in comments)):
         raise ValueError("comments must be single-line non-empty strings")
     extensions = plan.get("extensions", {})
@@ -84,6 +85,19 @@ def _validate_comments_extensions(plan: dict) -> None:
             or any(not isinstance(key, str) or not key or key in reserved
                    for key in extensions)):
         raise ValueError("extensions must use non-reserved string keys")
+
+
+def _validate_mutation_settings(plan: dict) -> None:
+    """Validate bounded mutation selection and documented exclusions."""
+    limit = plan.get("mutation_limit", MAX_MUTATIONS)
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= MAX_MUTATIONS:
+        raise ValueError(f"mutation_limit must be from 1 through {MAX_MUTATIONS}")
+    exclusions = plan.get("mutation_exclusions", {})
+    if (not isinstance(exclusions, dict)
+            or any(not isinstance(key, str) or not key
+                   or not isinstance(reason, str) or not reason.strip()
+                   for key, reason in exclusions.items())):
+        raise ValueError("mutation_exclusions must map paths to non-empty rationales")
 
 
 def validate_header(plan: dict) -> None:
@@ -101,10 +115,8 @@ def validate_header(plan: dict) -> None:
         raise ValueError(f"unsupported plan category: {plan['category']}")
     if plan.get("severity", "warning") not in ("error", "warning", "info"):
         raise ValueError("plan severity must be error, warning or info")
-    limit = plan.get("mutation_limit", MAX_MUTATIONS)
-    if not isinstance(limit, int) or isinstance(limit, bool) or not 0 <= limit <= MAX_MUTATIONS:
-        raise ValueError(f"mutation_limit must be from 0 through {MAX_MUTATIONS}")
     _validate_comments_extensions(plan)
+    _validate_mutation_settings(plan)
 
 
 def validate_cases(data) -> dict[str, list[str]]:
@@ -514,8 +526,19 @@ def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]]) -> None:
         raise RuntimeError(f"CONTRAST_PREFLIGHT_FAILED: {detail}")
     _preflight_named_branches(plan, cases)
     candidates = compiled_mutations(plan, matcher)
+    exclusions = set(plan.get("mutation_exclusions", {}))
+    indexed = dict(candidates)
+    unknown = sorted(exclusions - set(indexed))
+    if unknown:
+        raise RuntimeError(f"UNKNOWN_MUTATION_EXCLUSION: {', '.join(unknown)}")
+    for path in sorted(exclusions):
+        survived, exclusion_detail = run_preflight(indexed[path], cases, plan["id"])
+        invalid = "engine-error=" in exclusion_detail or "invalid-mutant=" in exclusion_detail
+        if not survived or invalid:
+            raise RuntimeError(f"INVALID_MUTATION_EXCLUSION: {path}: {exclusion_detail}")
+    candidates = [(path, rule) for path, rule in candidates if path not in exclusions]
     limit = plan.get("mutation_limit", MAX_MUTATIONS)
-    if "mutation_limit" not in plan and len(candidates) > limit:
+    if len(candidates) > limit:
         raise RuntimeError(f"MUTATION_BUDGET_EXCEEDED: {len(candidates)} exceeds {limit}")
     for path, rule_text in candidates[:limit]:
         survived, mutation_detail = run_preflight(rule_text, cases, plan["id"])

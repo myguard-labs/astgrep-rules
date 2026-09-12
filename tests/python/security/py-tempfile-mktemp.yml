@@ -7,6 +7,9 @@ valid:
 - path = tf.mktemp()
 - path = consume(tempfile.mktemp)
 - path = mytempfile.mktemp()
+- path = other.tempfile.mktemp()
+- path = tempfile.other.mktemp()
+- path = obj.mktemp(tempfile)
 - path = tempfile.mktemp_extra()
 - result = wrapper(tempfile, mktemp)
 - text = "tempfile.mktemp()"

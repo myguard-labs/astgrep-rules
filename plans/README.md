@@ -11,3 +11,5 @@ plans. Existing handcrafted rules can be migrated independently.
 Imported rules preserve required license and source comments through the
 single-line `comments` list. Non-native top-level metadata belongs under
 `extensions`; reserved ast-grep configuration keys cannot be overridden there.
+Structurally redundant mutations retained for diagnostic-label compatibility
+may be named under `mutation_exclusions`; each needs a reviewable rationale.
