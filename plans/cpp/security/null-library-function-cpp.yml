@@ -16,16 +16,19 @@ mutation_exclusions:
   rule.all[1].any[0].has.field: 'The field selector documents the subscript operand; the C++ contrast has only one direct call child.'
   rule.all[1].any[1].has.field: 'The field selector documents the member object; the C++ contrast has only one direct call child.'
   rule.all[1].any[2].has.field: 'The field selector documents the unary operand; the C++ contrast has only one direct call child.'
-  rule.all[1].any[3].all[0].has.field: 'A call has one direct callee child; the field selector records the API-name boundary.'
-  rule.all[1].any[4].all[0].has.field: 'A call has one direct callee child; the field selector records the API-name boundary.'
-  rule.all[1].any[5].all[0].has.field: 'A call has one direct callee child; the field selector records the API-name boundary.'
-  rule.all[1].any[6].all[0].has.field: 'A call has one direct callee child; the field selector records the API-name boundary.'
-  rule.all[1].any[6].all[1].has.field: 'A call has one direct argument-list child; the field selector records the positional boundary.'
-  rule.all[1].any[6].all[1].has.all[0].has.kind: 'The percent-s regex can only match a string literal token in the C++ argument contrasts; the kind states the literal-format contract.'
+  rule.all[1].any[3].all[1].has.field: 'A call has one direct callee child; the field selector documents that the fprintf contract applies to the callee.'
+  rule.all[1].any[4].all[1].has.field: 'A call has one direct callee child; the field selector documents that the variadic fprintf contract applies to the callee.'
+  rule.all[1].any[5].all[1].has.field: 'A call has one direct callee child; the field selector documents that the fwrite contract applies to the callee.'
+  rule.all[1].any[6].all[1].has.field: 'A call has one direct callee child; the field selector documents that the exact second-position contract applies to the callee.'
+  rule.all[1].any[7].all[1].has.field: 'A call has one direct callee child; the field selector documents that the variadic second-position contract applies to the callee.'
+  rule.all[1].any[8].all[1].has.field: 'A call has one direct callee child; the field selector documents that the exact first-position contract applies to the callee.'
+  rule.all[1].any[9].all[1].has.field: 'A call has one direct callee child; the field selector documents that the variadic first-position contract applies to the callee.'
   utils.null-return-call.has.field: 'A call has one direct callee child; the field selector prevents arguments from becoming function names.'
-  utils.null-return-assignment.has.field: 'An assignment has one direct RHS child in these contrasts; the selector records the RHS-only contract.'
   utils.null-return-paren-one.has.stopBy: 'Neighbor is the engine default here; spelling it pins the transparent single-wrapper boundary.'
   utils.null-return-paren-two.has.stopBy: 'Neighbor is the engine default here; spelling it pins the transparent double-wrapper boundary.'
+  utils.percent-s-format.any[1].has.stopBy: 'Neighbor is the engine default here; spelling it pins the transparent single-wrapper format boundary.'
+  utils.percent-s-format.any[2].has.stopBy: 'Neighbor is the engine default here; spelling it pins the transparent double-wrapper format boundary.'
+  utils.percent-s-format.any[2].has.has.stopBy: 'Neighbor is the engine default here; spelling it pins the nested transparent format boundary.'
 message: >-
   A library function that may return NULL is dereferenced or passed directly
   to a library function that requires a valid pointer, without a NULL check.
@@ -52,57 +55,69 @@ rule:
           has:
             field: argument
             matches: null-return-operand
-        - kind: call_expression
-          all:
+        - all:
+            - pattern:
+                context: void f() { $FPRINTF_ONLY($_, $FORMAT, $OPERAND); }
+                selector: call_expression
             - has:
                 field: function
-                matches: first-pointer-consumer
-            - has:
-                field: arguments
-                has:
-                  nthChild: 1
-                  matches: unsafe-pointer-operand
-        - kind: call_expression
-          all:
+                regex: '^\(*\s*(?:(?:::\s*|std\s*::\s*)?fprintf)\s*\)*$'
+        - all:
+            - pattern:
+                context: void f() { $FPRINTF_REST($_, $FORMAT, $OPERAND, $$$REST); }
+                selector: call_expression
             - has:
                 field: function
-                matches: second-pointer-consumer
-            - has:
-                field: arguments
-                has:
-                  nthChild: 2
-                  matches: unsafe-pointer-operand
-        - kind: call_expression
-          all:
+                regex: '^\(*\s*(?:(?:::\s*|std\s*::\s*)?fprintf)\s*\)*$'
+        - all:
+            - pattern:
+                context: void f() { $FWRITE($_, $_, $_, $OPERAND); }
+                selector: call_expression
             - has:
                 field: function
-                regex: '^(?:(?:::|std::)?fwrite)$'
-            - has:
-                field: arguments
-                has:
-                  nthChild: 4
-                  matches: unsafe-pointer-operand
-        - kind: call_expression
-          all:
+                regex: '^\(*\s*(?:(?:::\s*|std\s*::\s*)?fwrite)\s*\)*$'
+        - all:
+            - pattern:
+                context: void f() { $SECOND_ONLY($_, $OPERAND); }
+                selector: call_expression
             - has:
                 field: function
-                regex: '^(?:(?:::|std::)?fprintf)$'
+                regex: '^\(*\s*(?:(?:::\s*|std\s*::\s*)?(?:fprintf|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy))\s*\)*$'
+        - all:
+            - pattern:
+                context: void f() { $SECOND_REST($_, $OPERAND, $$$REST); }
+                selector: call_expression
             - has:
-                field: arguments
-                all:
-                  - has:
-                      nthChild: 2
-                      kind: string_literal
-                      regex: '%s'
-                  - has:
-                      nthChild: 3
-                      matches: unsafe-pointer-operand
+                field: function
+                regex: '^\(*\s*(?:(?:::\s*|std\s*::\s*)?(?:fprintf|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy))\s*\)*$'
+        - all:
+            - pattern:
+                context: void f() { $FIRST_ONLY($OPERAND); }
+                selector: call_expression
+            - has:
+                field: function
+                regex: '^\(*\s*(?:(?:::\s*|std\s*::\s*)?(?:atof|atoi|atol_l|atol|atoll_l|atoll|getc|fprintf|fgetpos|fseek|fseeko|fsetpos|ftell|ftello|rewind|strlen|strtoimax|strtod|strtol|strtoul|strtoll|strtoq|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy|fwrite))\s*\)*$'
+        - all:
+            - pattern:
+                context: void f() { $FIRST_REST($OPERAND, $$$REST); }
+                selector: call_expression
+            - has:
+                field: function
+                regex: '^\(*\s*(?:(?:::\s*|std\s*::\s*)?(?:atof|atoi|atol_l|atol|atoll_l|atoll|getc|fprintf|fgetpos|fseek|fseeko|fsetpos|ftell|ftello|rewind|strlen|strtoimax|strtod|strtol|strtoul|strtoll|strtoq|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy|fwrite))\s*\)*$'
+constraints:
+  FORMAT:
+    matches: percent-s-format
+  OPERAND:
+    regex: '^(?:[A-Za-z_][A-Za-z0-9_]*\s*=\s*)?\(*\s*(?:(?:::\s*|std\s*::\s*)?(?:fgets|fopen|getenv|getgrent|getgrgid|getgrnam|getlogin|getpwent|getpwnam|getpwuid|getpwuuid|gets|inet_ntop|realpath|tempnam|tmpfile|tmpnam|memchr|strcasestr_l|strcasestr|strchr|strnstr|strpbrk|strrchr|strstr|strtok_r|strtok))\s*\)*\s*\('
+labels:
+  OPERAND:
+    style: secondary
 utils:
   null-return-call:
     kind: call_expression
     has:
       field: function
-      regex: '^(?:(?:::|std::)?(?:fgets|fopen|getenv|getgrent|getgrgid|getgrnam|getlogin|getpwent|getpwnam|getpwuid|getpwuuid|gets|inet_ntop|realpath|tempnam|tmpfile|tmpnam|memchr|strcasestr_l|strcasestr|strchr|strnstr|strpbrk|strrchr|strstr|strtok_r|strtok))$'
+      regex: '^\(*\s*(?:(?:::\s*|std\s*::\s*)?(?:fgets|fopen|getenv|getgrent|getgrgid|getgrnam|getlogin|getpwent|getpwnam|getpwuid|getpwuuid|gets|inet_ntop|realpath|tempnam|tmpfile|tmpnam|memchr|strcasestr_l|strcasestr|strchr|strnstr|strpbrk|strrchr|strstr|strtok_r|strtok))\s*\)*$'
   null-return-paren-one:
     kind: parenthesized_expression
     has:
@@ -118,19 +133,28 @@ utils:
       - matches: null-return-call
       - matches: null-return-paren-one
       - matches: null-return-paren-two
-  null-return-assignment:
-    kind: assignment_expression
-    has:
-      field: right
-      matches: null-return-operand
-  unsafe-pointer-operand:
+  percent-s-format:
     any:
-      - matches: null-return-operand
-      - matches: null-return-assignment
-  first-pointer-consumer:
-    regex: '^(?:(?:::|std::)?(?:atof|atoi|atol_l|atol|atoll_l|atoll|getc|fprintf|fgetpos|fseek|fseeko|fsetpos|ftell|ftello|rewind|strlen|strtoimax|strtod|strtol|strtoul|strtoll|strtoq|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy|fwrite))$'
-  second-pointer-consumer:
-    regex: '^(?:(?:::|std::)?(?:fprintf|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy))$'
+      - matches: percent-s-literal
+      - kind: parenthesized_expression
+        has:
+          stopBy: neighbor
+          matches: percent-s-literal
+      - kind: parenthesized_expression
+        has:
+          stopBy: neighbor
+          kind: parenthesized_expression
+          has:
+            stopBy: neighbor
+            matches: percent-s-literal
+  percent-s-literal:
+    any:
+      - kind: string_literal
+        regex: '(?:^|[^%])(?:%%)*%(?:[0-9]+)?(?:\.[0-9]+)?s'
+      - kind: raw_string_literal
+        regex: '(?:^|[^%])(?:%%)*%(?:[0-9]+)?(?:\.[0-9]+)?s'
+      - kind: concatenated_string
+        regex: '(?:^|[^%])(?:%%)*%(?:[0-9]+)?(?:\.[0-9]+)?s'
 cases:
   valid:
     - |
@@ -169,6 +193,10 @@ cases:
         consume(wrapper(getenv("FIELD"))->field);
         consume(*buffer);
         consume(*wrapper(getenv("POINTER")));
+        consume(*mygetenv("POINTER_SUFFIX"));
+        consume(*project::getenv("POINTER_MEMBER"));
+        consume(*(known_nonnull));
+        consume(*((known_nonnull)));
       }
     - |
       void consumer_shape_controls() {
@@ -182,6 +210,11 @@ cases:
         mystrcpy(buffer, getenv("SECOND"));
         myfwrite(a, b, c, getenv("FOURTH_SUFFIX"));
         myfprintf(stream, "%s", getenv("THIRD_SUFFIX"));
+        myfprintf(stream, "%s", getenv("THIRD_REST_SUFFIX"), extra);
+        object.fwrite(a, b, c, getenv("FOURTH_MEMBER"));
+        mymemccpy(dst, getenv("SECOND_REST_SUFFIX"), 0, size);
+        mystrtol(getenv("FIRST_REST_SUFFIX"), nullptr, 10);
+        getc(stream = myfopen(path, "r"));
       }
     - |
       void lexical_controls() {
@@ -195,9 +228,13 @@ cases:
     - |
       void pointer_format_control() {
         fprintf(stderr, "%p", memchr(data, needle, length));
+        fprintf(stderr, "%%s %p", memchr(data, needle, length));
         fprintf(stderr, "%s", known_nonnull);
         fprintf(stderr, "%s", known_nonnull, getenv("UNUSED"));
         fprintf(stderr, "%p", getenv("POINTER"), "%s");
+        fprintf(stderr, format%s, memchr(data, needle, length));
+        fprintf(stderr, (format), memchr(data, needle, length));
+        fprintf(stderr, ((format)), memchr(data, needle, length));
         fwrite(data, size, getenv("COUNT"), stream);
       }
   invalid:
@@ -238,6 +275,8 @@ cases:
     - |
       long parenthesized_sink() { return strlen((getenv("NAME"))); }
     - |
+      long twice_parenthesized_sink() { return strlen(((getenv("NAME")))); }
+    - |
       int parenthesized_assignment() { return getc(stream = (fopen(path, "r"))); }
     - |
       char *stpcpy_source() { return stpcpy(destination, getenv("NAME")); }
@@ -245,3 +284,110 @@ cases:
       void unsafe_string_format() {
         fprintf(stderr, "%s", memchr(data, needle, length));
       }
+    - |
+      void unsafe_concatenated_string_format() {
+        fprintf(stderr, "%s" " tail", memchr(data, needle, length));
+      }
+    - |
+      void unsafe_raw_string_format() {
+        fprintf(stderr, R"tag(%10s)tag", memchr(data, needle, length));
+      }
+    - |
+      void unsafe_parenthesized_format() {
+        fprintf(stderr, (("%.3s")), memchr(data, needle, length));
+      }
+    - |
+      void unsafe_single_parenthesized_format() {
+        fprintf(stderr, ("%s"), memchr(data, needle, length));
+      }
+    - |
+      void unsafe_variadic_string_format() {
+        fprintf(stderr, "%10s", memchr(data, needle, length), extra);
+      }
+    - |
+      long parenthesized_sink_callee() { return (strlen)(getenv("NAME")); }
+    - |
+      long spaced_qualified_sink() { return std :: strlen(getenv("NAME")); }
+    - |
+      long parenthesized_source_callee() { return strlen((getenv)("NAME")); }
+    - |
+      long first_position_with_rest() { return strtol(getenv("NUMBER"), nullptr, 10); }
+    - |
+      void second_position_with_rest() {
+        memccpy(destination, memchr(data, needle, length), 0, size);
+      }
+    - |
+      void source_api_inventory() {
+        strlen(fgets()); strlen(fopen()); strlen(getenv()); strlen(getgrent());
+        strlen(getgrgid()); strlen(getgrnam()); strlen(getlogin()); strlen(getpwent());
+        strlen(getpwnam()); strlen(getpwuid()); strlen(getpwuuid()); strlen(gets());
+        strlen(inet_ntop()); strlen(realpath()); strlen(tempnam()); strlen(tmpfile());
+        strlen(tmpnam()); strlen(memchr()); strlen(strcasestr_l()); strlen(strcasestr());
+        strlen(strchr()); strlen(strnstr()); strlen(strpbrk()); strlen(strrchr());
+        strlen(strstr()); strlen(strtok_r()); strlen(strtok());
+      }
+    - |
+      void sink_api_inventory() {
+        atof(getenv()); atoi(getenv()); atol_l(getenv()); atol(getenv());
+        atoll_l(getenv()); atoll(getenv()); getc(getenv()); fprintf(getenv());
+        fgetpos(getenv()); fseek(getenv()); fseeko(getenv()); fsetpos(getenv());
+        ftell(getenv()); ftello(getenv()); rewind(getenv()); strlen(getenv());
+        strtoimax(getenv()); strtod(getenv()); strtol(getenv()); strtoul(getenv());
+        strtoll(getenv()); strtoq(getenv()); bcopy(getenv()); memccpy(getenv());
+        memcpy(getenv()); memmove(getenv()); stpncpy(getenv()); strcat(getenv());
+        strcpy(getenv()); strlcat(getenv()); strlcpy(getenv()); strncat(getenv());
+        stpcpy(getenv()); wcpcpy(getenv()); wcpncpy(getenv()); fwrite(getenv());
+      }
+    - |
+      void second_position_sink_api_inventory() {
+        fprintf(stream, getenv()); bcopy(destination, getenv());
+        memccpy(destination, getenv()); memcpy(destination, getenv());
+        memmove(destination, getenv()); stpncpy(destination, getenv());
+        strcat(destination, getenv()); strcpy(destination, getenv());
+        strlcat(destination, getenv()); strlcpy(destination, getenv());
+        strncat(destination, getenv()); stpcpy(destination, getenv());
+        wcpcpy(destination, getenv()); wcpncpy(destination, getenv());
+      }
+oracles:
+  ? |
+    void f() {
+       char buf[128];
+       strcpy(buf, getenv("FOO"));
+    }
+  : count: 1
+    labels: ['getenv("FOO")']
+  ? |
+    void source_api_inventory() {
+      strlen(fgets()); strlen(fopen()); strlen(getenv()); strlen(getgrent());
+      strlen(getgrgid()); strlen(getgrnam()); strlen(getlogin()); strlen(getpwent());
+      strlen(getpwnam()); strlen(getpwuid()); strlen(getpwuuid()); strlen(gets());
+      strlen(inet_ntop()); strlen(realpath()); strlen(tempnam()); strlen(tmpfile());
+      strlen(tmpnam()); strlen(memchr()); strlen(strcasestr_l()); strlen(strcasestr());
+      strlen(strchr()); strlen(strnstr()); strlen(strpbrk()); strlen(strrchr());
+      strlen(strstr()); strlen(strtok_r()); strlen(strtok());
+    }
+  : count: 27
+  ? |
+    void sink_api_inventory() {
+      atof(getenv()); atoi(getenv()); atol_l(getenv()); atol(getenv());
+      atoll_l(getenv()); atoll(getenv()); getc(getenv()); fprintf(getenv());
+      fgetpos(getenv()); fseek(getenv()); fseeko(getenv()); fsetpos(getenv());
+      ftell(getenv()); ftello(getenv()); rewind(getenv()); strlen(getenv());
+      strtoimax(getenv()); strtod(getenv()); strtol(getenv()); strtoul(getenv());
+      strtoll(getenv()); strtoq(getenv()); bcopy(getenv()); memccpy(getenv());
+      memcpy(getenv()); memmove(getenv()); stpncpy(getenv()); strcat(getenv());
+      strcpy(getenv()); strlcat(getenv()); strlcpy(getenv()); strncat(getenv());
+      stpcpy(getenv()); wcpcpy(getenv()); wcpncpy(getenv()); fwrite(getenv());
+    }
+  : count: 36
+  ? |
+    void second_position_sink_api_inventory() {
+      fprintf(stream, getenv()); bcopy(destination, getenv());
+      memccpy(destination, getenv()); memcpy(destination, getenv());
+      memmove(destination, getenv()); stpncpy(destination, getenv());
+      strcat(destination, getenv()); strcpy(destination, getenv());
+      strlcat(destination, getenv()); strlcpy(destination, getenv());
+      strncat(destination, getenv()); stpcpy(destination, getenv());
+      wcpcpy(destination, getenv()); wcpncpy(destination, getenv());
+    }
+  : count: 14

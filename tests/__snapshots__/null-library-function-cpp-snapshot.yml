@@ -3,342 +3,222 @@ snapshots:
   ? |
     char *stpcpy_source() { return stpcpy(destination, getenv("NAME")); }
   : labels:
-    - source: stpcpy(destination, getenv("NAME"))
-      style: primary
-      start: 31
-      end: 66
-    - source: stpcpy
-      style: secondary
-      start: 31
-      end: 37
-    - source: getenv
-      style: secondary
-      start: 51
-      end: 57
-    - source: getenv("NAME")
-      style: secondary
-      start: 51
-      end: 65
     - source: getenv("NAME")
       style: secondary
       start: 51
       end: 65
   ? |
     char direct_dereference() { return *getenv("NAME"); }
-  : labels:
-    - source: '*getenv("NAME")'
-      style: primary
-      start: 35
-      end: 50
-    - source: getenv
-      style: secondary
-      start: 36
-      end: 42
-    - source: getenv("NAME")
-      style: secondary
-      start: 36
-      end: 50
+  : labels: []
   ? |
     char member_access() { return ::fopen("file", "r")->flags; }
-  : labels:
-    - source: ::fopen("file", "r")->flags
-      style: primary
-      start: 30
-      end: 57
-    - source: ::fopen
-      style: secondary
-      start: 30
-      end: 37
-    - source: ::fopen("file", "r")
-      style: secondary
-      start: 30
-      end: 50
+  : labels: []
   ? |
     char parenthesized_dereference() { return *((getenv("NAME"))); }
-  : labels:
-    - source: '*((getenv("NAME")))'
-      style: primary
-      start: 42
-      end: 61
-    - source: getenv
-      style: secondary
-      start: 45
-      end: 51
-    - source: getenv("NAME")
-      style: secondary
-      start: 45
-      end: 59
-    - source: (getenv("NAME"))
-      style: secondary
-      start: 44
-      end: 60
-    - source: ((getenv("NAME")))
-      style: secondary
-      start: 43
-      end: 61
+  : labels: []
   ? |
     char parenthesized_member() { return (fopen("file", "r"))->flags; }
-  : labels:
-    - source: (fopen("file", "r"))->flags
-      style: primary
-      start: 37
-      end: 64
-    - source: fopen
-      style: secondary
-      start: 38
-      end: 43
-    - source: fopen("file", "r")
-      style: secondary
-      start: 38
-      end: 56
-    - source: (fopen("file", "r"))
-      style: secondary
-      start: 37
-      end: 57
+  : labels: []
   ? |
     char parenthesized_subscript() { return ((getenv("NAME")))[0]; }
-  : labels:
-    - source: ((getenv("NAME")))[0]
-      style: primary
-      start: 40
-      end: 61
-    - source: getenv
-      style: secondary
-      start: 42
-      end: 48
-    - source: getenv("NAME")
-      style: secondary
-      start: 42
-      end: 56
-    - source: (getenv("NAME"))
-      style: secondary
-      start: 41
-      end: 57
-    - source: ((getenv("NAME")))
-      style: secondary
-      start: 40
-      end: 58
+  : labels: []
   ? |
     char subscript_identifier(int index) { return std::getenv("NAME")[index]; }
-  : labels:
-    - source: std::getenv("NAME")[index]
-      style: primary
-      start: 46
-      end: 72
-    - source: std::getenv
-      style: secondary
-      start: 46
-      end: 57
-    - source: std::getenv("NAME")
-      style: secondary
-      start: 46
-      end: 65
+  : labels: []
   ? |
     char subscript_number() { return getenv("NAME")[0]; }
-  : labels:
-    - source: getenv("NAME")[0]
-      style: primary
-      start: 33
-      end: 50
-    - source: getenv
-      style: secondary
-      start: 33
-      end: 39
-    - source: getenv("NAME")
-      style: secondary
-      start: 33
-      end: 47
+  : labels: []
   ? |
     int parenthesized_assignment() { return getc(stream = (fopen(path, "r"))); }
   : labels:
-    - source: getc(stream = (fopen(path, "r")))
-      style: primary
-      start: 40
-      end: 73
-    - source: getc
-      style: secondary
-      start: 40
-      end: 44
-    - source: fopen
-      style: secondary
-      start: 55
-      end: 60
-    - source: fopen(path, "r")
-      style: secondary
-      start: 55
-      end: 71
-    - source: (fopen(path, "r"))
-      style: secondary
-      start: 54
-      end: 72
     - source: stream = (fopen(path, "r"))
       style: secondary
       start: 45
       end: 72
-    - source: stream = (fopen(path, "r"))
+  ? |
+    long first_position_with_rest() { return strtol(getenv("NUMBER"), nullptr, 10); }
+  : labels:
+    - source: getenv("NUMBER")
       style: secondary
-      start: 45
-      end: 72
+      start: 48
+      end: 64
   ? |
     long parenthesized_sink() { return strlen((getenv("NAME"))); }
   : labels:
-    - source: strlen((getenv("NAME")))
-      style: primary
-      start: 35
-      end: 59
-    - source: strlen
-      style: secondary
-      start: 35
-      end: 41
-    - source: getenv
-      style: secondary
-      start: 43
-      end: 49
-    - source: getenv("NAME")
-      style: secondary
-      start: 43
-      end: 57
-    - source: (getenv("NAME"))
-      style: secondary
-      start: 42
-      end: 58
     - source: (getenv("NAME"))
       style: secondary
       start: 42
       end: 58
   ? |
+    long parenthesized_sink_callee() { return (strlen)(getenv("NAME")); }
+  : labels:
+    - source: getenv("NAME")
+      style: secondary
+      start: 51
+      end: 65
+  ? |
+    long parenthesized_source_callee() { return strlen((getenv)("NAME")); }
+  : labels:
+    - source: (getenv)("NAME")
+      style: secondary
+      start: 51
+      end: 67
+  ? |
     long qualified_sink() { return std::strlen(::getenv("NAME")); }
   : labels:
-    - source: std::strlen(::getenv("NAME"))
-      style: primary
-      start: 31
-      end: 60
-    - source: std::strlen
-      style: secondary
-      start: 31
-      end: 42
-    - source: ::getenv
-      style: secondary
-      start: 43
-      end: 51
     - source: ::getenv("NAME")
       style: secondary
       start: 43
       end: 59
-    - source: ::getenv("NAME")
+  ? |
+    long spaced_qualified_sink() { return std :: strlen(getenv("NAME")); }
+  : labels:
+    - source: getenv("NAME")
       style: secondary
-      start: 43
-      end: 59
+      start: 52
+      end: 66
+  ? |
+    long twice_parenthesized_sink() { return strlen(((getenv("NAME")))); }
+  : labels:
+    - source: ((getenv("NAME")))
+      style: secondary
+      start: 48
+      end: 66
   ? |
     void f() {
        char buf[128];
        strcpy(buf, getenv("FOO"));
     }
   : labels:
-    - source: strcpy(buf, getenv("FOO"))
-      style: primary
-      start: 32
-      end: 58
-    - source: strcpy
-      style: secondary
-      start: 32
-      end: 38
-    - source: getenv
-      style: secondary
-      start: 44
-      end: 50
     - source: getenv("FOO")
       style: secondary
       start: 44
       end: 57
-    - source: getenv("FOO")
+  ? |
+    void second_position_sink_api_inventory() {
+      fprintf(stream, getenv()); bcopy(destination, getenv());
+      memccpy(destination, getenv()); memcpy(destination, getenv());
+      memmove(destination, getenv()); stpncpy(destination, getenv());
+      strcat(destination, getenv()); strcpy(destination, getenv());
+      strlcat(destination, getenv()); strlcpy(destination, getenv());
+      strncat(destination, getenv()); stpcpy(destination, getenv());
+      wcpcpy(destination, getenv()); wcpncpy(destination, getenv());
+    }
+  : labels:
+    - source: getenv()
       style: secondary
-      start: 44
-      end: 57
+      start: 62
+      end: 70
+  ? |
+    void second_position_with_rest() {
+      memccpy(destination, memchr(data, needle, length), 0, size);
+    }
+  : labels:
+    - source: memchr(data, needle, length)
+      style: secondary
+      start: 58
+      end: 86
+  ? |
+    void sink_api_inventory() {
+      atof(getenv()); atoi(getenv()); atol_l(getenv()); atol(getenv());
+      atoll_l(getenv()); atoll(getenv()); getc(getenv()); fprintf(getenv());
+      fgetpos(getenv()); fseek(getenv()); fseeko(getenv()); fsetpos(getenv());
+      ftell(getenv()); ftello(getenv()); rewind(getenv()); strlen(getenv());
+      strtoimax(getenv()); strtod(getenv()); strtol(getenv()); strtoul(getenv());
+      strtoll(getenv()); strtoq(getenv()); bcopy(getenv()); memccpy(getenv());
+      memcpy(getenv()); memmove(getenv()); stpncpy(getenv()); strcat(getenv());
+      strcpy(getenv()); strlcat(getenv()); strlcpy(getenv()); strncat(getenv());
+      stpcpy(getenv()); wcpcpy(getenv()); wcpncpy(getenv()); fwrite(getenv());
+    }
+  : labels:
+    - source: getenv()
+      style: secondary
+      start: 35
+      end: 43
+  ? |
+    void source_api_inventory() {
+      strlen(fgets()); strlen(fopen()); strlen(getenv()); strlen(getgrent());
+      strlen(getgrgid()); strlen(getgrnam()); strlen(getlogin()); strlen(getpwent());
+      strlen(getpwnam()); strlen(getpwuid()); strlen(getpwuuid()); strlen(gets());
+      strlen(inet_ntop()); strlen(realpath()); strlen(tempnam()); strlen(tmpfile());
+      strlen(tmpnam()); strlen(memchr()); strlen(strcasestr_l()); strlen(strcasestr());
+      strlen(strchr()); strlen(strnstr()); strlen(strpbrk()); strlen(strrchr());
+      strlen(strstr()); strlen(strtok_r()); strlen(strtok());
+    }
+  : labels:
+    - source: fgets()
+      style: secondary
+      start: 39
+      end: 46
   ? |
     void test_getc() {
      int c = getc(fptr = fopen(file_name, "r"));
     }
   : labels:
-    - source: getc(fptr = fopen(file_name, "r"))
-      style: primary
-      start: 28
-      end: 62
-    - source: getc
-      style: secondary
-      start: 28
-      end: 32
-    - source: fopen
-      style: secondary
-      start: 40
-      end: 45
-    - source: fopen(file_name, "r")
-      style: secondary
-      start: 40
-      end: 61
-    - source: fptr = fopen(file_name, "r")
-      style: secondary
-      start: 33
-      end: 61
     - source: fptr = fopen(file_name, "r")
       style: secondary
       start: 33
       end: 61
   ? |
+    void unsafe_concatenated_string_format() {
+      fprintf(stderr, "%s" " tail", memchr(data, needle, length));
+    }
+  : labels:
+    - source: memchr(data, needle, length)
+      style: secondary
+      start: 75
+      end: 103
+  ? |
+    void unsafe_parenthesized_format() {
+      fprintf(stderr, (("%.3s")), memchr(data, needle, length));
+    }
+  : labels:
+    - source: memchr(data, needle, length)
+      style: secondary
+      start: 67
+      end: 95
+  ? |
+    void unsafe_raw_string_format() {
+      fprintf(stderr, R"tag(%10s)tag", memchr(data, needle, length));
+    }
+  : labels:
+    - source: memchr(data, needle, length)
+      style: secondary
+      start: 69
+      end: 97
+  ? |
+    void unsafe_single_parenthesized_format() {
+      fprintf(stderr, ("%s"), memchr(data, needle, length));
+    }
+  : labels:
+    - source: memchr(data, needle, length)
+      style: secondary
+      start: 70
+      end: 98
+  ? |
     void unsafe_string_format() {
       fprintf(stderr, "%s", memchr(data, needle, length));
     }
   : labels:
-    - source: fprintf(stderr, "%s", memchr(data, needle, length))
-      style: primary
-      start: 32
-      end: 83
-    - source: fprintf
-      style: secondary
-      start: 32
-      end: 39
-    - source: '"%s"'
-      style: secondary
-      start: 48
-      end: 52
-    - source: memchr
-      style: secondary
-      start: 54
-      end: 60
     - source: memchr(data, needle, length)
       style: secondary
       start: 54
       end: 82
-    - source: (stderr, "%s", memchr(data, needle, length))
+  ? |
+    void unsafe_variadic_string_format() {
+      fprintf(stderr, "%10s", memchr(data, needle, length), extra);
+    }
+  : labels:
+    - source: memchr(data, needle, length)
       style: secondary
-      start: 39
-      end: 83
+      start: 65
+      end: 93
   ? |
     {
      FILE *fptr;
      fwrite("foo", 3, 1, fptr = fopen("foo.txt", "w"));
     }
   : labels:
-    - source: fwrite("foo", 3, 1, fptr = fopen("foo.txt", "w"))
-      style: primary
-      start: 16
-      end: 65
-    - source: fwrite
-      style: secondary
-      start: 16
-      end: 22
-    - source: fopen
-      style: secondary
-      start: 43
-      end: 48
-    - source: fopen("foo.txt", "w")
-      style: secondary
-      start: 43
-      end: 64
-    - source: fptr = fopen("foo.txt", "w")
-      style: secondary
-      start: 36
-      end: 64
     - source: fptr = fopen("foo.txt", "w")
       style: secondary
       start: 36
@@ -348,22 +228,6 @@ snapshots:
      fwrite("foo", 3, 1, fopen("foo.txt", "w"));
     }
   : labels:
-    - source: fwrite("foo", 3, 1, fopen("foo.txt", "w"))
-      style: primary
-      start: 3
-      end: 45
-    - source: fwrite
-      style: secondary
-      start: 3
-      end: 9
-    - source: fopen
-      style: secondary
-      start: 23
-      end: 28
-    - source: fopen("foo.txt", "w")
-      style: secondary
-      start: 23
-      end: 44
     - source: fopen("foo.txt", "w")
       style: secondary
       start: 23

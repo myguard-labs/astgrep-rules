@@ -27,9 +27,12 @@ the caller must first establish what `.len` means.
   aliases, macros, prior checks, control flow, or platform-specific return
   contracts; unqualified, global-qualified, and `std::` spellings are the only
   supported function forms, with at most two transparent parenthesis layers.
-  For `fprintf`, the format-sensitive arm covers a direct third argument when
-  the literal format contains `%s`; it does not parse escaped directives,
-  positional directives, `*` widths, or later variadic arguments. Calls nested
+  For `fprintf`, the format-sensitive arm covers the direct third argument when
+  an ordinary, raw, or concatenated literal format contains `%s`, a decimal
+  width such as `%10s`, or a decimal precision such as `%.3s`; up to two
+  transparent parentheses around the format are accepted. It distinguishes
+  escaped `%%s`, but does not parse flags, positional directives, `*` widths,
+  or later variadic arguments. Calls nested
   in parser `ERROR` recovery nodes are excluded; fix malformed C++ before
   treating the absence of a finding as safe.
 - `nginx-cpp-line-comment` and `nginx-plain-inline` enforce nginx source style

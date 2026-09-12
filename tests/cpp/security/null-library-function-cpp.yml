@@ -37,6 +37,10 @@ valid:
     consume(wrapper(getenv("FIELD"))->field);
     consume(*buffer);
     consume(*wrapper(getenv("POINTER")));
+    consume(*mygetenv("POINTER_SUFFIX"));
+    consume(*project::getenv("POINTER_MEMBER"));
+    consume(*(known_nonnull));
+    consume(*((known_nonnull)));
   }
 - |
   void consumer_shape_controls() {
@@ -50,6 +54,11 @@ valid:
     mystrcpy(buffer, getenv("SECOND"));
     myfwrite(a, b, c, getenv("FOURTH_SUFFIX"));
     myfprintf(stream, "%s", getenv("THIRD_SUFFIX"));
+    myfprintf(stream, "%s", getenv("THIRD_REST_SUFFIX"), extra);
+    object.fwrite(a, b, c, getenv("FOURTH_MEMBER"));
+    mymemccpy(dst, getenv("SECOND_REST_SUFFIX"), 0, size);
+    mystrtol(getenv("FIRST_REST_SUFFIX"), nullptr, 10);
+    getc(stream = myfopen(path, "r"));
   }
 - |
   void lexical_controls() {
@@ -63,9 +72,13 @@ valid:
 - |
   void pointer_format_control() {
     fprintf(stderr, "%p", memchr(data, needle, length));
+    fprintf(stderr, "%%s %p", memchr(data, needle, length));
     fprintf(stderr, "%s", known_nonnull);
     fprintf(stderr, "%s", known_nonnull, getenv("UNUSED"));
     fprintf(stderr, "%p", getenv("POINTER"), "%s");
+    fprintf(stderr, format%s, memchr(data, needle, length));
+    fprintf(stderr, (format), memchr(data, needle, length));
+    fprintf(stderr, ((format)), memchr(data, needle, length));
     fwrite(data, size, getenv("COUNT"), stream);
   }
 invalid:
@@ -106,10 +119,76 @@ invalid:
 - |
   long parenthesized_sink() { return strlen((getenv("NAME"))); }
 - |
+  long twice_parenthesized_sink() { return strlen(((getenv("NAME")))); }
+- |
   int parenthesized_assignment() { return getc(stream = (fopen(path, "r"))); }
 - |
   char *stpcpy_source() { return stpcpy(destination, getenv("NAME")); }
 - |
   void unsafe_string_format() {
     fprintf(stderr, "%s", memchr(data, needle, length));
+  }
+- |
+  void unsafe_concatenated_string_format() {
+    fprintf(stderr, "%s" " tail", memchr(data, needle, length));
+  }
+- |
+  void unsafe_raw_string_format() {
+    fprintf(stderr, R"tag(%10s)tag", memchr(data, needle, length));
+  }
+- |
+  void unsafe_parenthesized_format() {
+    fprintf(stderr, (("%.3s")), memchr(data, needle, length));
+  }
+- |
+  void unsafe_single_parenthesized_format() {
+    fprintf(stderr, ("%s"), memchr(data, needle, length));
+  }
+- |
+  void unsafe_variadic_string_format() {
+    fprintf(stderr, "%10s", memchr(data, needle, length), extra);
+  }
+- |
+  long parenthesized_sink_callee() { return (strlen)(getenv("NAME")); }
+- |
+  long spaced_qualified_sink() { return std :: strlen(getenv("NAME")); }
+- |
+  long parenthesized_source_callee() { return strlen((getenv)("NAME")); }
+- |
+  long first_position_with_rest() { return strtol(getenv("NUMBER"), nullptr, 10); }
+- |
+  void second_position_with_rest() {
+    memccpy(destination, memchr(data, needle, length), 0, size);
+  }
+- |
+  void source_api_inventory() {
+    strlen(fgets()); strlen(fopen()); strlen(getenv()); strlen(getgrent());
+    strlen(getgrgid()); strlen(getgrnam()); strlen(getlogin()); strlen(getpwent());
+    strlen(getpwnam()); strlen(getpwuid()); strlen(getpwuuid()); strlen(gets());
+    strlen(inet_ntop()); strlen(realpath()); strlen(tempnam()); strlen(tmpfile());
+    strlen(tmpnam()); strlen(memchr()); strlen(strcasestr_l()); strlen(strcasestr());
+    strlen(strchr()); strlen(strnstr()); strlen(strpbrk()); strlen(strrchr());
+    strlen(strstr()); strlen(strtok_r()); strlen(strtok());
+  }
+- |
+  void sink_api_inventory() {
+    atof(getenv()); atoi(getenv()); atol_l(getenv()); atol(getenv());
+    atoll_l(getenv()); atoll(getenv()); getc(getenv()); fprintf(getenv());
+    fgetpos(getenv()); fseek(getenv()); fseeko(getenv()); fsetpos(getenv());
+    ftell(getenv()); ftello(getenv()); rewind(getenv()); strlen(getenv());
+    strtoimax(getenv()); strtod(getenv()); strtol(getenv()); strtoul(getenv());
+    strtoll(getenv()); strtoq(getenv()); bcopy(getenv()); memccpy(getenv());
+    memcpy(getenv()); memmove(getenv()); stpncpy(getenv()); strcat(getenv());
+    strcpy(getenv()); strlcat(getenv()); strlcpy(getenv()); strncat(getenv());
+    stpcpy(getenv()); wcpcpy(getenv()); wcpncpy(getenv()); fwrite(getenv());
+  }
+- |
+  void second_position_sink_api_inventory() {
+    fprintf(stream, getenv()); bcopy(destination, getenv());
+    memccpy(destination, getenv()); memcpy(destination, getenv());
+    memmove(destination, getenv()); stpncpy(destination, getenv());
+    strcat(destination, getenv()); strcpy(destination, getenv());
+    strlcat(destination, getenv()); strlcpy(destination, getenv());
+    strncat(destination, getenv()); stpcpy(destination, getenv());
+    wcpcpy(destination, getenv()); wcpncpy(destination, getenv());
   }

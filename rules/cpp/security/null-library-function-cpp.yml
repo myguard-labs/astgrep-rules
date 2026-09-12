@@ -15,12 +15,17 @@ note: >-
   [CWE-476] NULL Pointer Dereference. [REFERENCES]
       - https://wiki.sei.cmu.edu/confluence/display/c/EXP34-C.+Do+not+dereference+null+pointers
 ast-grep-essentials: true
+constraints:
+  FORMAT:
+    matches: percent-s-format
+  OPERAND:
+    regex: ^(?:[A-Za-z_][A-Za-z0-9_]*\s*=\s*)?\(*\s*(?:(?:::\s*|std\s*::\s*)?(?:fgets|fopen|getenv|getgrent|getgrgid|getgrnam|getlogin|getpwent|getpwnam|getpwuid|getpwuuid|gets|inet_ntop|realpath|tempnam|tmpfile|tmpnam|memchr|strcasestr_l|strcasestr|strchr|strnstr|strpbrk|strrchr|strstr|strtok_r|strtok))\s*\)*\s*\(
 utils:
   null-return-call:
     kind: call_expression
     has:
       field: function
-      regex: ^(?:(?:::|std::)?(?:fgets|fopen|getenv|getgrent|getgrgid|getgrnam|getlogin|getpwent|getpwnam|getpwuid|getpwuuid|gets|inet_ntop|realpath|tempnam|tmpfile|tmpnam|memchr|strcasestr_l|strcasestr|strchr|strnstr|strpbrk|strrchr|strstr|strtok_r|strtok))$
+      regex: ^\(*\s*(?:(?:::\s*|std\s*::\s*)?(?:fgets|fopen|getenv|getgrent|getgrgid|getgrnam|getlogin|getpwent|getpwnam|getpwuid|getpwuuid|gets|inet_ntop|realpath|tempnam|tmpfile|tmpnam|memchr|strcasestr_l|strcasestr|strchr|strnstr|strpbrk|strrchr|strstr|strtok_r|strtok))\s*\)*$
   null-return-paren-one:
     kind: parenthesized_expression
     has:
@@ -36,19 +41,31 @@ utils:
     - matches: null-return-call
     - matches: null-return-paren-one
     - matches: null-return-paren-two
-  null-return-assignment:
-    kind: assignment_expression
-    has:
-      field: right
-      matches: null-return-operand
-  unsafe-pointer-operand:
+  percent-s-format:
     any:
-    - matches: null-return-operand
-    - matches: null-return-assignment
-  first-pointer-consumer:
-    regex: ^(?:(?:::|std::)?(?:atof|atoi|atol_l|atol|atoll_l|atoll|getc|fprintf|fgetpos|fseek|fseeko|fsetpos|ftell|ftello|rewind|strlen|strtoimax|strtod|strtol|strtoul|strtoll|strtoq|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy|fwrite))$
-  second-pointer-consumer:
-    regex: ^(?:(?:::|std::)?(?:fprintf|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy))$
+    - matches: percent-s-literal
+    - kind: parenthesized_expression
+      has:
+        stopBy: neighbor
+        matches: percent-s-literal
+    - kind: parenthesized_expression
+      has:
+        stopBy: neighbor
+        kind: parenthesized_expression
+        has:
+          stopBy: neighbor
+          matches: percent-s-literal
+  percent-s-literal:
+    any:
+    - kind: string_literal
+      regex: (?:^|[^%])(?:%%)*%(?:[0-9]+)?(?:\.[0-9]+)?s
+    - kind: raw_string_literal
+      regex: (?:^|[^%])(?:%%)*%(?:[0-9]+)?(?:\.[0-9]+)?s
+    - kind: concatenated_string
+      regex: (?:^|[^%])(?:%%)*%(?:[0-9]+)?(?:\.[0-9]+)?s
+labels:
+  OPERAND:
+    style: secondary
 rule:
   all:
   - not:
@@ -68,48 +85,52 @@ rule:
       has:
         field: argument
         matches: null-return-operand
-    - kind: call_expression
-      all:
+    - all:
+      - pattern:
+          context: void f() { $FPRINTF_ONLY($_, $FORMAT, $OPERAND); }
+          selector: call_expression
       - has:
           field: function
-          matches: first-pointer-consumer
-      - has:
-          field: arguments
-          has:
-            nthChild: 1
-            matches: unsafe-pointer-operand
-    - kind: call_expression
-      all:
+          regex: ^\(*\s*(?:(?:::\s*|std\s*::\s*)?fprintf)\s*\)*$
+    - all:
+      - pattern:
+          context: void f() { $FPRINTF_REST($_, $FORMAT, $OPERAND, $$$REST); }
+          selector: call_expression
       - has:
           field: function
-          matches: second-pointer-consumer
-      - has:
-          field: arguments
-          has:
-            nthChild: 2
-            matches: unsafe-pointer-operand
-    - kind: call_expression
-      all:
+          regex: ^\(*\s*(?:(?:::\s*|std\s*::\s*)?fprintf)\s*\)*$
+    - all:
+      - pattern:
+          context: void f() { $FWRITE($_, $_, $_, $OPERAND); }
+          selector: call_expression
       - has:
           field: function
-          regex: ^(?:(?:::|std::)?fwrite)$
-      - has:
-          field: arguments
-          has:
-            nthChild: 4
-            matches: unsafe-pointer-operand
-    - kind: call_expression
-      all:
+          regex: ^\(*\s*(?:(?:::\s*|std\s*::\s*)?fwrite)\s*\)*$
+    - all:
+      - pattern:
+          context: void f() { $SECOND_ONLY($_, $OPERAND); }
+          selector: call_expression
       - has:
           field: function
-          regex: ^(?:(?:::|std::)?fprintf)$
+          regex: ^\(*\s*(?:(?:::\s*|std\s*::\s*)?(?:fprintf|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy))\s*\)*$
+    - all:
+      - pattern:
+          context: void f() { $SECOND_REST($_, $OPERAND, $$$REST); }
+          selector: call_expression
       - has:
-          field: arguments
-          all:
-          - has:
-              nthChild: 2
-              kind: string_literal
-              regex: '%s'
-          - has:
-              nthChild: 3
-              matches: unsafe-pointer-operand
+          field: function
+          regex: ^\(*\s*(?:(?:::\s*|std\s*::\s*)?(?:fprintf|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy))\s*\)*$
+    - all:
+      - pattern:
+          context: void f() { $FIRST_ONLY($OPERAND); }
+          selector: call_expression
+      - has:
+          field: function
+          regex: ^\(*\s*(?:(?:::\s*|std\s*::\s*)?(?:atof|atoi|atol_l|atol|atoll_l|atoll|getc|fprintf|fgetpos|fseek|fseeko|fsetpos|ftell|ftello|rewind|strlen|strtoimax|strtod|strtol|strtoul|strtoll|strtoq|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy|fwrite))\s*\)*$
+    - all:
+      - pattern:
+          context: void f() { $FIRST_REST($OPERAND, $$$REST); }
+          selector: call_expression
+      - has:
+          field: function
+          regex: ^\(*\s*(?:(?:::\s*|std\s*::\s*)?(?:atof|atoi|atol_l|atol|atoll_l|atoll|getc|fprintf|fgetpos|fseek|fseeko|fsetpos|ftell|ftello|rewind|strlen|strtoimax|strtod|strtol|strtoul|strtoll|strtoq|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy|fwrite))\s*\)*$
