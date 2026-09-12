@@ -160,7 +160,8 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                         'const char *x = "a" "b";', "literal-spacing", language),
                     'const char *x = "a"   "b";')
         for source, language in (('danger(" ")', "python"),
-                                 ('const re = /" "/;', "javascript")):
+                                 ('danger(" ");', "c"),
+                                 ('"a"\n"b"', "python")):
             with self.subTest(source=source), self.assertRaisesRegex(
                     ValueError, "not applicable"):
                 PLAN._metamorphic_source(  # pylint: disable=protected-access

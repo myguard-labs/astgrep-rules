@@ -56,10 +56,11 @@ def syntax_spans(source: str, language: str, kind: str | tuple[str, ...], extens
 
 def literal_gap_spans(source: str, language: str, extension: str, invoke):
     """Return whitespace gaps bounded by two distinct string-literal CST nodes."""
-    kind = "string" if language in {"python", "javascript", "typescript"} else "string_literal"
+    kind = "string" if language == "python" else "string_literal"
     literals = sorted(syntax_spans(source, language, kind, extension, invoke))
     return [(left[1], right[0]) for left, right in pairwise(literals)
-            if source[left[1]:right[0]].isspace()]
+            if source[left[1]:right[0]].isspace()
+            and "\n" not in source[left[1]:right[0]]]
 
 
 def callee_spans(source: str, language: str, extension: str,
