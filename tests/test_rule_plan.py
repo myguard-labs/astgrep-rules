@@ -1,14 +1,14 @@
-from tests.mechanics_test_support import (
-    PLAN,
-    PROBE,
-    ROOT,
-    Path,
-    minimal_plan,
-    patch,
-    tempfile,
-    unittest,
-    yaml,
-)
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import yaml
+
+from tests.mechanics_test_support import ROOT, load_tool, minimal_plan
+
+PLAN = load_tool("rule-plan")
+PROBE = load_tool("rule-probe")
 
 
 class RulePlanTests(unittest.TestCase):
@@ -162,6 +162,9 @@ class RuleRegexMutationTests(unittest.TestCase):
             r"[[:alpha:]|]+|outer": [r"[[:alpha:]|]+", "outer"],
             r"[[.ch.]|]+|outer": [r"[[.ch.]|]+", "outer"],
             r"[[=a=]|]+|outer": [r"[[=a=]|]+", "outer"],
+            r"[a&&[b|c]]+|outer": [r"[a&&[b|c]]+", "outer"],
+            r"[a--[b|c]]+|outer": [r"[a--[b|c]]+", "outer"],
+            r"[a--[b|c]|d]|outer": [r"[a--[b|c]|d]", "outer"],
         }
         for pattern, expected in cases.items():
             with self.subTest(pattern=pattern):

@@ -1,17 +1,18 @@
-from tests.mechanics_test_support import (
-    PLAN,
-    Path,
-    SimpleNamespace,
-    json,
-    minimal_plan,
-    patch,
-    subprocess,
-    sys,
-    tempfile,
-    time,
-    unittest,
-    yaml,
-)
+import json
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import yaml
+
+from tests.mechanics_test_support import load_tool, minimal_plan
+
+PLAN = load_tool("rule-plan")
 
 
 class RulePlanPreflightTests(unittest.TestCase):

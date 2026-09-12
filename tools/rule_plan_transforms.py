@@ -30,6 +30,10 @@ def _lexical_kinds(source: str, language: str) -> list[str]:
         if end is not None:
             kinds[index:end] = ["comment"] * (end - index)
             index = end
+        elif language == "cpp" and source.startswith('R"', index):
+            end = _cpp_raw_end(source, index)
+            kinds[index:end] = ["string"] * (end - index)
+            index = end
         elif source[index] in "'\"`":
             end = _quoted_end(source, index)
             kinds[index:end] = ["string"] * (end - index)
@@ -66,6 +70,15 @@ def _quoted_end(source: str, index: int) -> int:
     while end < len(source) and not source.startswith(delimiter, end):
         end += 2 if source[end] == "\\" else 1
     return min(len(source), end + len(delimiter))
+
+
+def _cpp_raw_end(source: str, index: int) -> int:
+    opening = source.find("(", index + 2)
+    if opening < 0 or opening - index > 18:
+        return index + 1
+    delimiter = source[index + 2:opening]
+    close = source.find(")" + delimiter + '"', opening + 1)
+    return len(source) if close < 0 else close + len(delimiter) + 2
 
 
 def _javascript_regex_end(source: str, index: int) -> int | None:
@@ -276,6 +289,7 @@ def _class_end(pattern: str, index: int) -> int:
         cursor += 1
     if cursor < len(pattern) and pattern[cursor] == "]":
         cursor += 1
+    depth = 1
     while cursor < len(pattern):
         if pattern[cursor] == "\\":
             cursor += 2
@@ -285,8 +299,12 @@ def _class_end(pattern: str, index: int) -> int:
             close = pattern.find(marker + "]", cursor + 2)
             cursor = len(pattern) if close < 0 else close + 2
             continue
+        if pattern[cursor] == "[":
+            depth += 1
         if pattern[cursor] == "]":
-            return cursor + 1
+            depth -= 1
+            if depth == 0:
+                return cursor + 1
         cursor += 1
     return cursor
 

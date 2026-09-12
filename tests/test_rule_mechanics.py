@@ -1,20 +1,20 @@
-from tests.mechanics_test_support import (
-    MECHANICS,
-    PLAN,
-    ROOT,
-    Path,
-    SimpleNamespace,
-    contextlib,
-    io,
-    json,
-    minimal_plan,
-    patch,
-    stat,
-    sys,
-    tempfile,
-    unittest,
-    yaml,
-)
+import contextlib
+import io
+import json
+import stat
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import yaml
+
+from tests.mechanics_test_support import ROOT, load_tool, minimal_plan
+
+PLAN = load_tool("rule-plan")
+MECHANICS = load_tool("rule-mechanics")
 
 
 class RuleMechanicsTests(unittest.TestCase):

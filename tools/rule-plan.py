@@ -456,6 +456,7 @@ def validate_metamorphic(plan: dict, cases: dict[str, list[str]]) -> None:
 
 def _metamorphic_source(
         source: str, transform: str, language: str, context=None) -> str:
+    bound = context is not None
     deadline, telemetry, findings = context or (None, None, None)
     ext = LANGUAGE_EXTENSIONS[language]
     invoke = partial(_syntax_run, deadline=deadline, telemetry=telemetry)
@@ -466,11 +467,8 @@ def _metamorphic_source(
     else:
         kind = SYNTAX.target_kind(transform, language)
         spans = SYNTAX.syntax_spans(source, language, kind, ext, invoke) if kind else None
-    if findings is not None:
-        spans = [span for span in (findings if spans is None else spans) if any(
-            span[0] < end and start < span[1] for start, end in findings)]
-        if transform == "parenthesized" and not findings:
-            raise ValueError(f"metamorphic transform {transform} is not applicable")
+    if bound:
+        spans = SYNTAX.bound_transform_spans(spans, findings, transform)
     return TRANSFORMS.metamorphic_source(source, transform, language, spans)
 
 
@@ -488,14 +486,18 @@ def expanded_cases(plan: dict, cases: dict[str, list[str]], deadline: float | No
     result = {key: list(values) for key, values in cases.items()}
     source_class = {source: key for key, values in cases.items() for source in values}
     for entry in plan.get("metamorphic", []):
+        original_category = source_class[entry["source"]]
         findings = SYNTAX.rule_spans(
             entry["source"], LANGUAGE_EXTENSIONS[plan["language"]],
             render_rule(plan, plan_matcher(plan)), partial(
                 _syntax_run, deadline=deadline, telemetry=telemetry)) if bind_findings else None
+        if (bind_findings and not findings and original_category == "valid"
+                and entry["outcome"] == "different"):
+            findings = None
         transformed = _metamorphic_source(
             entry["source"], entry["transform"], plan["language"],
             (deadline, telemetry, findings))
-        category = source_class[entry["source"]]
+        category = original_category
         if entry["outcome"] == "different":
             category = "valid" if category == "invalid" else "invalid"
         other = "valid" if category == "invalid" else "invalid"
@@ -584,17 +586,17 @@ def run_engine(command: list[str], *, timeout: float,
         except subprocess.TimeoutExpired:
             signal_process_group(process.pid, signal.SIGTERM)
             try:
-                stdout, stderr = process.communicate(timeout=1)
+                process.communicate(timeout=1)
             except subprocess.TimeoutExpired:
-                stdout = stderr = ""
+                pass
             signal_process_group(process.pid, signal.SIGKILL)
-            stdout, stderr = process.communicate()
-            _ = stdout, stderr
+            process.communicate()
             raise
         return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
 def signal_process_group(pid: int, requested_signal: signal.Signals) -> bool:
+    """Signal a process group best-effort; return whether a live group was signalled."""
     try:
         os.killpg(pid, requested_signal)
     except ProcessLookupError:

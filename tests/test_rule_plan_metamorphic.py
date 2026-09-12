@@ -1,13 +1,13 @@
-from tests.mechanics_test_support import (
-    PLAN,
-    ROOT,
-    Path,
-    minimal_plan,
-    patch,
-    tempfile,
-    unittest,
-    yaml,
-)
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import yaml
+
+from tests.mechanics_test_support import ROOT, load_tool, minimal_plan
+
+PLAN = load_tool("rule-plan")
 
 
 class RulePlanMetamorphicTests(unittest.TestCase):
@@ -51,8 +51,9 @@ class RulePlanMetamorphicTests(unittest.TestCase):
             "outcome": "different",
         }])
         _matcher, cases = PLAN.validate_plan(unmatched)
-        with self.assertRaisesRegex(ValueError, "not applicable"):
-            PLAN.expanded_cases(unmatched, cases)
+        self.assertIn("(safe)()", PLAN.expanded_cases(unmatched, cases)["invalid"])
+        with self.assertRaisesRegex(RuntimeError, "CONTRAST_PREFLIGHT_FAILED"):
+            PLAN.preflight(unmatched, _matcher, cases)
 
         for language, source, expected in (
             ("c", "int x='%s'; log(\"%s\", value);",
@@ -298,6 +299,43 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         self.assertEqual(PLAN._metamorphic_source(
             'log(R"tag(%s)tag", value)', "format-width", "cpp"),
             'log(R"tag(%20s)tag", value)')
+
+        raw = 'log(R"tag(quoted \" text \\\\ %s)tag", value)'
+        # White-box assertion covers raw delimiters with quote/backslash content.
+        # pylint: disable-next=protected-access
+        self.assertEqual(PLAN._metamorphic_source(raw, "format-precision", "cpp"),
+                         raw.replace("%s", "%.3s"))
+
+    def test_bound_transforms_require_one_attributable_target(self):
+        ambiguous = minimal_plan(
+            language="c", rule={"pattern": {
+                "context": 'sink("safe", "danger");', "selector": "call_expression",
+            }},
+            cases={"invalid": ['sink("safe", "danger");'], "valid": ["safe();"]},
+            metamorphic=[{
+                "source": 'sink("safe", "danger");',
+                "transform": "literal-concatenation", "outcome": "equivalent",
+            }],
+        )
+        _matcher, cases = PLAN.validate_plan(ambiguous)
+        with self.assertRaisesRegex(ValueError, "one unambiguous target"):
+            PLAN.expanded_cases(ambiguous, cases)
+
+        different = minimal_plan(
+            language="c", rule={"pattern": 'log("%20s", value)'},
+            cases={"invalid": ['log("%20s", value)'],
+                   "valid": ['log("%s", value)']},
+            metamorphic=[{
+                "source": 'log("%s", value)', "transform": "format-width",
+                "outcome": "different",
+            }],
+        )
+        _matcher, cases = PLAN.validate_plan(different)
+        expanded = PLAN.expanded_cases(different, cases)
+        self.assertIn('log("%20s", value)', expanded["invalid"])
+        passed, _detail = PLAN.run_preflight(
+            PLAN.render_rule(different, _matcher), expanded, different["id"])
+        self.assertTrue(passed)
 
     def test_compiled_plan_ir_matches_compatibility_artifacts(self):
         path = ROOT / "plans/python/security/py-tempfile-mktemp.yml"

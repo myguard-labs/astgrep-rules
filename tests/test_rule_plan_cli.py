@@ -1,16 +1,15 @@
-from tests.mechanics_test_support import (
-    MECHANICS,
-    PLAN,
-    ROOT,
-    Path,
-    json,
-    minimal_plan,
-    patch,
-    subprocess,
-    sys,
-    tempfile,
-    unittest,
-)
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from tests.mechanics_test_support import ROOT, load_tool, minimal_plan
+
+PLAN = load_tool("rule-plan")
+MECHANICS = load_tool("rule-mechanics")
 
 
 class RulePlanFixTests(unittest.TestCase):

@@ -1,15 +1,16 @@
-from tests.mechanics_test_support import (
-    CHANGED,
-    ROOT,
-    Path,
-    SimpleNamespace,
-    json,
-    os,
-    patch,
-    tempfile,
-    unittest,
-    yaml,
-)
+import json
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import yaml
+
+from tests.mechanics_test_support import ROOT, load_tool
+
+CHANGED = load_tool("test-changed")
 
 
 class ChangedGateTests(unittest.TestCase):

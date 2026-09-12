@@ -62,6 +62,22 @@ def target_kind(transform: str, language: str) -> str | tuple[str, ...] | None:
     return CST_TARGET_KINDS.get(transform, {}).get(language)
 
 
+def bound_transform_spans(spans, findings, transform: str):
+    """Intersect structural targets with findings and require unique attribution."""
+    if findings is not None:
+        spans = [span for span in (findings if spans is None else spans) if any(
+            span[0] < end and start < span[1] for start, end in findings)]
+    if transform == "parenthesized":
+        if findings == []:
+            raise ValueError(f"metamorphic transform {transform} is not applicable")
+        return spans
+    if not spans:
+        raise ValueError(f"metamorphic transform {transform} is not applicable")
+    if len(spans) != 1:
+        raise ValueError(f"metamorphic transform {transform} requires one unambiguous target")
+    return spans
+
+
 def syntax_spans(source: str, language: str, kind: str | tuple[str, ...], extension: str,
                  invoke) -> list[tuple[int, int]]:
     """Return character spans for full-source CST nodes of one target kind."""
