@@ -930,7 +930,7 @@ def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]],
               deadline: float | None = None) -> PhaseTelemetry:
     """Require contrasts and every selected mutant to fail closed."""
     telemetry = telemetry or PhaseTelemetry()
-    deadline = deadline or perf_counter() + MAX_PREFLIGHT_SECONDS
+    deadline = perf_counter() + MAX_PREFLIGHT_SECONDS if deadline is None else deadline
     expanded = expanded_cases(plan, cases, deadline, telemetry)
     validate_derived_syntax(plan, cases, deadline, telemetry, expanded)
     cases = expanded

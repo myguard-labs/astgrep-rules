@@ -219,6 +219,11 @@ class RulePlanPreflightTests(unittest.TestCase):
              "qualified-name-spacing", "safe();"),
             ("typescript", "if (x) /fake.name/; obj.name;",
              "qualified-name-spacing", "safe();"),
+            ("python", "x = 1.2\nobj.name", "qualified-name-spacing", "safe()"),
+            ("java", "class X { void f(){ double x=1.2; obj.name(); } }",
+             "qualified-name-spacing", "class X {}"),
+            ("php", "<?php $x = 1.2; $obj->name();",
+             "qualified-name-spacing", "<?php safe();"),
             ("php", "$obj?->field;", "member-access-spacing", "$safe->field;"),
             ("javascript", "handlers[key]();", "callee-parenthesized", "safe();"),
             ("python", "handlers[0]()", "callee-parenthesized", "safe()"),
@@ -277,6 +282,14 @@ class RulePlanPreflightTests(unittest.TestCase):
                 self.assertRaisesRegex(RuntimeError, "budget exhausted"):
             PLAN.preflight(
                 plan, matcher, cases, telemetry, deadline=PLAN.perf_counter() - 1)
+        process.assert_not_called()
+        self.assertEqual(telemetry.engine_processes, 0)
+
+        telemetry = PLAN.PhaseTelemetry()
+        with patch.object(PLAN, "run_engine") as process, \
+                self.assertRaisesRegex(RuntimeError, "CONTRAST_PREFLIGHT_FAILED"):
+            PLAN.preflight(minimal_plan(), {"pattern": "danger()"},
+                           minimal_plan()["cases"], telemetry, deadline=0)
         process.assert_not_called()
         self.assertEqual(telemetry.engine_processes, 0)
 

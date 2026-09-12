@@ -106,6 +106,13 @@ class RulePlanMetamorphicTests(unittest.TestCase):
             ('if (x) /fake.name/; obj.name;',
              "qualified-name-spacing", "javascript"):
                 'if (x) /fake.name/; obj . name;',
+            ('x = 1.2\nobj.name', "qualified-name-spacing", "python"):
+                'x = 1.2\nobj . name',
+            ('class X { void f(){ double x=1.2; obj.name(); } }',
+             "qualified-name-spacing", "java"):
+                'class X { void f(){ double x=1.2; obj . name(); } }',
+            ('<?php $x = 1.2; $obj->name();', "qualified-name-spacing", "php"):
+                '<?php $x = 1.2; $obj -> name();',
             ('# $fake->field\n$obj->field;', "member-access-spacing", "php"):
                 '# $fake->field\n$obj -> field;',
             ('void f() { danger(); }', "callee-parenthesized", "cpp"):

@@ -19,6 +19,9 @@ CST_TARGET_KINDS: dict[str, dict[str, str | tuple[str, ...]]] = {
     },
     "qualified-name-spacing": {
         "javascript": "member_expression", "typescript": "member_expression",
+        "python": "attribute", "java": "method_invocation",
+        "php": ("member_call_expression", "member_access_expression",
+                "nullsafe_member_call_expression", "nullsafe_member_access_expression"),
     },
     "member-access-swap": {"c": "field_expression", "cpp": "field_expression"},
 }
