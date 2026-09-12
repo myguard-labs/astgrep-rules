@@ -100,6 +100,12 @@ class RulePlanMetamorphicTests(unittest.TestCase):
             ('function f(){ return /obj.field/; } obj.field;',
              "member-access-spacing", "javascript"):
                 'function f(){ return /obj.field/; } obj . field;',
+            ('function f(){ return /fake.name/; } obj.name;',
+             "qualified-name-spacing", "javascript"):
+                'function f(){ return /fake.name/; } obj . name;',
+            ('if (x) /fake.name/; obj.name;',
+             "qualified-name-spacing", "javascript"):
+                'if (x) /fake.name/; obj . name;',
             ('# $fake->field\n$obj->field;', "member-access-spacing", "php"):
                 '# $fake->field\n$obj -> field;',
             ('void f() { danger(); }', "callee-parenthesized", "cpp"):

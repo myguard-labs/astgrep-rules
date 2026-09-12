@@ -215,6 +215,10 @@ class RulePlanPreflightTests(unittest.TestCase):
              "int value = 1;"),
             ("javascript", "obj.danger()", "callee-parenthesized", "safe();"),
             ("javascript", "obj?.field", "member-access-spacing", "safe();"),
+            ("javascript", "function f(){ return /fake.name/; } obj.name;",
+             "qualified-name-spacing", "safe();"),
+            ("typescript", "if (x) /fake.name/; obj.name;",
+             "qualified-name-spacing", "safe();"),
             ("php", "$obj?->field;", "member-access-spacing", "$safe->field;"),
             ("javascript", "handlers[key]();", "callee-parenthesized", "safe();"),
             ("python", "handlers[0]()", "callee-parenthesized", "safe()"),
@@ -273,6 +277,30 @@ class RulePlanPreflightTests(unittest.TestCase):
                 self.assertRaisesRegex(RuntimeError, "budget exhausted"):
             PLAN.preflight(
                 plan, matcher, cases, telemetry, deadline=PLAN.perf_counter() - 1)
+        process.assert_not_called()
+        self.assertEqual(telemetry.engine_processes, 0)
+
+        telemetry = PLAN.PhaseTelemetry()
+        with patch.object(PLAN, "run_engine") as process:
+            passed, detail = PLAN.run_preflight(
+                "id: sample\n", {"invalid": ["x"], "valid": ["y"]}, "sample",
+                deadline=PLAN.perf_counter() - 1, telemetry=telemetry)
+        self.assertFalse(passed)
+        self.assertIn("budget exhausted", detail)
+        process.assert_not_called()
+        self.assertEqual(telemetry.engine_processes, 0)
+
+        plan = minimal_plan(match={
+            "target": {"kind": "call"},
+            "any": [{"name": "only", "rule": {"pattern": "danger()"},
+                     "witness": "danger()"}],
+        })
+        with patch.object(PLAN, "run_engine") as process, \
+                self.assertRaisesRegex(RuntimeError, "ANY_ARM_PREFLIGHT_ERROR"):
+            # White-box call verifies named-arm accounting before engine launch.
+            # pylint: disable-next=protected-access
+            PLAN._preflight_named_branches(
+                plan, plan["cases"], PLAN.perf_counter() - 1, telemetry)
         process.assert_not_called()
         self.assertEqual(telemetry.engine_processes, 0)
 

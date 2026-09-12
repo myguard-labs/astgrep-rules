@@ -613,7 +613,7 @@ def signal_process_group(pid: int, requested_signal: signal.Signals) -> bool:
 
 
 def run_preflight(rule_text: str, cases: dict[str, list[str]], rule_id: str,
-                  *, deadline: float | None = None) -> tuple[bool, str]:
+                  *, deadline: float | None = None, telemetry=None) -> tuple[bool, str]:
     """Run a bounded isolated upstream fixture suite."""
     started = perf_counter()
     with tempfile.TemporaryDirectory(prefix="rule-plan-") as directory:
@@ -631,6 +631,8 @@ def run_preflight(rule_text: str, cases: dict[str, list[str]], rule_id: str,
             if remaining <= 0:
                 return False, "engine-error=preflight budget exhausted"
         try:
+            if telemetry is not None:
+                telemetry.engine_processes += 1
             result = run_engine(
                 [str(ENGINE), "test", "--include-off", "-c", str(root / "sgconfig.yml"),
                  "--skip-snapshot-tests"], timeout=remaining,
@@ -851,17 +853,15 @@ def _branch_mutant(plan: dict, branches: list[dict], deleted: int) -> dict:
     return compile_match(spec)
 
 
-def _preflight_named_branches(plan: dict, cases: dict[str, list[str]],
-                              deadline: float,
+def _preflight_named_branches(plan: dict, cases: dict[str, list[str]], deadline: float,
                               telemetry: PhaseTelemetry | None = None) -> None:
     branches = named_branches(plan)
     for index, branch in enumerate(branches):
-        if telemetry is not None:
-            telemetry.engine_processes += 1
         mutant = _branch_mutant(plan, branches, index)
         witness = {"invalid": [branch["witness"]], "valid": cases["valid"][:1]}
         survived, detail = run_preflight(
-            render_rule(plan, mutant), witness, plan["id"], deadline=deadline)
+            render_rule(plan, mutant), witness, plan["id"], deadline=deadline,
+            telemetry=telemetry)
         if survived:
             raise RuntimeError(f"ANY_ARM_SURVIVED: {branch['name']}")
         if "engine-error=" in detail:
@@ -934,9 +934,9 @@ def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]],
     expanded = expanded_cases(plan, cases, deadline, telemetry)
     validate_derived_syntax(plan, cases, deadline, telemetry, expanded)
     cases = expanded
-    telemetry.engine_processes += 1
     passed, detail = run_preflight(
-        render_rule(plan, matcher), cases, plan["id"], deadline=deadline)
+        render_rule(plan, matcher), cases, plan["id"], deadline=deadline,
+        telemetry=telemetry)
     if not passed:
         raise RuntimeError(f"CONTRAST_PREFLIGHT_FAILED: {detail}")
     _preflight_named_branches(plan, cases, deadline, telemetry)

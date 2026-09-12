@@ -17,6 +17,9 @@ CST_TARGET_KINDS: dict[str, dict[str, str | tuple[str, ...]]] = {
         "java": "field_access", "go": "selector_expression",
         "php": ("member_access_expression", "nullsafe_member_access_expression"),
     },
+    "qualified-name-spacing": {
+        "javascript": "member_expression", "typescript": "member_expression",
+    },
     "member-access-swap": {"c": "field_expression", "cpp": "field_expression"},
 }
 
