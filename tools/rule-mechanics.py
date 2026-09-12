@@ -8,12 +8,15 @@ import json
 import os
 import re
 import selectors
+import signal
 import stat
 import subprocess
 import sys
 import tempfile
 import time
 from collections import Counter
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -39,6 +42,15 @@ def load_tool(name: str):
 
 SCAFFOLD = load_tool("rule-scaffold")
 PLAN = load_tool("rule-plan")
+
+
+@dataclass(frozen=True)
+class RenderedPlan:
+    plan: Mapping
+    rule_path: Path
+    fixture_path: Path
+    rule_text: str
+    fixture_text: str
 
 
 def plan_paths() -> list[Path]:
@@ -76,21 +88,20 @@ def _compiled_plan_artifacts(path: Path, *, preflight: bool = True, compiled=Non
                   if candidate != rule_path]
     if collisions:
         raise RuntimeError(f"PLAN_ID_COLLISION: {plan['id']}: {collisions[0]}")
-    return compiled, rule_path, fixture_path, rule_text, fixture_text
+    return RenderedPlan(compiled.plan, rule_path, fixture_path, rule_text, fixture_text)
 
 
 def compile_plan(path: Path, *, preflight: bool = True):
     """Compatibility artifact tuple backed by the single compiled plan IR."""
-    _compiled, rule_path, fixture_path, rule_text, fixture_text = \
-        _compiled_plan_artifacts(path, preflight=preflight)
-    return rule_path, fixture_path, rule_text, fixture_text
+    rendered = _compiled_plan_artifacts(path, preflight=preflight)
+    return (rendered.rule_path, rendered.fixture_path, rendered.rule_text,
+            rendered.fixture_text)
 
 
 def scan_rule(rule: dict, source: str, engine: Path = ENGINE) -> list[dict]:
-    result = subprocess.run(
+    result = PLAN.run_engine(
         [str(engine), "scan", "--inline-rules", yaml.safe_dump(rule),
-         "--stdin", "--json=compact"], input=source, text=True,
-        capture_output=True, timeout=20, check=False,
+         "--stdin", "--json=compact"], input_text=source, timeout=20,
     )
     if result.returncode not in (0, 1):
         raise RuntimeError((result.stderr or result.stdout)[-500:])
@@ -152,7 +163,8 @@ def generated_owner(path: Path) -> str | None:
     return None
 
 
-def stale_generated_artifacts(paths: list[Path], artifacts=None) -> list[str]:
+def stale_generated_artifacts(paths: list[Path],
+                              artifacts: dict[Path, RenderedPlan] | None = None) -> list[str]:
     """Find generated artifacts whose owner vanished or no longer targets them."""
     expected = {}
     for plan_path in paths:
@@ -160,7 +172,8 @@ def stale_generated_artifacts(paths: list[Path], artifacts=None) -> list[str]:
             rule_path, fixture_path, _rule, _fixture = compile_plan(
                 plan_path, preflight=False)
         else:
-            _compiled, rule_path, fixture_path, _rule, _fixture = artifacts[plan_path]
+            rule_path = artifacts[plan_path].rule_path
+            fixture_path = artifacts[plan_path].fixture_path
         owner = f"# Generated from: {plan_path.relative_to(ROOT).as_posix()}"
         expected[rule_path.resolve()] = owner
         expected[fixture_path.resolve()] = owner
@@ -173,11 +186,11 @@ def stale_generated_artifacts(paths: list[Path], artifacts=None) -> list[str]:
     return sorted(stale)
 
 
-def validate_plan_id_ownership(paths: list[Path], artifacts=None) -> None:
+def validate_plan_id_ownership(paths: list[Path], compiled_plans=None) -> None:
     """Reject duplicate plan IDs and collisions with handcrafted rules."""
     owners: dict[str, str] = {}
     for plan_path in paths:
-        plan = (artifacts[plan_path][0].plan if artifacts is not None
+        plan = (compiled_plans[plan_path].plan if compiled_plans is not None
                 else PLAN.load_plan(plan_path))
         rule_id = plan["id"]
         if rule_id in owners:
@@ -190,13 +203,16 @@ def validate_plan_id_ownership(paths: list[Path], artifacts=None) -> None:
             raise RuntimeError(f"PLAN_ID_COLLISION: {rule_id}: {collisions[0]}")
 
 
-def _changed_plan_artifacts(paths: list[Path], write: bool, artifacts=None):
+def _changed_plan_artifacts(paths: list[Path], write: bool,
+                            artifacts: dict[Path, RenderedPlan] | None = None):
     drift, updates = [], []
     for path in paths:
         if artifacts is None:
             rule_path, fixture_path, rule_text, fixture_text = compile_plan(path)
         else:
-            _compiled, rule_path, fixture_path, rule_text, fixture_text = artifacts[path]
+            rendered = artifacts[path]
+            rule_path, fixture_path = rendered.rule_path, rendered.fixture_path
+            rule_text, fixture_text = rendered.rule_text, rendered.fixture_text
         owner = f"# Generated from: {path.relative_to(ROOT).as_posix()}"
         for target, content in ((rule_path, rule_text), (fixture_path, fixture_text)):
             if target.is_file() and target.read_text(encoding="utf-8") == content:
@@ -217,12 +233,12 @@ def _write_plan_artifacts(updates: list[tuple[Path, str, str]]) -> None:
 
 
 def validate_plan_fixes(paths: list[Path], rendered_rules: dict[Path, str] | None = None,
-                        artifacts=None) -> int:
+                        artifacts: dict[Path, RenderedPlan] | None = None) -> int:
     """Validate every exact fixed-output oracle owned by canonical plans."""
     checked = 0
     with tempfile.TemporaryDirectory(prefix="rule-plan-fixes-") as directory:
         for plan_path in paths:
-            plan = (artifacts[plan_path][0].plan if artifacts is not None
+            plan = (artifacts[plan_path].plan if artifacts is not None
                     else PLAN.load_plan(plan_path))
             if "fix" not in plan:
                 continue
@@ -247,8 +263,7 @@ def validate_plan_fixes(paths: list[Path], rendered_rules: dict[Path, str] | Non
 def _plans_command(write: bool) -> int:
     paths = plan_paths()
     compiled = {path: PLAN.compile_plan_ir(path, run_checks=False) for path in paths}
-    ownership = {path: (value,) for path, value in compiled.items()}
-    validate_plan_id_ownership(paths, ownership)
+    validate_plan_id_ownership(paths, compiled)
     artifacts = {
         path: _compiled_plan_artifacts(path, compiled=value)
         for path, value in compiled.items()
@@ -346,9 +361,9 @@ def validate_fix(rule_path: Path, source: str, expected: str | None = None,
         target = Path(directory) / f"source.{extension}"
         target.write_text(source, encoding="utf-8")
         before = target.read_text(encoding="utf-8")
-        result = subprocess.run([str(ENGINE), "scan", "--rule", str(rule_path),
-                                 "--update-all", str(target)], text=True,
-                                capture_output=True, timeout=20, check=False)
+        result = PLAN.run_engine(
+            [str(ENGINE), "scan", "--rule", str(rule_path),
+             "--update-all", str(target)], timeout=20)
         if result.returncode not in (0, 1):
             raise RuntimeError(f"FIX_FAILED: {rule['id']}: {result.stderr[-400:]}")
         after = target.read_text(encoding="utf-8")
@@ -358,15 +373,14 @@ def validate_fix(rule_path: Path, source: str, expected: str | None = None,
             raise RuntimeError(f"FIX_OUTPUT_MISMATCH: {rule['id']}")
         if scan_rule(rule, after):
             raise RuntimeError(f"FIX_RETAINS_FINDING: {rule['id']}")
-        second = subprocess.run([str(ENGINE), "scan", "--rule", str(rule_path),
-                                 "--update-all", str(target)], text=True,
-                                capture_output=True, timeout=20, check=False)
+        second = PLAN.run_engine(
+            [str(ENGINE), "scan", "--rule", str(rule_path),
+             "--update-all", str(target)], timeout=20)
         if second.returncode not in (0, 1) or target.read_text(encoding="utf-8") != after:
             raise RuntimeError(f"FIX_NOT_IDEMPOTENT: {rule['id']}")
-        parse = subprocess.run(
+        parse = PLAN.run_engine(
             [str(ENGINE), "run", "-l", rule["language"], "-p", after,
-             "--debug-query=sexp", "--stdin"], input="", text=True,
-            capture_output=True, timeout=20, check=False,
+             "--debug-query=sexp", "--stdin"], input_text="", timeout=20,
         )
         tree = parse.stdout + parse.stderr
         if parse.returncode not in (0, 1) or re.search(r"\((?:ERROR|MISSING)\b", tree):
@@ -403,7 +417,8 @@ def fixes_command(rule_id: str | None, skip_planned: bool = False) -> int:
 def bounded_scan_output(command: list[str], timeout: float = 300) -> bytes:
     """Capture engine JSON while enforcing a hard output-byte ceiling."""
     with tempfile.TemporaryFile() as errors:
-        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors) as process:
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors,
+                              start_new_session=True) as process:
             output = bytearray()
             assert process.stdout is not None
             deadline = time.monotonic() + timeout
@@ -412,7 +427,7 @@ def bounded_scan_output(command: list[str], timeout: float = 300) -> bytes:
                 while True:
                     remaining = deadline - time.monotonic()
                     if remaining <= 0 or not selector.select(remaining):
-                        process.kill()
+                        PLAN.signal_process_group(process.pid, signal.SIGKILL)
                         process.wait(timeout=10)
                         raise RuntimeError(f"scan exceeded {timeout:g} seconds")
                     chunk = os.read(process.stdout.fileno(), 64 * 1024)
@@ -420,13 +435,13 @@ def bounded_scan_output(command: list[str], timeout: float = 300) -> bytes:
                         break
                     output.extend(chunk)
                     if len(output) > MAX_SCAN_OUTPUT_BYTES:
-                        process.kill()
+                        PLAN.signal_process_group(process.pid, signal.SIGKILL)
                         process.wait(timeout=10)
                         raise RuntimeError(f"scan output exceeds {MAX_SCAN_OUTPUT_BYTES} bytes")
             try:
                 returncode = process.wait(timeout=max(0.1, deadline - time.monotonic()))
             except subprocess.TimeoutExpired as error:
-                process.kill()
+                PLAN.signal_process_group(process.pid, signal.SIGKILL)
                 process.wait(timeout=10)
                 raise RuntimeError(f"scan exceeded {timeout:g} seconds") from error
         errors.seek(0)

@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -58,7 +59,7 @@ METAMORPHIC_LANGUAGES = {
     "format-precision": {"c", "cpp", "go"},
     "qualified-name": {"c", "cpp"},
     "member-access-swap": {"c", "cpp"},
-    "literal-concatenation": {"c", "cpp", "java", "javascript", "python", "typescript"},
+    "literal-concatenation": {"c", "cpp", "python"},
 }
 
 
@@ -66,9 +67,9 @@ METAMORPHIC_LANGUAGES = {
 class CompiledPlan:
     """One validated plan representation shared by every downstream phase."""
 
-    plan: dict
-    matcher: dict
-    cases: dict[str, list[str]]
+    plan: Mapping[str, object]
+    matcher: Mapping[str, object]
+    cases: Mapping[str, object]
     rule_text: str
     fixture_text: str
 
@@ -78,6 +79,8 @@ def _deep_freeze(value):
         return MappingProxyType({key: _deep_freeze(child) for key, child in value.items()})
     if isinstance(value, list):
         return tuple(_deep_freeze(child) for child in value)
+    if isinstance(value, set):
+        return frozenset(_deep_freeze(child) for child in value)
     return value
 
 
@@ -87,6 +90,8 @@ def thaw(value):
         return {key: thaw(child) for key, child in value.items()}
     if isinstance(value, tuple):
         return [thaw(child) for child in value]
+    if isinstance(value, frozenset):
+        return {thaw(child) for child in value}
     return copy.deepcopy(value)
 
 
@@ -431,6 +436,8 @@ def validate_claims(plan: dict, cases: dict[str, list[str]]) -> None:
     claims = plan.get("claims", {})
     if not isinstance(claims, dict):
         raise TypeError("claims must be a mapping of syntactic dimensions")
+    if any(not isinstance(dimension, str) for dimension in claims):
+        raise ValueError("claim dimension names must be strings")
     unknown = sorted(set(claims) - CLAIM_DIMENSIONS)
     if unknown:
         raise ValueError("claims are syntax-only; unsupported dimensions: "
@@ -477,6 +484,8 @@ def validate_metamorphic(plan: dict, cases: dict[str, list[str]]) -> None:
     for entry in entries:
         if not isinstance(entry, dict) or set(entry) != {"source", "transform", "outcome"}:
             raise ValueError("metamorphic entries require source, transform and outcome")
+        if any(not isinstance(entry[key], str) for key in ("source", "transform", "outcome")):
+            raise ValueError("metamorphic source, transform and outcome must be strings")
         identity = (entry["source"], entry["transform"])
         if (entry["source"] not in known
                 or entry["transform"] not in METAMORPHIC_TRANSFORMS
@@ -573,15 +582,16 @@ def validate_derived_syntax(plan: dict, cases: dict[str, list[str]], deadline: f
                             telemetry: PhaseTelemetry) -> None:
     """Reject derived cases containing parser error or missing nodes."""
     originals = set(cases["valid"] + cases["invalid"])
-    for source in expanded_cases(plan, cases)["valid"] + expanded_cases(plan, cases)["invalid"]:
+    derived = expanded_cases(plan, cases)
+    for source in derived["valid"] + derived["invalid"]:
         if source in originals:
             continue
         telemetry.engine_processes += 1
         try:
-            result = _engine_run(
-                [str(ENGINE), "run", "-l", plan["language"], "-p", "$_",
+            result = run_engine(
+                [str(ENGINE), "run", "-l", plan["language"], "-p", source,
                  "--debug-query=sexp", "--stdin"],
-                input_text=source, timeout=_remaining(deadline))
+                input_text="", timeout=_remaining(deadline))
         except (OSError, subprocess.TimeoutExpired, RuntimeError) as error:
             raise RuntimeError(f"METAMORPHIC_PARSE_ERROR: {error}") from error
         tree = result.stdout + result.stderr
@@ -637,8 +647,8 @@ def render_fixture(plan: dict, cases: dict[str, list[str]]) -> str:
     return yaml.dump(fixture, sort_keys=False, width=1000, allow_unicode=True)
 
 
-def _engine_run(command: list[str], *, timeout: float,
-                input_text: str | None = None) -> subprocess.CompletedProcess:
+def run_engine(command: list[str], *, timeout: float,
+               input_text: str | None = None) -> subprocess.CompletedProcess:
     """Run one engine process and terminate its complete group on timeout."""
     with subprocess.Popen(
             command, stdin=subprocess.PIPE if input_text is not None else None,
@@ -647,17 +657,19 @@ def _engine_run(command: list[str], *, timeout: float,
         try:
             stdout, stderr = process.communicate(input=input_text, timeout=timeout)
         except subprocess.TimeoutExpired:
-            _signal_process_group(process.pid, signal.SIGTERM)
+            signal_process_group(process.pid, signal.SIGTERM)
             try:
                 stdout, stderr = process.communicate(timeout=1)
             except subprocess.TimeoutExpired:
-                _signal_process_group(process.pid, signal.SIGKILL)
-                stdout, stderr = process.communicate()
+                stdout = stderr = ""
+            signal_process_group(process.pid, signal.SIGKILL)
+            stdout, stderr = process.communicate()
+            _ = stdout, stderr
             raise
         return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
-def _signal_process_group(pid: int, requested_signal: signal.Signals) -> bool:
+def signal_process_group(pid: int, requested_signal: signal.Signals) -> bool:
     try:
         os.killpg(pid, requested_signal)
     except ProcessLookupError:
@@ -684,7 +696,7 @@ def run_preflight(rule_text: str, cases: dict[str, list[str]], rule_id: str,
             if remaining <= 0:
                 return False, "engine-error=preflight budget exhausted"
         try:
-            result = _engine_run(
+            result = run_engine(
                 [str(ENGINE), "test", "--include-off", "-c", str(root / "sgconfig.yml"),
                  "--skip-snapshot-tests"], timeout=remaining,
             )
@@ -710,6 +722,53 @@ def _remaining(deadline: float) -> float:
     return remaining
 
 
+def _materialize_mutants(root: Path, items: list[tuple[str, str]],
+                         cases: dict[str, list[str]], rule_id: str):
+    (root / "rules").mkdir()
+    (root / "tests").mkdir()
+    id_to_path, malformed = {}, {}
+    for index, (path, rule_text) in enumerate(items):
+        mutant_id = f"{rule_id}-mutant-{index}"
+        try:
+            rule = yaml.safe_load(rule_text)
+        except yaml.YAMLError as error:
+            malformed[path] = ("invalid", str(error)[:600])
+            continue
+        if not isinstance(rule, dict):
+            malformed[path] = ("invalid", "mutant rule is not a mapping")
+            continue
+        rule["id"] = mutant_id
+        (root / "rules" / f"{mutant_id}.yml").write_text(
+            yaml.safe_dump(rule, sort_keys=False), encoding="utf-8")
+        (root / "tests" / f"{mutant_id}.yml").write_text(
+            yaml.safe_dump({"id": mutant_id, **cases}, sort_keys=False),
+            encoding="utf-8")
+        id_to_path[mutant_id] = path
+    (root / "sgconfig.yml").write_text(
+        "ruleDirs: [rules]\ntestConfigs: [{testDir: tests}]\n", encoding="utf-8")
+    return id_to_path, malformed
+
+
+def _batch_error(paths, malformed, detail: str):
+    outcomes = {path: ("error", detail) for path in paths}
+    outcomes.update(malformed)
+    return outcomes
+
+
+def _classify_mutant_batch(result, id_to_path, malformed):
+    output = result.stdout + result.stderr
+    if result.returncode != 0 and "Error: test failed." not in output:
+        return None
+    failed_ids = set(re.findall(r"^FAIL\s+(\S+)", output, flags=re.MULTILINE))
+    outcomes = {
+        path: (("killed", "test-failure") if mutant_id in failed_ids
+               else ("survived", "ok"))
+        for mutant_id, path in id_to_path.items()
+    }
+    outcomes.update(malformed)
+    return outcomes
+
+
 def _run_mutant_batch(items: list[tuple[str, str]], cases: dict[str, list[str]],
                       rule_id: str, deadline: float,
                       telemetry: PhaseTelemetry) -> dict[str, tuple[str, str]]:
@@ -719,60 +778,24 @@ def _run_mutant_batch(items: list[tuple[str, str]], cases: dict[str, list[str]],
     started = perf_counter()
     with tempfile.TemporaryDirectory(prefix="rule-plan-mutants-") as directory:
         root = Path(directory)
-        (root / "rules").mkdir()
-        (root / "tests").mkdir()
-        id_to_path = {}
-        malformed = {}
-        for index, (path, rule_text) in enumerate(items):
-            mutant_id = f"{rule_id}-mutant-{index}"
-            try:
-                rule = yaml.safe_load(rule_text)
-            except yaml.YAMLError as error:
-                malformed[path] = ("invalid", str(error)[:600])
-                continue
-            if not isinstance(rule, dict):
-                malformed[path] = ("invalid", "mutant rule is not a mapping")
-                continue
-            rule["id"] = mutant_id
-            (root / "rules" / f"{mutant_id}.yml").write_text(
-                yaml.safe_dump(rule, sort_keys=False), encoding="utf-8")
-            (root / "tests" / f"{mutant_id}.yml").write_text(
-                yaml.safe_dump({"id": mutant_id, **cases}, sort_keys=False),
-                encoding="utf-8")
-            id_to_path[mutant_id] = path
+        id_to_path, malformed = _materialize_mutants(root, items, cases, rule_id)
         if not id_to_path:
             return malformed
-        (root / "sgconfig.yml").write_text(
-            "ruleDirs: [rules]\ntestConfigs: [{testDir: tests}]\n", encoding="utf-8")
         try:
             remaining = _remaining(deadline)
         except RuntimeError:
-            exhausted = {
-                path: ("error", "engine-error=preflight budget exhausted")
-                for path in id_to_path.values()
-            }
-            exhausted.update(malformed)
-            return exhausted
+            return _batch_error(id_to_path.values(), malformed,
+                                "engine-error=preflight budget exhausted")
         telemetry.engine_processes += 1
         try:
-            result = _engine_run(
+            result = run_engine(
                 [str(ENGINE), "test", "--include-off", "-c", str(root / "sgconfig.yml"),
                  "--skip-snapshot-tests"], timeout=remaining)
         except (OSError, subprocess.TimeoutExpired) as error:
-            detail = f"engine-error={error}"
-            errors = {path: ("error", detail) for path in id_to_path.values()}
-            errors.update(malformed)
-            return errors
+            return _batch_error(id_to_path.values(), malformed, f"engine-error={error}")
     telemetry.wall_ms += int((perf_counter() - started) * 1000)
-    output = result.stdout + result.stderr
-    failed_ids = set(re.findall(r"^FAIL\s+(\S+)", output, flags=re.MULTILINE))
-    if result.returncode == 0 or "Error: test failed." in output:
-        outcomes = {
-            path: (("killed", "test-failure") if mutant_id in failed_ids
-                   else ("survived", "ok"))
-            for mutant_id, path in id_to_path.items()
-        }
-        outcomes.update(malformed)
+    outcomes = _classify_mutant_batch(result, id_to_path, malformed)
+    if outcomes is not None:
         return outcomes
     if len(items) > 1:
         middle = len(items) // 2
@@ -780,6 +803,7 @@ def _run_mutant_batch(items: list[tuple[str, str]], cases: dict[str, list[str]],
             **_run_mutant_batch(items[:middle], cases, rule_id, deadline, telemetry),
             **_run_mutant_batch(items[middle:], cases, rule_id, deadline, telemetry),
         }
+    output = result.stdout + result.stderr
     detail = " | ".join(output.splitlines()[-6:])[:600]
     kind = "invalid" if "file is not a valid ast-grep rule" in output else "error"
     return {**malformed, items[0][0]: (kind, detail)}
@@ -798,10 +822,11 @@ def _qualified_pattern_mutations(pattern: str):
     yield "member", f"{receiver}.$_({arguments})"
 
 
-def _regex_alternatives(pattern: str) -> list[str]:
+def _regex_alternatives(pattern: str, *, verbose: bool = False) -> list[str]:
     """Split only top-level regex alternatives, preserving all syntax verbatim."""
+    scan = _mask_verbose_comments(pattern) if verbose or "(?x" in pattern else pattern
     parts, start, depth, escaped, in_class = [], 0, 0, False, False
-    for index, character in enumerate(pattern):
+    for index, character in enumerate(scan):
         escaped, in_class, depth, separator = _regex_state(
             character, escaped, in_class, depth)
         if separator:
@@ -809,6 +834,27 @@ def _regex_alternatives(pattern: str) -> list[str]:
             start = index + 1
     parts.append(pattern[start:])
     return parts if len(parts) > 1 and all(parts) else []
+
+
+def _mask_verbose_comments(pattern: str) -> str:
+    output, escaped, in_class, in_comment = [], False, False, False
+    for character in pattern:
+        if in_comment:
+            output.append("\n" if character == "\n" else " ")
+            in_comment = character != "\n"
+        else:
+            output.append(character)
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == "[":
+                in_class = True
+            elif character == "]":
+                in_class = False
+            elif character == "#" and not in_class:
+                in_comment = True
+    return "".join(output)
 
 
 def _regex_state(character: str, escaped: bool, in_class: bool,
@@ -835,11 +881,12 @@ def _regex_alternative_mutations(pattern: str):
     if not alternatives:
         grouped = re.fullmatch(
             r"(\^?(?:\(\?:|\(\?[A-Za-z-]+:|\())(.+)"
-            r"(\)(?:[?+*]|\{\d+(?:,\d*)?\})?\$?)",
+            r"(\)(?:(?:[?+*]|\{\d+(?:,\d*)?\})\??)?\$?)",
             pattern, flags=re.DOTALL)
         if grouped:
             prefix, body, suffix = grouped.groups()
-            alternatives = _regex_alternatives(body)
+            verbose = prefix.startswith("(?") and "x" in prefix.partition(":")[0]
+            alternatives = _regex_alternatives(body, verbose=verbose)
     for index in range(len(alternatives)):
         remaining = "|".join(
             part for part_index, part in enumerate(alternatives)

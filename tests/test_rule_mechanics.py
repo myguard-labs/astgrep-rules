@@ -191,15 +191,34 @@ class RulePlanTests(unittest.TestCase):
 
     def test_grouped_regex_alternatives_preserve_anchors_and_wrapper(self):
         cases = {
-            "^(?:open|read|write)$": "^(?:read|write)$",
-            "^(?i:open|read)+$": "^(?i:read)+$",
-            "(open|read){2}": "(read){2}",
+            "^(?:open|read|write)$": ("^(?:read|write)$", 3),
+            "^(?i:open|read)+$": ("^(?i:read)+$", 2),
+            "(open|read){2}": ("(read){2}", 2),
+            "(open|read){2,4}?": ("(read){2,4}?", 2),
+            "(?x:open # ignored | bar\n|read)": ("(?x:read)", 2),
         }
-        for pattern, expected in cases.items():
+        for pattern, (expected, expected_count) in cases.items():
             with self.subTest(pattern=pattern):
                 mutations = dict(PLAN.mutation_candidates({"regex": pattern}))
                 self.assertEqual(
                     mutations["rule.regex-alternative[0]-deleted"]["regex"], expected)
+                alternative_keys = [key for key in mutations if "regex-alternative" in key]
+                self.assertEqual(len(alternative_keys), expected_count)
+
+    def test_grouped_regex_mutants_are_engine_valid_with_exact_text(self):
+        mutations = dict(PLAN.mutation_candidates({"regex": "^(?:open|read|write)$"}))
+        rows = (("^(?:read|write)$", "read"), ("^(?:open|write)$", "open"),
+                ("^(?:open|read)$", "open"))
+        for index, (expected, witness) in enumerate(rows):
+            regex = mutations[f"rule.regex-alternative[{index}]-deleted"]["regex"]
+            self.assertEqual(regex, expected)
+            rule = yaml.safe_dump({
+                "id": f"regex-{index}", "language": "python", "message": "x",
+                "severity": "warning", "rule": {"kind": "identifier", "regex": regex},
+            })
+            passed, detail = PLAN.run_preflight(
+                rule, {"invalid": [witness], "valid": ["closed"]}, f"regex-{index}")
+            self.assertTrue(passed, detail)
 
     def test_claim_matrix_requires_each_pairwise_combination(self):
         plan = minimal_plan(
@@ -219,6 +238,8 @@ class RulePlanTests(unittest.TestCase):
             PLAN.validate_plan(minimal_plan(claims={"runtime-type": {"file": ["danger()"]}}))
         with self.assertRaisesRegex(ValueError, "non-invalid witnesses"):
             PLAN.validate_plan(minimal_plan(claims={"api": {"safe": ["safe()"]}}))
+        with self.assertRaisesRegex(ValueError, "dimension names must be strings"):
+            PLAN.validate_plan(minimal_plan(claims={1: {"api": ["danger()"]}}))
 
     def test_declared_metamorphic_cases_preserve_or_change_outcome(self):
         plan = minimal_plan(metamorphic=[
@@ -244,12 +265,11 @@ class RulePlanTests(unittest.TestCase):
         _matcher, cases = PLAN.validate_plan(plan)
         with self.assertRaisesRegex(ValueError, "not applicable"):
             PLAN.expanded_cases(plan, cases)
-        with self.assertRaisesRegex(ValueError, "does not support bash"):
-            PLAN.validate_plan(minimal_plan(
-                language="bash", metamorphic=[{
-                    "source": "danger()", "transform": "member-access-swap",
-                    "outcome": "equivalent",
-                }]))
+        with self.assertRaisesRegex(ValueError, "must be strings"):
+            PLAN.validate_plan(minimal_plan(metamorphic=[{
+                "source": ["danger()"], "transform": "parenthesized",
+                "outcome": "equivalent",
+            }]))
         with self.assertRaisesRegex(ValueError, "does not support bash"):
             PLAN.validate_plan(minimal_plan(language="bash", metamorphic=[
                 {"source": "danger()", "transform": "member-access-swap",
@@ -270,25 +290,21 @@ class RulePlanTests(unittest.TestCase):
                 self.assertEqual(PLAN._metamorphic_source(source, transform), expected)
 
     def test_format_transforms_skip_escaped_percent_and_existing_fields(self):
-        self.assertEqual(
-            PLAN._metamorphic_source('log("%% %s", value)', "format-width"),
-            'log("%% %20s", value)',
-        )
-        for source, transform in (("%20s", "format-width"), ("%.2s", "format-precision")):
-            with self.subTest(transform=transform), \
+        transformed = [
+            ('log("%% literal: %s", value)', "format-width",
+             'log("%% literal: %20s", value)'),
+            ('log("%%%s", value)', "format-precision", 'log("%%%.3s", value)'),
+        ]
+        for source, transform, expected in transformed:
+            with self.subTest(source=source, transform=transform):
+                self.assertEqual(PLAN._metamorphic_source(source, transform), expected)
+        unchanged = [("%20s", "format-width"), ("%*s", "format-width"),
+                     ("%.2s", "format-precision"), ("%.*s", "format-precision"),
+                     ("%%", "format-width")]
+        for source, transform in unchanged:
+            with self.subTest(source=source, transform=transform), \
                     self.assertRaisesRegex(ValueError, "not applicable"):
                 PLAN._metamorphic_source(source, transform)
-
-    def test_format_transform_skips_escaped_percent_and_existing_fields(self):
-        source = 'log("%% literal: %s", value)'
-        self.assertEqual(
-            PLAN._metamorphic_source(source, "format-width"),
-            'log("%% literal: %20s", value)',
-        )
-        with self.assertRaisesRegex(ValueError, "not applicable"):
-            PLAN._metamorphic_source('log("%8s", value)', "format-width")
-        with self.assertRaisesRegex(ValueError, "not applicable"):
-            PLAN._metamorphic_source('log("%.4s", value)', "format-precision")
 
     def test_compiled_plan_ir_matches_compatibility_artifacts(self):
         path = ROOT / "plans/python/security/py-tempfile-mktemp.yml"
@@ -304,6 +320,15 @@ class RulePlanTests(unittest.TestCase):
             ir.plan["cases"]["invalid"][0] = "changed()"
         with self.assertRaises(TypeError):
             ir.matcher["kind"] = "identifier"
+
+    def test_compiled_plan_ir_freezes_yaml_sets_and_thaws_compatibly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "plan.yml"
+            path.write_text(yaml.safe_dump(minimal_plan(
+                extensions={"tags": {"one", "two"}})), encoding="utf-8")
+            ir = PLAN.compile_plan_ir(path, run_checks=False)
+        self.assertIsInstance(ir.plan["extensions"]["tags"], frozenset)
+        self.assertEqual(PLAN.thaw(ir.plan)["extensions"]["tags"], {"one", "two"})
 
     def test_relation_only_mutants_are_not_counted_as_kills(self):
         matcher = {"all": [{"kind": "call"}, {"not": {"has": {"kind": "string"}}}]}
@@ -361,7 +386,7 @@ class RulePlanTests(unittest.TestCase):
 
     def test_exhausted_preflight_budget_fails_before_engine_run(self):
         with patch.object(PLAN, "perf_counter", side_effect=[5.0, 6.0]), \
-                patch.object(PLAN, "_engine_run") as run:
+                patch.object(PLAN, "run_engine") as run:
             passed, detail = PLAN.run_preflight(
                 "id: sample\n", {"invalid": ["x"], "valid": ["y"]}, "sample",
                 deadline=5.5,
@@ -392,7 +417,7 @@ class RulePlanTests(unittest.TestCase):
                                        "message": "x", "severity": "warning",
                                        "rule": {"pattern": "danger()"}})),
         ]
-        with patch.object(PLAN, "_engine_run", return_value=result) as run:
+        with patch.object(PLAN, "run_engine", return_value=result) as run:
             outcomes = PLAN._run_mutant_batch(
                 rules, {"invalid": ["danger()"], "valid": ["safe()"]},
                 "sample", float("inf"), telemetry)
@@ -407,7 +432,7 @@ class RulePlanTests(unittest.TestCase):
             "id": "sample", "language": "python", "message": "x", "severity": "warning",
             "rule": {"pattern": "danger()"},
         })
-        with patch.object(PLAN, "_engine_run", return_value=result) as run:
+        with patch.object(PLAN, "run_engine", return_value=result) as run:
             PLAN._run_mutant_batch(
                 [("one", rule), ("two", rule)],
                 {"invalid": ["danger()"], "valid": ["safe()"]},
@@ -423,7 +448,7 @@ class RulePlanTests(unittest.TestCase):
             "id": "sample", "language": "python", "message": "x", "severity": "warning",
             "rule": {"pattern": "danger()"},
         })
-        with patch.object(PLAN, "_engine_run",
+        with patch.object(PLAN, "run_engine",
                           side_effect=[load_error, passed, load_error]):
             outcomes = PLAN._run_mutant_batch(
                 [("valid", valid_rule), ("invalid", yaml.safe_dump({
@@ -449,24 +474,66 @@ class RulePlanTests(unittest.TestCase):
         ])
         matcher, cases = PLAN.validate_plan(plan)
         malformed = SimpleNamespace(returncode=0, stdout="(ERROR)", stderr="")
-        with patch.object(PLAN, "_engine_run", return_value=malformed), \
+        with patch.object(PLAN, "run_engine", return_value=malformed), \
                 patch.object(PLAN, "run_preflight") as contrast, \
                 self.assertRaisesRegex(RuntimeError, "METAMORPHIC_PARSE_ERROR"):
             PLAN.preflight(plan, matcher, cases)
         contrast.assert_not_called()
 
+    def test_metamorphic_parser_checks_actual_derived_cst(self):
+        good = minimal_plan(metamorphic=[
+            {"source": "danger()", "transform": "parenthesized", "outcome": "equivalent"},
+        ])
+        _matcher, good_cases = PLAN.validate_plan(good)
+        PLAN.validate_derived_syntax(
+            good, good_cases, float("inf"), PLAN.PhaseTelemetry())
+
+        bad = minimal_plan(
+            cases={"invalid": ["danger("], "valid": ["safe()"]},
+            metamorphic=[
+                {"source": "danger(", "transform": "parenthesized",
+                 "outcome": "equivalent"},
+            ],
+        )
+        _matcher, bad_cases = PLAN.validate_plan(bad)
+        with self.assertRaisesRegex(RuntimeError, "METAMORPHIC_PARSE_ERROR"):
+            PLAN.validate_derived_syntax(
+                bad, bad_cases, float("inf"), PLAN.PhaseTelemetry())
+
+    def test_literal_concatenation_is_limited_to_adjacent_literal_grammars(self):
+        for language in ("javascript", "typescript", "java"):
+            with self.subTest(language=language), \
+                    self.assertRaisesRegex(ValueError, f"does not support {language}"):
+                PLAN.validate_plan(minimal_plan(language=language, metamorphic=[{
+                    "source": "danger()", "transform": "literal-concatenation",
+                    "outcome": "equivalent",
+                }]))
+
     def test_engine_timeout_terminates_descendant_process_group(self):
         with tempfile.TemporaryDirectory() as directory:
             child_pid = Path(directory) / "child.pid"
+            ready = Path(directory) / "ready"
+            child_program = (
+                "import pathlib,signal,time; "
+                "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+                f"pathlib.Path({str(ready)!r}).write_text('ready', encoding='utf-8'); "
+                "time.sleep(60)"
+            )
             program = (
                 "import pathlib,subprocess,sys,time; "
-                "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); "
-                f"pathlib.Path({str(child_pid)!r}).write_text(str(child.pid)); "
+                f"child=subprocess.Popen([sys.executable,'-c',{child_program!r}], "
+                "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
+                f"ready=pathlib.Path({str(ready)!r}); "
+                "deadline=time.monotonic()+2; "
+                "exec(\"while not ready.exists() and time.monotonic() < deadline:\\n"
+                " time.sleep(0.01)\"); "
+                f"pathlib.Path({str(child_pid)!r}).write_text(str(child.pid), encoding='utf-8'); "
                 "time.sleep(60)"
             )
             with self.assertRaises(subprocess.TimeoutExpired):
-                PLAN._engine_run([sys.executable, "-c", program], timeout=0.2)
-            pid = int(child_pid.read_text())
+                PLAN.run_engine([sys.executable, "-c", program], timeout=0.5)
+            self.assertTrue(ready.is_file())
+            pid = int(child_pid.read_text(encoding="utf-8"))
             status = Path(f"/proc/{pid}/status")
             for _attempt in range(100):
                 if (not status.exists()
@@ -546,10 +613,16 @@ class RulePlanCliTests(unittest.TestCase):
                 text=True, capture_output=True, check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            report = json.loads(telemetry.read_text())
+            report = json.loads(telemetry.read_text(encoding="utf-8"))
         self.assertEqual(report["version"], 1)
         self.assertEqual(report["plan"], "py-tempfile-mktemp")
-        self.assertGreaterEqual(report["counts"]["engine_processes"], 2)
+        self.assertEqual(report["counts"], {
+            "engine_processes": 2,
+            "mutants": 9,
+            "survived": 4,
+            "invalid": 0,
+            "errors": 0,
+        })
         self.assertIn("preflight", report["wall_clock_ms_informational"])
 
     def test_rule_plan_help_is_clean(self):
@@ -637,19 +710,21 @@ class RuleMechanicsTests(unittest.TestCase):
                     patch.object(MECHANICS, "validate_plan_id_ownership"), \
                     patch.object(MECHANICS.PLAN, "compile_plan_ir",
                                  return_value=SimpleNamespace(plan=minimal_plan())), \
-                    patch.object(MECHANICS, "_compiled_plan_artifacts", return_value=(
-                        SimpleNamespace(plan=minimal_plan()), rule_path, fixture_path,
-                        generated, generated)):
+                    patch.object(MECHANICS, "_compiled_plan_artifacts", return_value=
+                                 MECHANICS.RenderedPlan(
+                                     minimal_plan(), rule_path,
+                                     fixture_path, generated, generated)):
                 MECHANICS.plans_command(True)
 
     def test_regeneration_validates_candidate_fixes_before_writing(self):
         target = ROOT / "rules/python/security/py-sample.yml"
         updates = [(target, "id: py-sample\n", "owner")]
-        artifacts = (SimpleNamespace(plan=minimal_plan()), target, target,
-                     "id: py-sample\n", "id: py-sample\n")
+        compiled = SimpleNamespace(plan=minimal_plan())
+        artifacts = MECHANICS.RenderedPlan(
+            minimal_plan(), target, target, "id: py-sample\n", "id: py-sample\n")
         with patch.object(MECHANICS, "plan_paths", return_value=[Path("plan.yml")]), \
                 patch.object(MECHANICS.PLAN, "compile_plan_ir",
-                             return_value=artifacts[0]), \
+                             return_value=compiled), \
                 patch.object(MECHANICS, "_compiled_plan_artifacts",
                              return_value=artifacts), \
                 patch.object(MECHANICS, "validate_plan_id_ownership"), \
@@ -721,7 +796,7 @@ class RuleMechanicsTests(unittest.TestCase):
                 return SimpleNamespace(returncode=0, stdout="", stderr="")
 
             with self.assertRaisesRegex(RuntimeError, "FIX_OUTPUT_MISMATCH"), \
-                    patch.object(MECHANICS.subprocess, "run", side_effect=run), \
+                    patch.object(MECHANICS.PLAN, "run_engine", side_effect=run), \
                     patch.object(MECHANICS, "scan_rule", return_value=[]):
                 MECHANICS.validate_fix(rule, "danger()", "different()")
 
