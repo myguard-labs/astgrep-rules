@@ -6,6 +6,7 @@ import io
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -247,6 +248,8 @@ class RulePlanTests(unittest.TestCase):
             PLAN.preflight(plan, matcher, cases)
         self.assertEqual(preflight.call_count, 3)
 
+
+class RulePlanFixTests(unittest.TestCase):
     def test_fixer_requires_fixed_oracle_on_invalid_source(self):
         plan = minimal_plan(
             fix="safe()",
@@ -263,6 +266,26 @@ class RulePlanTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "every invalid source"):
             PLAN.validate_plan(plan)
+
+
+class RulePlanCliTests(unittest.TestCase):
+    def test_rule_plan_help_is_clean(self):
+        result = subprocess.run(
+            [sys.executable, ROOT / "tools/rule-plan.py", "--help"],
+            text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("usage:", result.stdout)
+        self.assertIn("PLAN.yml", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_readme_documents_the_actual_plan_commands_and_guides(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertNotIn("rule-scaffold.py --plan", readme)
+        self.assertNotIn("docs/complex-rules.md", readme)
+        for text in ("python3 tools/rule-plan.py", "npm run generate:check",
+                     "npm run generate", "docs/authoring.md", "plans/README.md"):
+            self.assertIn(text, readme)
 
 
 class RuleMechanicsTests(unittest.TestCase):
@@ -437,6 +460,20 @@ class RuleMechanicsTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "corpus exceeds 0 files"):
                     MECHANICS.normalized_findings(Path("engine"), Path("config"), Path(directory))
                 engine_run.assert_not_called()
+
+    def test_normalized_findings_rejects_non_list_json(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(MECHANICS, "bounded_scan_output", return_value=b"{}"), \
+                self.assertRaisesRegex(TypeError, "expected a finding list"):
+            MECHANICS.normalized_findings(
+                Path("engine"), Path("config"), Path(directory))
+
+    def test_normalized_findings_rejects_malformed_entry(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(MECHANICS, "bounded_scan_output", return_value=b"[{}]"), \
+                self.assertRaisesRegex(RuntimeError, "malformed.*finding"):
+            MECHANICS.normalized_findings(
+                Path("engine"), Path("config"), Path(directory))
 
     def test_scan_output_bound_terminates_oversized_output(self):
         with patch.object(MECHANICS, "MAX_SCAN_OUTPUT_BYTES", 10), \

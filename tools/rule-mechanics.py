@@ -385,6 +385,27 @@ def bounded_scan_output(command: list[str], timeout: float = 300) -> bytes:
     return bytes(output)
 
 
+def _normalize_finding(finding, root: Path) -> tuple:
+    """Validate and normalize one compact ast-grep finding."""
+    try:
+        if not isinstance(finding, dict):
+            raise TypeError
+        rule_id = finding["ruleId"]
+        file_name = finding["file"]
+        byte_offset = finding["range"]["byteOffset"]
+        start, end = byte_offset["start"], byte_offset["end"]
+        if not isinstance(rule_id, str) or not isinstance(file_name, str):
+            raise TypeError
+        if any(not isinstance(value, int) or isinstance(value, bool)
+               for value in (start, end)):
+            raise TypeError
+        relative = Path(file_name).resolve().relative_to(root).as_posix()
+    except (KeyError, OSError, TypeError, ValueError) as error:
+        raise RuntimeError("malformed or escaped differential finding") from error
+    return (rule_id, relative, start, end, finding.get("text"),
+            finding.get("message"), finding.get("severity"))
+
+
 def normalized_findings(engine: Path, config: Path, corpus: Path) -> list[tuple]:
     files = [path for path in corpus.rglob("*") if path.is_file()]
     if len(files) > MAX_FILES:
@@ -396,21 +417,16 @@ def normalized_findings(engine: Path, config: Path, corpus: Path) -> list[tuple]
         [str(engine), "scan", "-c", str(config), "--json=compact", "--threads", "1",
          "--max-results", str(MAX_FINDINGS + 1), str(corpus)],
     )
-    findings = json.loads(output or b"[]")
+    try:
+        findings = json.loads(output or b"[]")
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise RuntimeError("invalid scan JSON") from error
+    if not isinstance(findings, list):
+        raise TypeError("invalid scan JSON: expected a finding list")
     if len(findings) > MAX_FINDINGS:
         raise RuntimeError(f"scan exceeds {MAX_FINDINGS} findings")
     root = corpus.resolve()
-    normalized = []
-    for finding in findings:
-        try:
-            relative = Path(finding["file"]).resolve().relative_to(root).as_posix()
-        except (KeyError, OSError, ValueError) as error:
-            raise RuntimeError("finding path escaped differential corpus") from error
-        normalized.append((finding["ruleId"], relative,
-                           finding["range"]["byteOffset"]["start"],
-                           finding["range"]["byteOffset"]["end"], finding.get("text"),
-                           finding.get("message"), finding.get("severity")))
-    return sorted(normalized)
+    return sorted(_normalize_finding(finding, root) for finding in findings)
 
 
 def baseline_command(config: Path, corpus: Path, expected: Path, write: bool) -> int:

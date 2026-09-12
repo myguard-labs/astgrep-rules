@@ -10,13 +10,19 @@ message: >-
   the specific errors you can handle.
 note: >-
   Fires on a clause with no exception type. A bare clause that re-raises with
-  an unconditional direct bare `raise` is the documented cleanup idiom and
-  does not match; later statements are unreachable. A clause that raises a
-  different exception replaces KeyboardInterrupt or SystemExit and does match.
-  PEP 760 proposed removing this form from the language.
+  a direct bare `raise`, and contains no return or competing non-bare raise, is
+  treated as the documented cleanup idiom. This conservative syntax check does
+  not prove control flow. A clause that can return or raise a different
+  exception still matches. PEP 760 proposed removing this form from the
+  language.
 utils:
   terminal-bare-reraise:
     regex: '^raise$'
+  nonbare-raise:
+    all:
+      - kind: raise_statement
+      - not:
+          regex: '^raise$'
 rule:
   all:
     - kind: except_clause
@@ -27,8 +33,17 @@ rule:
     - not:
         has:
           kind: block
-          has:
-            matches: terminal-bare-reraise
+          all:
+            - has:
+                matches: terminal-bare-reraise
+            - not:
+                has:
+                  kind: return_statement
+                  stopBy: end
+            - not:
+                has:
+                  matches: nonbare-raise
+                  stopBy: end
 cases:
   valid:
     - |
@@ -57,6 +72,13 @@ cases:
           f()
       except:
           cleanup()
+          raise
+    - |
+      try:
+          f()
+      except:
+          if debug:
+              log.debug("reraising")
           raise
     - |
       try:
@@ -93,6 +115,19 @@ cases:
       try:
           f()
       except:
+          raise RuntimeError("failed")
+          raise
+    - |
+      try:
+          f()
+      except:
+          if debug:
+              raise RuntimeError("failed")
+          raise
+    - |
+      try:
+          f()
+      except:
           log.info("ignored")
     - |
       try:
@@ -114,6 +149,18 @@ cases:
               if item.bad:
                   raise
           log.info("ignored")
+    - |
+      try:
+          f()
+      except:
+          if handled:
+              return
+          raise
+          log.info("unreachable only on the raise path")
+mutation_exclusions:
+  rule.all[2].not.has.kind: >-
+    The except clause's handler is its only direct child, so the surrounding
+    has relation already selects the block and makes this kind redundant.
 oracles:
   ? |
     try:

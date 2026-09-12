@@ -110,8 +110,8 @@ The generator checks the plan's structure, references, bindings, and expected
 matches before writing files. `generate:check` catches differences between
 plans and generated files, checks exact expected results, and rejects matcher
 or utility mutations that the tests fail to detect. The
-[plan guide](docs/authoring.md#generate-from-a-canonical-plan)
-explains the format.
+[authoring guide](docs/authoring.md#generate-from-a-canonical-plan) and
+[plan README](plans/README.md) explain the format and workflow.
 
 For deeper checks, `tools/rule-mechanics.py` can suggest transformed test cases
 with `metamorph PLAN`, test fixes with `validate-fixes`, and compare two engine

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compile and preflight one canonical ast-grep rule plan."""
 
+import argparse
 import re
 import subprocess
 import sys
@@ -598,10 +599,11 @@ def compile_plan(path: Path, *, run_checks=True) -> tuple[dict, dict, str, str]:
     return plan, matcher, rule_text, fixture_text
 
 
-def main() -> int:
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: rule-plan.py PLAN.yml")
-    plan, _, _, _ = compile_plan(Path(sys.argv[1]))
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("plan", metavar="PLAN.yml", type=Path)
+    args = parser.parse_args(argv)
+    plan, _, _, _ = compile_plan(args.plan)
     print(f"plan ok: {plan['id']}")
     return 0
 

@@ -31,6 +31,13 @@ valid:
 - |
   try:
       f()
+  except:
+      if debug:
+          log.debug("reraising")
+      raise
+- |
+  try:
+      f()
   except ValueError:
       pass
 - |
@@ -63,6 +70,19 @@ invalid:
   try:
       f()
   except:
+      raise RuntimeError("failed")
+      raise
+- |
+  try:
+      f()
+  except:
+      if debug:
+          raise RuntimeError("failed")
+      raise
+- |
+  try:
+      f()
+  except:
       log.info("ignored")
 - |
   try:
@@ -84,3 +104,11 @@ invalid:
           if item.bad:
               raise
       log.info("ignored")
+- |
+  try:
+      f()
+  except:
+      if handled:
+          return
+      raise
+      log.info("unreachable only on the raise path")
