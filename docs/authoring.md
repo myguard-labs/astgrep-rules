@@ -1,5 +1,8 @@
 # Authoring rules
 
+The ongoing active-rule and rejected-candidate workflow is defined in the
+[rule refinement plan](rule-refinement-plan.md).
+
 Checked against ast-grep 0.45.3 on 2026-09-06. The linked upstream pages are
 living references; the lockfile and fixtures define this repository's baseline.
 
