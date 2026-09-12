@@ -39,11 +39,13 @@ rule:
             - not:
                 has:
                   kind: return_statement
-                  stopBy: end
+                  stopBy:
+                    kind: function_definition
             - not:
                 has:
                   matches: nonbare-raise
-                  stopBy: end
+                  stopBy:
+                    kind: function_definition
 cases:
   valid:
     - |
@@ -98,6 +100,15 @@ cases:
           raise
           # a comment must not hide a direct unconditional re-raise
           log.info("still unreachable")
+    - |
+      try:
+          f()
+      except:
+          def helper():
+              if done:
+                  return
+              raise RuntimeError("helper failed")
+          raise
   invalid:
     - |
       try:
@@ -157,6 +168,13 @@ cases:
               return
           raise
           log.info("unreachable only on the raise path")
+    - |
+      try:
+          f()
+      except:
+          class Cleanup:
+              raise RuntimeError("class body failed")
+          raise
 mutation_exclusions:
   rule.all[2].not.has.kind: >-
     The except clause's handler is its only direct child, so the surrounding

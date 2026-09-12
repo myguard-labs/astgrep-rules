@@ -506,6 +506,21 @@ class RuleMechanicsTests(unittest.TestCase):
             MECHANICS.normalized_findings(
                 Path("engine"), Path("config"), Path(directory))
 
+    def test_normalized_finding_rejects_invalid_byte_ranges(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            target = root / "sample.py"
+            target.write_text("x", encoding="utf-8")
+            for start, end in ((-1, 0), (2, 1)):
+                finding = {
+                    "ruleId": "sample",
+                    "file": str(target),
+                    "range": {"byteOffset": {"start": start, "end": end}},
+                }
+                with self.subTest(start=start, end=end), \
+                        self.assertRaisesRegex(RuntimeError, "malformed.*finding"):
+                    MECHANICS._normalize_finding(finding, root)
+
     def test_scan_output_bound_terminates_oversized_output(self):
         with patch.object(MECHANICS, "MAX_SCAN_OUTPUT_BYTES", 10), \
                 self.assertRaisesRegex(RuntimeError, "scan output exceeds"):

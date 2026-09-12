@@ -53,6 +53,15 @@ valid:
       raise
       # a comment must not hide a direct unconditional re-raise
       log.info("still unreachable")
+- |
+  try:
+      f()
+  except:
+      def helper():
+          if done:
+              return
+          raise RuntimeError("helper failed")
+      raise
 invalid:
 - |
   try:
@@ -112,3 +121,10 @@ invalid:
           return
       raise
       log.info("unreachable only on the raise path")
+- |
+  try:
+      f()
+  except:
+      class Cleanup:
+          raise RuntimeError("class body failed")
+      raise

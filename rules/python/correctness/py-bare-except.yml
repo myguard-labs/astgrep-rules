@@ -37,8 +37,10 @@ rule:
         - not:
             has:
               kind: return_statement
-              stopBy: end
+              stopBy:
+                kind: function_definition
         - not:
             has:
               matches: nonbare-raise
-              stopBy: end
+              stopBy:
+                kind: function_definition

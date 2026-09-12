@@ -410,8 +410,9 @@ def _normalize_finding(finding, root: Path) -> tuple:
         start, end = byte_offset["start"], byte_offset["end"]
         if not isinstance(rule_id, str) or not isinstance(file_name, str):
             raise TypeError
-        if any(not isinstance(value, int) or isinstance(value, bool)
-               for value in (start, end)):
+        if (any(not isinstance(value, int) or isinstance(value, bool)
+                for value in (start, end))
+                or start < 0 or end < start):
             raise TypeError
         relative = Path(file_name).resolve().relative_to(root).as_posix()
     except (KeyError, OSError, TypeError, ValueError) as error:
