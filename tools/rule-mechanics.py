@@ -21,6 +21,7 @@ ENGINE = ROOT / "node_modules" / ".bin" / "ast-grep"
 MAX_FILES = 20_000
 MAX_FINDINGS = 100_000
 MAX_CORPUS_BYTES = 256 * 1024 * 1024
+DIFFERENTIAL_ROOT = ROOT / "tests" / "differential" / "v1"
 
 
 def load_tool(name: str):
@@ -116,6 +117,14 @@ def write_atomic(path: Path, content: str) -> None:
             temporary.unlink(missing_ok=True)
 
 
+def generated_owner(path: Path) -> str | None:
+    """Return only a first-line ownership marker; embedded comments do not own files."""
+    if not path.is_file():
+        return None
+    first = path.read_text(encoding="utf-8").splitlines()[:1]
+    return first[0] if first and first[0].startswith("# Generated from: ") else None
+
+
 def plans_command(write: bool) -> int:
     paths = plan_paths()
     drift = []
@@ -127,7 +136,7 @@ def plans_command(write: bool) -> int:
                 drift.append(target.relative_to(ROOT).as_posix())
                 if write:
                     owner = f"# Generated from: {path.relative_to(ROOT).as_posix()}\n"
-                    if target.exists() and owner not in target.read_text(encoding="utf-8"):
+                    if target.exists() and generated_owner(target) != owner.rstrip("\n"):
                         raise RuntimeError(f"refusing to overwrite non-generated {target}")
                     updates.append((target, content))
     if write:
@@ -135,7 +144,7 @@ def plans_command(write: bool) -> int:
             for target, content in updates:
                 owner = next(line for line in content.splitlines()
                              if line.startswith("# Generated from: ")) + "\n"
-                if target.exists() and owner not in target.read_text(encoding="utf-8"):
+                if target.exists() and generated_owner(target) != owner.rstrip("\n"):
                     raise RuntimeError(f"refusing to overwrite non-generated {target}")
                 write_atomic(target, content)
             count_changed = sync_diagnostic_count(True, {path.stem for path in paths})
@@ -203,10 +212,10 @@ def validate_fix(rule_path: Path, source: str, expected: str | None = None) -> N
     rule = yaml.safe_load(rule_path.read_text(encoding="utf-8"))
     if "fix" not in rule:
         return
-    extension = {
-        "python": "py", "javascript": "js", "bash": "sh", "c": "c", "go": "go",
-        "java": "java", "php": "php", "lua": "lua", "cpp": "cpp",
-    }[rule["language"]]
+    try:
+        extension = PLAN.LANGUAGE_EXTENSIONS[rule["language"]]
+    except KeyError as error:
+        raise RuntimeError(f"unsupported fixer language: {rule['language']}") from error
     with tempfile.TemporaryDirectory(prefix="rule-fix-") as directory:
         target = Path(directory) / f"source.{extension}"
         target.write_text(source, encoding="utf-8")
@@ -279,10 +288,38 @@ def normalized_findings(engine: Path, config: Path, corpus: Path) -> list[tuple]
     findings = json.loads(result.stdout or "[]")
     if len(findings) > MAX_FINDINGS:
         raise RuntimeError(f"scan exceeds {MAX_FINDINGS} findings")
-    return sorted((finding["ruleId"], finding["file"],
-                   finding["range"]["byteOffset"]["start"],
-                   finding["range"]["byteOffset"]["end"], finding.get("text"),
-                   finding.get("message"), finding.get("severity")) for finding in findings)
+    root = corpus.resolve()
+    normalized = []
+    for finding in findings:
+        try:
+            relative = Path(finding["file"]).resolve().relative_to(root).as_posix()
+        except (KeyError, OSError, ValueError) as error:
+            raise RuntimeError("finding path escaped differential corpus") from error
+        normalized.append((finding["ruleId"], relative,
+                           finding["range"]["byteOffset"]["start"],
+                           finding["range"]["byteOffset"]["end"], finding.get("text"),
+                           finding.get("message"), finding.get("severity")))
+    return sorted(normalized)
+
+
+def baseline_command(config: Path, corpus: Path, expected: Path, write: bool) -> int:
+    """Check or refresh a versioned normalized finding baseline."""
+    findings = [list(finding) for finding in normalized_findings(ENGINE, config, corpus)]
+    observed = {"version": 1, "findings": findings}
+    rendered = json.dumps(observed, indent=2, ensure_ascii=False) + "\n"
+    if write:
+        write_atomic(expected, rendered)
+        print(f"updated differential baseline with {len(findings)} finding(s)")
+        return 0
+    try:
+        wanted = json.loads(expected.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"cannot read differential baseline: {error}") from error
+    if wanted != observed:
+        print(json.dumps({"expected": wanted, "observed": observed}, indent=1), file=sys.stderr)
+        return 1
+    print(f"verified differential baseline with {len(findings)} finding(s)")
+    return 0
 
 
 def differential_command(old: Path, new: Path, config: Path, corpus: Path) -> int:
@@ -314,6 +351,12 @@ def main() -> int:
     diff.add_argument("--new-engine", type=Path, default=ENGINE)
     diff.add_argument("--config", type=Path, default=ROOT / "sgconfig.yml")
     diff.add_argument("--corpus", type=Path, required=True)
+    for name in ("corpus-check", "corpus-update"):
+        baseline = sub.add_parser(name)
+        baseline.add_argument("--config", type=Path, default=ROOT / "sgconfig.yml")
+        baseline.add_argument("--corpus", type=Path, default=DIFFERENTIAL_ROOT / "corpus")
+        baseline.add_argument("--expected", type=Path,
+                              default=DIFFERENTIAL_ROOT / "expected.json")
     args = parser.parse_args()
     if args.command == "check-plans":
         return plans_command(False)
@@ -323,6 +366,9 @@ def main() -> int:
         return metamorph_command(args.plan)
     if args.command == "validate-fixes":
         return fixes_command(args.rule_id)
+    if args.command in ("corpus-check", "corpus-update"):
+        return baseline_command(args.config, args.corpus, args.expected,
+                                args.command == "corpus-update")
     return differential_command(args.old_engine, args.new_engine, args.config, args.corpus)
 
 

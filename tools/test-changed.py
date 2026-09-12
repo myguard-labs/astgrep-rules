@@ -57,11 +57,10 @@ def main() -> int:
         run([sys.executable, "tools/rule-mechanics.py", "validate-fixes"])
         print("fast gate escalated to full suite for infrastructure changes")
         return 0
-    # The focused probes below enforce the same per-rule arm mutation contract
-    # without running the repository-wide arm inventory for every rule edit.
-    modules = [f"tests.{path.stem}" for path in sorted((ROOT / "tests").glob("test_*.py"))
-               if path.name not in {"test_arm_coverage.py", "test_powershell_parser.py"}]
-    run([sys.executable, "-m", "unittest", *modules])
+    # Inventory enforces whole-pack layout, IDs, fixtures, snapshots and docs.
+    # Each focused probe then enforces that rule's diagnostics, exact counts,
+    # discovery and arm mutations without rescanning every rule in the pack.
+    run([sys.executable, "-m", "unittest", "tests.test_inventory"])
     run([sys.executable, "tools/rule-mechanics.py", "check-plans"])
     ids = rule_ids(paths)
     for rule_id in ids:

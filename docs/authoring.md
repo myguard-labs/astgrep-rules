@@ -57,10 +57,10 @@ an optional custom parser and remains outside this generic isolated workflow.
 
 ## Generate from a canonical plan
 
-For rules that benefit from repeatable mechanical construction, keep a v1 plan
-at `plans/<language>/<category>/<id>.yml`. A plan owns the corresponding rule
-and fixture, records positive and negative contrasts, and can pin exact JSON
-oracles for ranges, text, diagnostics, labels, or fixed output.
+For native-language rules that benefit from repeatable mechanical construction,
+keep a v1 plan at `plans/<language>/<category>/<id>.yml`. A plan owns the
+corresponding rule and fixture, records positive and negative contrasts, and
+can pin exact JSON oracles for ranges, text, diagnostics, labels, or fixed output.
 
 ```bash
 python3 tools/rule-plan.py plans/python/security/py-tempfile-mktemp.yml
@@ -78,6 +78,9 @@ Use `python3 tools/rule-mechanics.py metamorph PLAN` to emit bounded lookalike
 and boundary candidates for review. Candidates deliberately have no invented
 expected result. Use `differential` with two engine binaries and a bounded local
 corpus to compare normalized, duplicate-sensitive findings across upgrades.
+The versioned `tests/differential/v1` corpus runs in `test:mechanics`; after an
+intentional engine or rule behavior change, inspect the JSON delta before using
+`corpus-update` to accept the new baseline.
 
 ## Define the claim
 

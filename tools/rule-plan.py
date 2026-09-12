@@ -12,7 +12,13 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE = ROOT / "node_modules" / ".bin" / "ast-grep"
-LANGUAGES = ("go", "c", "php", "python", "javascript", "java", "lua", "bash")
+LANGUAGE_EXTENSIONS = {
+    "bash": "sh", "c": "c", "cpp": "cpp", "csharp": "cs", "go": "go",
+    "html": "html", "java": "java", "javascript": "js", "kotlin": "kt",
+    "lua": "lua", "php": "php", "python": "py", "ruby": "rb", "rust": "rs",
+    "scala": "scala", "swift": "swift", "typescript": "ts",
+}
+LANGUAGES = tuple(LANGUAGE_EXTENSIONS)
 CATEGORIES = ("security", "correctness")
 MAX_MUTATIONS = 256
 UTILITY_ID = re.compile(r"^[a-z][a-z0-9-]*$")
@@ -345,6 +351,20 @@ def mutation_candidates(value, path="rule"):
     """Yield deterministic claim-weakening mutations with stable paths."""
     if isinstance(value, dict):
         for key, child in value.items():
+            if key == "pattern" and isinstance(child, str):
+                qualified = re.fullmatch(
+                    r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)",
+                    child,
+                    flags=re.DOTALL,
+                )
+                if qualified:
+                    receiver, member, arguments = qualified.groups()
+                    for identity, pattern in (
+                            ("receiver", f"$_.{member}({arguments})"),
+                            ("member", f"{receiver}.$_({arguments})")):
+                        mutant = dict(value)
+                        mutant[key] = pattern
+                        yield f"{path}.pattern-{identity}", mutant
             if key in {"field", "stopBy", "kind", "nthChild", "ofRule", "inside", "has",
                        "follows", "precedes", "not"} and len(value) > 1:
                 mutant = dict(value)

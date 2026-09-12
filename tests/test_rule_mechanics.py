@@ -26,6 +26,7 @@ def load_tool(name):
 PLAN = load_tool("rule-plan")
 MECHANICS = load_tool("rule-mechanics")
 CHANGED = load_tool("test-changed")
+PROBE = load_tool("rule-probe")
 
 
 def minimal_plan(**updates):
@@ -44,6 +45,14 @@ def minimal_plan(**updates):
 
 
 class RulePlanTests(unittest.TestCase):
+    def test_plan_and_probe_cover_every_native_rule_language(self):
+        configured = {
+            path.name for path in (ROOT / "rules").iterdir()
+            if path.is_dir() and path.name != "powershell"
+        }
+        self.assertEqual(set(PLAN.LANGUAGE_EXTENSIONS), configured)
+        self.assertEqual(PROBE.EXTENSIONS, PLAN.LANGUAGE_EXTENSIONS)
+
     def test_repository_plan_compiles_and_passes_preflight(self):
         path = ROOT / "plans/python/security/py-tempfile-mktemp.yml"
         plan, matcher, rule, fixture = PLAN.compile_plan(path)
@@ -84,6 +93,16 @@ class RulePlanTests(unittest.TestCase):
         with patch.object(PLAN, "run_preflight", return_value=(True, "ok")), \
                 self.assertRaisesRegex(RuntimeError, "MUTATION_SURVIVED"):
             PLAN.preflight(plan, matcher, cases)
+
+    def test_qualified_call_patterns_mutate_receiver_and_member(self):
+        mutations = dict(PLAN.mutation_candidates(
+            {"pattern": "tempfile.mktemp($$$ARGS)"}))
+        self.assertEqual(
+            set(mutations),
+            {"rule.pattern-receiver", "rule.pattern-member"},
+        )
+        self.assertEqual(mutations["rule.pattern-receiver"]["pattern"],
+                         "$_.mktemp($$$ARGS)")
 
     def test_two_named_branches_reach_both_witness_preflights(self):
         plan = minimal_plan(
@@ -151,6 +170,15 @@ class RuleMechanicsTests(unittest.TestCase):
                                  return_value=(rule_path, fixture_path, generated, generated)):
                 MECHANICS.plans_command(True)
 
+    def test_embedded_generation_marker_does_not_claim_ownership(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "rule.yml"
+            path.write_text(
+                "id: hand-authored\n# Generated from: plans/python/security/claimed.yml\n",
+                encoding="utf-8",
+            )
+            self.assertIsNone(MECHANICS.generated_owner(path))
+
     def test_fix_output_mismatch_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             rule = Path(directory) / "fix.yml"
@@ -209,6 +237,18 @@ class RuleMechanicsTests(unittest.TestCase):
             self.assertEqual(status, 1)
             self.assertEqual(report["removed"][0]["count"], 1)
 
+    def test_versioned_corpus_rejects_behavior_drift(self):
+        finding = ("rule", "sample.py", 0, 1, "x", "message", "warning")
+        with tempfile.TemporaryDirectory() as directory:
+            expected = Path(directory) / "expected.json"
+            expected.write_text(json.dumps({"version": 1, "findings": []}),
+                                encoding="utf-8")
+            with patch.object(MECHANICS, "normalized_findings", return_value=[finding]), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                status = MECHANICS.baseline_command(
+                    Path("config"), Path("corpus"), expected, False)
+            self.assertEqual(status, 1)
+
     def test_corpus_file_bound_fails_before_engine_run(self):
         with tempfile.TemporaryDirectory() as directory:
             (Path(directory) / "a.py").write_text("x")
@@ -233,6 +273,18 @@ class ChangedGateTests(unittest.TestCase):
         self.assertTrue(CHANGED.requires_full_suite(["tools/rule-plan.py"]))
         self.assertTrue(CHANGED.requires_full_suite(["tests/test_inventory.py"]))
         self.assertFalse(CHANGED.requires_full_suite(["rules/python/security/py-one.yml"]))
+
+    def test_focused_gate_runs_inventory_and_each_changed_probe(self):
+        paths = ["rules/python/security/py-one.yml"]
+        with patch.object(CHANGED, "rule_ids", return_value=["py-one"]), \
+                patch.object(CHANGED, "run") as run, \
+                patch.object(Path, "glob", return_value=iter([Path("rule.yml")])), \
+                patch("sys.argv", ["test-changed.py", *paths]):
+            self.assertEqual(CHANGED.main(), 0)
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertIn([CHANGED.sys.executable, "-m", "unittest", "tests.test_inventory"],
+                      commands)
+        self.assertIn([CHANGED.sys.executable, "tools/rule-probe.py", "py-one"], commands)
 
     def test_change_discovery_includes_deletions(self):
         result = SimpleNamespace(returncode=0, stdout="tests/test_removed.py\n", stderr="")
