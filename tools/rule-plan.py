@@ -26,7 +26,7 @@ PLAN_KEYS = {
     "version", "id", "language", "category", "severity", "message", "note",
     "source", "match", "rule", "utils", "constraints", "labels", "fix",
     "transform", "rewriters", "files", "ignores", "url", "metadata", "cases",
-    "archetype", "mutation_limit", "oracles",
+    "archetype", "mutation_limit", "oracles", "comments", "extensions",
 }
 RULE_CONFIG_KEYS = (
     "constraints", "utils", "transform", "fix", "rewriters", "labels", "files",
@@ -71,6 +71,21 @@ def load_plan(path: Path) -> dict:
     return plan
 
 
+def _validate_comments_extensions(plan: dict) -> None:
+    """Validate generated comments and non-native top-level rule keys."""
+    comments = plan.get("comments", [])
+    if (not isinstance(comments, list)
+            or any(not isinstance(item, str) or not item.strip() or "\n" in item
+                   for item in comments)):
+        raise ValueError("comments must be single-line non-empty strings")
+    extensions = plan.get("extensions", {})
+    reserved = {"id", "language", "severity", "message", "note", "rule", *RULE_CONFIG_KEYS}
+    if (not isinstance(extensions, dict)
+            or any(not isinstance(key, str) or not key or key in reserved
+                   for key in extensions)):
+        raise ValueError("extensions must use non-reserved string keys")
+
+
 def validate_header(plan: dict) -> None:
     """Validate required metadata and bounded mutation settings."""
     required = ("id", "language", "category", "message", "note", "cases")
@@ -89,6 +104,7 @@ def validate_header(plan: dict) -> None:
     limit = plan.get("mutation_limit", MAX_MUTATIONS)
     if not isinstance(limit, int) or isinstance(limit, bool) or not 0 <= limit <= MAX_MUTATIONS:
         raise ValueError(f"mutation_limit must be from 0 through {MAX_MUTATIONS}")
+    _validate_comments_extensions(plan)
 
 
 def validate_cases(data) -> dict[str, list[str]]:
@@ -109,30 +125,39 @@ def validate_cases(data) -> dict[str, list[str]]:
     return result
 
 
+def _validate_named_branch(value: dict) -> str:
+    if set(value) != {"name", "rule", "witness"}:
+        raise ValueError("named match.any branch has invalid shape")
+    name, rule, witness = value["name"], value["rule"], value["witness"]
+    if not isinstance(name, str) or not UTILITY_ID.fullmatch(name):
+        raise ValueError("named match.any branch has invalid shape")
+    if not isinstance(rule, dict) or not rule:
+        raise ValueError("named match.any branch has invalid shape")
+    if not isinstance(witness, str) or not witness:
+        raise ValueError("named match.any branch has invalid shape")
+    return name
+
+
+def _validate_named_branches(values: list[dict]) -> None:
+    rich = [bool({"name", "rule", "witness"} & set(value)) for value in values]
+    if not all(rich):
+        raise ValueError("match.any cannot mix named and unnamed branches")
+    if len(values) < 2:
+        raise ValueError("named match.any needs at least two branches")
+    names = [_validate_named_branch(value) for value in values]
+    if len(names) != len(set(names)):
+        raise ValueError("match.any branch names must be unique")
+
+
 def _rule_list(spec: dict, key: str) -> list[dict]:
     values = spec.get(key, [])
     if not isinstance(values, list) or any(not isinstance(value, dict) or not value
                                            for value in values):
         raise ValueError(f"match.{key} must be a list of non-empty rule mappings")
-    if key != "any" or not values:
-        return values
-    rich = [any(field in value for field in ("name", "rule", "witness")) for value in values]
-    if any(rich) and not all(rich):
-        raise ValueError("match.any cannot mix named and unnamed branches")
-    if all(rich):
-        if len(values) < 2:
-            raise ValueError("named match.any needs at least two branches")
-        names = []
-        for value in values:
-            if (set(value) != {"name", "rule", "witness"}
-                    or not isinstance(value["name"], str)
-                    or not UTILITY_ID.fullmatch(value["name"])
-                    or not isinstance(value["rule"], dict) or not value["rule"]
-                    or not isinstance(value["witness"], str) or not value["witness"]):
-                raise ValueError("named match.any branch has invalid shape")
-            names.append(value["name"])
-        if len(names) != len(set(names)):
-            raise ValueError("match.any branch names must be unique")
+    if key == "any" and values:
+        rich = any({"name", "rule", "witness"} & set(value) for value in values)
+        if rich:
+            _validate_named_branches(values)
     return values
 
 
@@ -237,41 +262,58 @@ def validate_constraints(plan: dict, matcher: dict) -> None:
         raise ValueError(f"constraints are not bound by rule: {', '.join(sorted(unbound))}")
 
 
+def _valid_offset(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _validate_string_list(expected: dict, key: str) -> None:
+    value = expected.get(key)
+    if key in expected and (not isinstance(value, list)
+                            or any(not isinstance(item, str) for item in value)):
+        raise ValueError(f"oracle {key} must be a list of strings")
+
+
+def _validate_ranges(ranges) -> None:
+    if ranges is None:
+        return
+    valid = isinstance(ranges, list) and all(
+        isinstance(item, list) and len(item) == 2
+        and all(_valid_offset(offset) for offset in item) for item in ranges
+    )
+    if not valid:
+        raise ValueError("oracle ranges must be byte-offset pairs")
+
+
+def _validate_oracle(source, expected, known: set[str]) -> None:
+    allowed = {"count", "texts", "ranges", "message", "note", "severity", "labels", "fixed"}
+    if source not in known or not isinstance(expected, dict) or not expected:
+        raise ValueError("oracle needs a known source and non-empty mapping")
+    unknown = sorted(set(expected) - allowed)
+    if unknown:
+        raise ValueError(f"oracle contains unknown keys: {', '.join(unknown)}")
+    if "count" in expected and not _valid_offset(expected["count"]):
+        raise ValueError("oracle count must be a nonnegative integer")
+    for key in ("texts", "labels"):
+        _validate_string_list(expected, key)
+    _validate_ranges(expected.get("ranges"))
+    for key in ("message", "note", "severity", "fixed"):
+        if key in expected and not isinstance(expected[key], str):
+            raise ValueError(f"oracle {key} must be a string")
+
+
 def validate_oracles(plan: dict, cases: dict[str, list[str]]) -> None:
     """Validate exact finding/fix contracts keyed by fixture source."""
     oracles = plan.get("oracles", {})
-    allowed = {"count", "texts", "ranges", "message", "note", "severity", "labels", "fixed"}
     if not isinstance(oracles, dict):
         raise TypeError("oracles must be a mapping keyed by fixture source")
     known = set(cases["valid"] + cases["invalid"])
     for source, expected in oracles.items():
-        if source not in known or not isinstance(expected, dict) or not expected:
-            raise ValueError("oracle needs a known source and non-empty mapping")
-        unknown = sorted(set(expected) - allowed)
-        if unknown:
-            raise ValueError(f"oracle contains unknown keys: {', '.join(unknown)}")
-        count = expected.get("count")
-        if "count" in expected and (
-                not isinstance(count, int) or isinstance(count, bool) or count < 0):
-            raise ValueError("oracle count must be a nonnegative integer")
-        for key in ("texts", "labels"):
-            if key in expected and (not isinstance(expected[key], list)
-                                    or any(not isinstance(item, str) for item in expected[key])):
-                raise ValueError(f"oracle {key} must be a list of strings")
-        ranges = expected.get("ranges")
-        if ranges is not None and (not isinstance(ranges, list) or any(
-                not isinstance(item, list) or len(item) != 2
-                or any(not isinstance(offset, int) or isinstance(offset, bool) or offset < 0
-                       for offset in item)
-                for item in ranges)):
-            raise ValueError("oracle ranges must be byte-offset pairs")
-        for key in ("message", "note", "severity", "fixed"):
-            if key in expected and not isinstance(expected[key], str):
-                raise ValueError(f"oracle {key} must be a string")
-    if "fix" in plan and not any(
-            source in cases["invalid"] and "fixed" in expected
-            for source, expected in oracles.items()):
-        raise ValueError("rules with fix require fixed output for an invalid source")
+        _validate_oracle(source, expected, known)
+    if "fix" in plan:
+        missing = [source for source in cases["invalid"]
+                   if "fixed" not in oracles.get(source, {})]
+        if missing:
+            raise ValueError("rules with fix require fixed output for every invalid source")
 
 
 def named_branches(plan: dict) -> list[dict]:
@@ -303,11 +345,14 @@ def render_rule(plan: dict, matcher: dict) -> str:
     rule = {"id": plan["id"], "language": plan["language"],
             "severity": plan.get("severity", "warning"),
             "message": FoldedStr(plan["message"]), "note": FoldedStr(plan["note"])}
+    rule.update(plan.get("extensions", {}))
     for key in RULE_CONFIG_KEYS:
         if key in plan:
             rule[key] = plan[key]
     rule["rule"] = matcher
-    return yaml.safe_dump(rule, sort_keys=False, width=80, allow_unicode=True)
+    rendered = yaml.safe_dump(rule, sort_keys=False, width=80, allow_unicode=True)
+    comments = "".join(f"# {comment}\n" for comment in plan.get("comments", []))
+    return comments + rendered
 
 
 def render_fixture(plan: dict, cases: dict[str, list[str]]) -> str:
@@ -343,52 +388,63 @@ def run_preflight(rule_text: str, cases: dict[str, list[str]], rule_id: str) -> 
                f"output_bytes={len(output)}")
     if result.returncode == 0:
         return True, f"{metrics} {detail}".strip()
-    kind = "test-failure" if "Error: test failed." in output else "engine-error"
+    if "file is not a valid ast-grep rule" in output:
+        kind = "invalid-mutant"
+    else:
+        kind = "test-failure" if "Error: test failed." in output else "engine-error"
     return False, f"{metrics} {kind}={detail}".strip()
+
+
+def _qualified_pattern_mutations(pattern: str):
+    qualified = re.fullmatch(
+        r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)",
+        pattern,
+        flags=re.DOTALL,
+    )
+    if not qualified:
+        return
+    receiver, member, arguments = qualified.groups()
+    yield "receiver", f"$_.{member}({arguments})"
+    yield "member", f"{receiver}.$_({arguments})"
+
+
+def _direct_mapping_mutations(value: dict, path: str):
+    removable = {"field", "stopBy", "kind", "nthChild", "ofRule", "inside", "has",
+                 "follows", "precedes", "not"}
+    anchors = {"kind", "pattern", "regex", "all", "any", "matches"}
+    for key, child in value.items():
+        if key == "pattern" and isinstance(child, str):
+            for identity, pattern in _qualified_pattern_mutations(child):
+                yield f"{path}.pattern-{identity}", {**value, key: pattern}
+        if key in removable and len(value) > 1:
+            mutant = {candidate: item for candidate, item in value.items() if candidate != key}
+            if set(mutant) & anchors:
+                yield f"{path}.{key}", mutant
+        if key == "regex" and isinstance(child, str) \
+                and (child.startswith("^") or child.endswith("$")):
+            yield f"{path}.regex-anchor", {
+                **value, key: child.removeprefix("^").removesuffix("$"),
+            }
 
 
 def mutation_candidates(value, path="rule"):
     """Yield deterministic claim-weakening mutations with stable paths."""
     if isinstance(value, dict):
-        for key, child in value.items():
-            if key == "pattern" and isinstance(child, str):
-                qualified = re.fullmatch(
-                    r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)",
-                    child,
-                    flags=re.DOTALL,
-                )
-                if qualified:
-                    receiver, member, arguments = qualified.groups()
-                    for identity, pattern in (
-                            ("receiver", f"$_.{member}({arguments})"),
-                            ("member", f"{receiver}.$_({arguments})")):
-                        mutant = dict(value)
-                        mutant[key] = pattern
-                        yield f"{path}.pattern-{identity}", mutant
-            if key in {"field", "stopBy", "kind", "nthChild", "ofRule", "inside", "has",
-                       "follows", "precedes", "not"} and len(value) > 1:
-                mutant = dict(value)
-                del mutant[key]
-                if set(mutant) & {"kind", "pattern", "regex", "all", "any", "matches"}:
-                    yield f"{path}.{key}", mutant
-            elif key == "regex" and isinstance(child, str) \
-                    and (child.startswith("^") or child.endswith("$")):
-                mutant = dict(value)
-                mutant[key] = child.removeprefix("^").removesuffix("$")
-                yield f"{path}.regex-anchor", mutant
-            for child_path, child_mutant in mutation_candidates(child, f"{path}.{key}"):
-                mutant = dict(value)
-                mutant[key] = child_mutant
-                yield child_path, mutant
+        yield from _direct_mapping_mutations(value, path)
+        children = value.items()
     elif isinstance(value, list):
         if len(value) > 1 and path.endswith(".all"):
             for index in range(len(value)):
                 yield f"{path}[{index}]-deleted", value[:index] + value[index + 1:]
-        for index, child in enumerate(value):
-            for child_path, child_mutant in mutation_candidates(child, f"{path}[{index}]"):
-                mutant = list(value)
-                mutant[index] = child_mutant
-                yield child_path, mutant
+        children = enumerate(value)
+    else:
+        return
+    for key, child in children:
+        child_path = f"{path}.{key}" if isinstance(value, dict) else f"{path}[{key}]"
+        for mutant_path, child_mutant in mutation_candidates(child, child_path):
+            mutant = dict(value) if isinstance(value, dict) else list(value)
+            mutant[key] = child_mutant
+            yield mutant_path, mutant
 
 
 def _rule_with(plan: dict, matcher: dict, key=None, identity=None, mutant=None) -> str:
@@ -399,36 +455,65 @@ def _rule_with(plan: dict, matcher: dict, key=None, identity=None, mutant=None) 
     return render_rule(changed, matcher)
 
 
-def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]]) -> None:
-    """Require contrasts and every selected mutant to fail closed."""
-    passed, detail = run_preflight(render_rule(plan, matcher), cases, plan["id"])
-    if not passed:
-        raise RuntimeError(f"CONTRAST_PREFLIGHT_FAILED: {detail}")
+def _has_positive_anchor(value, negated: bool = False) -> bool:
+    """Return whether a rule tree still supplies an affirmative AST matcher."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in {"kind", "pattern", "regex", "matches"} and not negated:
+                return True
+            if key == "not":
+                continue
+            if key in {"all", "any"} and _has_positive_anchor(child, negated):
+                return True
+    elif isinstance(value, list):
+        return any(_has_positive_anchor(child, negated) for child in value)
+    return False
+
+
+def _branch_mutant(plan: dict, branches: list[dict], deleted: int) -> dict:
+    spec = dict(plan["match"])
+    remaining = [branch for index, branch in enumerate(branches) if index != deleted]
+    if len(remaining) == 1:
+        spec["require"] = [*spec.get("require", []), remaining[0]["rule"]]
+        spec["any"] = []
+    else:
+        spec["any"] = remaining
+    return compile_match(spec)
+
+
+def _preflight_named_branches(plan: dict, cases: dict[str, list[str]]) -> None:
     branches = named_branches(plan)
     for index, branch in enumerate(branches):
-        spec = dict(plan["match"])
-        remaining = [candidate for offset, candidate in enumerate(branches)
-                     if offset != index]
-        if len(remaining) == 1:
-            spec["require"] = [*spec.get("require", []), remaining[0]["rule"]]
-            spec["any"] = []
-        else:
-            spec["any"] = remaining
-        mutant = compile_match(spec)
+        mutant = _branch_mutant(plan, branches, index)
         witness = {"invalid": [branch["witness"]], "valid": cases["valid"][:1]}
-        survived, arm_detail = run_preflight(render_rule(plan, mutant), witness, plan["id"])
+        survived, detail = run_preflight(render_rule(plan, mutant), witness, plan["id"])
         if survived:
             raise RuntimeError(f"ANY_ARM_SURVIVED: {branch['name']}")
-        if "engine-error=" in arm_detail:
-            raise RuntimeError(f"ANY_ARM_PREFLIGHT_ERROR: {branch['name']}: {arm_detail}")
+        if "engine-error=" in detail:
+            raise RuntimeError(f"ANY_ARM_PREFLIGHT_ERROR: {branch['name']}: {detail}")
+
+
+def compiled_mutations(plan: dict, matcher: dict) -> list[tuple[str, str]]:
     candidates = [(path, _rule_with(plan, mutant))
-                  for path, mutant in mutation_candidates(matcher)]
+                  for path, mutant in mutation_candidates(matcher)
+                  if _has_positive_anchor(mutant)]
     for key in ("utils", "constraints"):
         candidates.extend(
             (path, _rule_with(plan, matcher, key, identity, mutant))
             for identity, value in plan.get(key, {}).items()
             for path, mutant in mutation_candidates(value, f"{key}.{identity}")
+            if _has_positive_anchor(mutant)
         )
+    return candidates
+
+
+def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]]) -> None:
+    """Require contrasts and every selected mutant to fail closed."""
+    passed, detail = run_preflight(render_rule(plan, matcher), cases, plan["id"])
+    if not passed:
+        raise RuntimeError(f"CONTRAST_PREFLIGHT_FAILED: {detail}")
+    _preflight_named_branches(plan, cases)
+    candidates = compiled_mutations(plan, matcher)
     limit = plan.get("mutation_limit", MAX_MUTATIONS)
     if "mutation_limit" not in plan and len(candidates) > limit:
         raise RuntimeError(f"MUTATION_BUDGET_EXCEEDED: {len(candidates)} exceeds {limit}")
@@ -436,6 +521,8 @@ def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]]) -> None:
         survived, mutation_detail = run_preflight(rule_text, cases, plan["id"])
         if survived:
             raise RuntimeError(f"MUTATION_SURVIVED: {path}")
+        if "invalid-mutant=" in mutation_detail:
+            continue
         if "engine-error=" in mutation_detail:
             raise RuntimeError(f"MUTATION_PREFLIGHT_ERROR: {path}: {mutation_detail}")
 

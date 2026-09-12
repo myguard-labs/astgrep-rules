@@ -7,3 +7,7 @@ ordinary ast-grep YAML for downstream compatibility.
 Run `npm run generate:check` to preflight plans, exact oracles, mutations, and
 generated-file drift. Run `npm run generate` to update only artifacts owned by
 plans. Existing handcrafted rules can be migrated independently.
+
+Imported rules preserve required license and source comments through the
+single-line `comments` list. Non-native top-level metadata belongs under
+`extensions`; reserved ast-grep configuration keys cannot be overridden there.

@@ -50,7 +50,13 @@ def compile_plan(path: Path, *, preflight: bool = True):
         raise RuntimeError(f"PLAN_LAYOUT: expected {expected_plan.relative_to(ROOT)}")
     relative = path.relative_to(ROOT).as_posix()
     marker = f"# Generated from: {relative}\n"
-    rule_text = marker + rule_text
+    if rule_text.startswith("# MyGuard rule: "):
+        lines = rule_text.splitlines(keepends=True)
+        header_end = next((index for index, line in enumerate(lines)
+                           if not line.startswith("# ")), len(lines))
+        rule_text = "".join([*lines[:header_end], marker, *lines[header_end:]])
+    else:
+        rule_text = marker + rule_text
     fixture_text = marker + fixture_text
     if preflight:
         check_oracles(plan, yaml.safe_load(rule_text))
@@ -118,35 +124,46 @@ def write_atomic(path: Path, content: str) -> None:
 
 
 def generated_owner(path: Path) -> str | None:
-    """Return only a first-line ownership marker; embedded comments do not own files."""
+    """Return an ownership marker only from the leading comment header."""
     if not path.is_file():
         return None
-    first = path.read_text(encoding="utf-8").splitlines()[:1]
-    return first[0] if first and first[0].startswith("# Generated from: ") else None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("# "):
+            return None
+        if line.startswith("# Generated from: "):
+            return line
+    return None
+
+
+def _changed_plan_artifacts(paths: list[Path], write: bool):
+    drift, updates = [], []
+    for path in paths:
+        rule_path, fixture_path, rule_text, fixture_text = compile_plan(path)
+        owner = f"# Generated from: {path.relative_to(ROOT).as_posix()}"
+        for target, content in ((rule_path, rule_text), (fixture_path, fixture_text)):
+            if target.is_file() and target.read_text(encoding="utf-8") == content:
+                continue
+            drift.append(target.relative_to(ROOT).as_posix())
+            if write and target.exists() and generated_owner(target) != owner:
+                raise RuntimeError(f"refusing to overwrite non-generated {target}")
+            if write:
+                updates.append((target, content, owner))
+    return drift, updates
+
+
+def _write_plan_artifacts(updates: list[tuple[Path, str, str]]) -> None:
+    for target, content, owner in updates:
+        if target.exists() and generated_owner(target) != owner:
+            raise RuntimeError(f"refusing to overwrite non-generated {target}")
+        write_atomic(target, content)
 
 
 def plans_command(write: bool) -> int:
     paths = plan_paths()
-    drift = []
-    updates = []
-    for path in paths:
-        rule_path, fixture_path, rule_text, fixture_text = compile_plan(path)
-        for target, content in ((rule_path, rule_text), (fixture_path, fixture_text)):
-            if not target.is_file() or target.read_text(encoding="utf-8") != content:
-                drift.append(target.relative_to(ROOT).as_posix())
-                if write:
-                    owner = f"# Generated from: {path.relative_to(ROOT).as_posix()}\n"
-                    if target.exists() and generated_owner(target) != owner.rstrip("\n"):
-                        raise RuntimeError(f"refusing to overwrite non-generated {target}")
-                    updates.append((target, content))
+    drift, updates = _changed_plan_artifacts(paths, write)
     if write:
         with SCAFFOLD.cli_scaffold_lock():
-            for target, content in updates:
-                owner = next(line for line in content.splitlines()
-                             if line.startswith("# Generated from: ")) + "\n"
-                if target.exists() and generated_owner(target) != owner.rstrip("\n"):
-                    raise RuntimeError(f"refusing to overwrite non-generated {target}")
-                write_atomic(target, content)
+            _write_plan_artifacts(updates)
             count_changed = sync_diagnostic_count(True, {path.stem for path in paths})
     else:
         count_changed = sync_diagnostic_count(False, {path.stem for path in paths})

@@ -67,6 +67,19 @@ class RulePlanTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unknown keys: surprise"):
                 PLAN.load_plan(path)
 
+    def test_provenance_comments_and_extensions_render_without_overrides(self):
+        plan = minimal_plan(
+            comments=["License: Example", "Source: https://example.test/rule"],
+            extensions={"upstream-pack": True},
+        )
+        matcher, _cases = PLAN.validate_plan(plan)
+        rendered = PLAN.render_rule(plan, matcher)
+        self.assertTrue(rendered.startswith(
+            "# License: Example\n# Source: https://example.test/rule\n"))
+        self.assertTrue(yaml.safe_load(rendered)["upstream-pack"])
+        with self.assertRaisesRegex(ValueError, "non-reserved"):
+            PLAN.validate_plan(minimal_plan(extensions={"rule": {"pattern": "safe()"}}))
+
     def test_utility_graph_rejects_undefined_cycle_and_unreachable(self):
         cases = [
             ({"rule": {"matches": "missing"}}, "undefined local utilities"),
@@ -104,6 +117,19 @@ class RulePlanTests(unittest.TestCase):
         self.assertEqual(mutations["rule.pattern-receiver"]["pattern"],
                          "$_.mktemp($$$ARGS)")
 
+    def test_relation_only_mutants_are_not_counted_as_kills(self):
+        matcher = {"all": [{"kind": "call"}, {"not": {"has": {"kind": "string"}}}]}
+        plan = minimal_plan(rule=matcher)
+        paths = [path for path, _rule in PLAN.compiled_mutations(plan, matcher)]
+        self.assertNotIn("rule.all[0]-deleted", paths)
+
+    def test_invalid_mutant_is_skipped(self):
+        plan = minimal_plan(rule={"all": [{"kind": "call"}, {"pattern": "danger()"}]})
+        matcher, cases = PLAN.validate_plan(plan)
+        outcomes = [(True, "ok"), *[(False, "invalid-mutant=bad rule")] * 10]
+        with patch.object(PLAN, "run_preflight", side_effect=outcomes):
+            PLAN.preflight(plan, matcher, cases)
+
     def test_two_named_branches_reach_both_witness_preflights(self):
         plan = minimal_plan(
             rule=None,
@@ -132,7 +158,16 @@ class RulePlanTests(unittest.TestCase):
             fix="safe()",
             oracles={"safe()": {"fixed": "safe()"}},
         )
-        with self.assertRaisesRegex(ValueError, "fixed output for an invalid source"):
+        with self.assertRaisesRegex(ValueError, "fixed output for every invalid source"):
+            PLAN.validate_plan(plan)
+
+    def test_fixer_requires_exact_output_for_each_invalid_source(self):
+        plan = minimal_plan(
+            fix="safe()",
+            cases={"invalid": ["danger()", "danger(1)"], "valid": ["safe()"]},
+            oracles={"danger()": {"fixed": "safe()"}},
+        )
+        with self.assertRaisesRegex(ValueError, "every invalid source"):
             PLAN.validate_plan(plan)
 
 

@@ -74,6 +74,11 @@ one at a time. Every selected mutation must break a test. Generated files carry
 an ownership marker; regeneration refuses to overwrite a hand-authored file.
 `npm run generate:check` is read-only and fails on drift.
 
+For imported rules, keep license and source provenance in `comments` and
+vendor-specific top-level metadata in `extensions`. The compiler rejects
+extension keys that could override ast-grep configuration. This makes imported
+rules plan-owned without discarding their attribution contract.
+
 Use `python3 tools/rule-mechanics.py metamorph PLAN` to emit bounded lookalike
 and boundary candidates for review. Candidates deliberately have no invented
 expected result. Use `differential` with two engine binaries and a bounded local
