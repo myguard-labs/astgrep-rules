@@ -465,9 +465,18 @@ class ChangedGateTests(unittest.TestCase):
             command,
         )
 
-    def test_workflow_skips_duplicate_mechanics_after_infrastructure_gate(self):
-        workflow = (ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
-        self.assertIn("if: steps.changed.outputs.mechanics_ran != 'true'", workflow)
+    def test_workflow_runs_full_suites_on_pull_requests_only(self):
+        workflow = yaml.safe_load(
+            (ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8"))
+        self.assertEqual(workflow.get("on", workflow.get(True)), ["pull_request"])
+        steps = {step.get("name"): step for step in workflow["jobs"]["test"]["steps"]}
+        self.assertEqual(steps["Full native suite"].get("run"), "npm test")
+        self.assertNotIn("if", steps["Full native suite"])
+        self.assertEqual(
+            steps["Generated artifacts and fixers"].get("run"),
+            "npm run test:mechanics",
+        )
+        self.assertNotIn("if", steps["Generated artifacts and fixers"])
 
     def test_rule_ids_include_plans_fixtures_rules_and_snapshots(self):
         paths = [
