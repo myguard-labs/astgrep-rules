@@ -46,8 +46,14 @@ def plan_paths() -> list[Path]:
     return sorted(root.rglob("*.yml")) if root.is_dir() else []
 
 
-def compile_plan(path: Path, *, preflight: bool = True):
-    plan, _matcher, rule_text, fixture_text = PLAN.compile_plan(path, run_checks=preflight)
+def _compiled_plan_artifacts(path: Path, *, preflight: bool = True, compiled=None):
+    compiled = compiled or PLAN.compile_plan_ir(path, run_checks=False)
+    if preflight:
+        if not PLAN.ENGINE.is_file():
+            raise RuntimeError(f"pinned engine missing: {PLAN.ENGINE}; run npm ci")
+        PLAN.preflight(compiled.plan, compiled.matcher, compiled.cases)
+    plan = compiled.plan
+    rule_text, fixture_text = compiled.rule_text, compiled.fixture_text
     expected_plan = ROOT / "plans" / plan["language"] / plan["category"] / f"{plan['id']}.yml"
     if path.resolve() != expected_plan.resolve():
         raise RuntimeError(f"PLAN_LAYOUT: expected {expected_plan.relative_to(ROOT)}")
@@ -69,6 +75,13 @@ def compile_plan(path: Path, *, preflight: bool = True):
                   if candidate != rule_path]
     if collisions:
         raise RuntimeError(f"PLAN_ID_COLLISION: {plan['id']}: {collisions[0]}")
+    return compiled, rule_path, fixture_path, rule_text, fixture_text
+
+
+def compile_plan(path: Path, *, preflight: bool = True):
+    """Compatibility artifact tuple backed by the single compiled plan IR."""
+    _compiled, rule_path, fixture_path, rule_text, fixture_text = \
+        _compiled_plan_artifacts(path, preflight=preflight)
     return rule_path, fixture_path, rule_text, fixture_text
 
 
@@ -138,11 +151,15 @@ def generated_owner(path: Path) -> str | None:
     return None
 
 
-def stale_generated_artifacts(paths: list[Path]) -> list[str]:
+def stale_generated_artifacts(paths: list[Path], artifacts=None) -> list[str]:
     """Find generated artifacts whose owner vanished or no longer targets them."""
     expected = {}
     for plan_path in paths:
-        rule_path, fixture_path, _rule, _fixture = compile_plan(plan_path, preflight=False)
+        if artifacts is None:
+            rule_path, fixture_path, _rule, _fixture = compile_plan(
+                plan_path, preflight=False)
+        else:
+            _compiled, rule_path, fixture_path, _rule, _fixture = artifacts[plan_path]
         owner = f"# Generated from: {plan_path.relative_to(ROOT).as_posix()}"
         expected[rule_path.resolve()] = owner
         expected[fixture_path.resolve()] = owner
@@ -155,11 +172,12 @@ def stale_generated_artifacts(paths: list[Path]) -> list[str]:
     return sorted(stale)
 
 
-def validate_plan_id_ownership(paths: list[Path]) -> None:
+def validate_plan_id_ownership(paths: list[Path], artifacts=None) -> None:
     """Reject duplicate plan IDs and collisions with handcrafted rules."""
     owners: dict[str, str] = {}
     for plan_path in paths:
-        plan = PLAN.load_plan(plan_path)
+        plan = (artifacts[plan_path][0].plan if artifacts is not None
+                else PLAN.load_plan(plan_path))
         rule_id = plan["id"]
         if rule_id in owners:
             raise RuntimeError(f"PLAN_ID_COLLISION: {rule_id}: {owners[rule_id]}")
@@ -171,10 +189,13 @@ def validate_plan_id_ownership(paths: list[Path]) -> None:
             raise RuntimeError(f"PLAN_ID_COLLISION: {rule_id}: {collisions[0]}")
 
 
-def _changed_plan_artifacts(paths: list[Path], write: bool):
+def _changed_plan_artifacts(paths: list[Path], write: bool, artifacts=None):
     drift, updates = [], []
     for path in paths:
-        rule_path, fixture_path, rule_text, fixture_text = compile_plan(path)
+        if artifacts is None:
+            rule_path, fixture_path, rule_text, fixture_text = compile_plan(path)
+        else:
+            _compiled, rule_path, fixture_path, rule_text, fixture_text = artifacts[path]
         owner = f"# Generated from: {path.relative_to(ROOT).as_posix()}"
         for target, content in ((rule_path, rule_text), (fixture_path, fixture_text)):
             if target.is_file() and target.read_text(encoding="utf-8") == content:
@@ -194,12 +215,14 @@ def _write_plan_artifacts(updates: list[tuple[Path, str, str]]) -> None:
         write_atomic(target, content)
 
 
-def validate_plan_fixes(paths: list[Path], rendered_rules: dict[Path, str] | None = None) -> int:
+def validate_plan_fixes(paths: list[Path], rendered_rules: dict[Path, str] | None = None,
+                        artifacts=None) -> int:
     """Validate every exact fixed-output oracle owned by canonical plans."""
     checked = 0
     with tempfile.TemporaryDirectory(prefix="rule-plan-fixes-") as directory:
         for plan_path in paths:
-            plan = PLAN.load_plan(plan_path)
+            plan = (artifacts[plan_path][0].plan if artifacts is not None
+                    else PLAN.load_plan(plan_path))
             if "fix" not in plan:
                 continue
             rule_path = (ROOT / "rules" / plan["language"] / plan["category"]
@@ -222,12 +245,18 @@ def validate_plan_fixes(paths: list[Path], rendered_rules: dict[Path, str] | Non
 
 def _plans_command(write: bool) -> int:
     paths = plan_paths()
-    validate_plan_id_ownership(paths)
-    stale = stale_generated_artifacts(paths)
+    compiled = {path: PLAN.compile_plan_ir(path, run_checks=False) for path in paths}
+    ownership = {path: (value,) for path, value in compiled.items()}
+    validate_plan_id_ownership(paths, ownership)
+    artifacts = {
+        path: _compiled_plan_artifacts(path, compiled=value)
+        for path, value in compiled.items()
+    }
+    stale = stale_generated_artifacts(paths, artifacts)
     if stale:
         print("stale generated artifacts: " + ", ".join(stale), file=sys.stderr)
         return 1
-    drift, updates = _changed_plan_artifacts(paths, write)
+    drift, updates = _changed_plan_artifacts(paths, write, artifacts)
     if not write:
         count_changed = sync_diagnostic_count(False, {path.stem for path in paths})
         if count_changed:
@@ -236,7 +265,7 @@ def _plans_command(write: bool) -> int:
         print("generated drift: " + ", ".join(drift), file=sys.stderr)
         return 1
     rendered_rules = {target.resolve(): content for target, content, _owner in updates}
-    fixed = validate_plan_fixes(paths, rendered_rules if write else None)
+    fixed = validate_plan_fixes(paths, rendered_rules if write else None, artifacts)
     if write:
         _write_plan_artifacts(updates)
         if sync_diagnostic_count(True, {path.stem for path in paths}):

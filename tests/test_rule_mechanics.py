@@ -115,8 +115,9 @@ class RulePlanTests(unittest.TestCase):
             PLAN.preflight(unknown, matcher, cases)
         killed = minimal_plan(mutation_exclusions={"one": "reason"})
         with patch.object(PLAN, "compiled_mutations", return_value=[("one", "rule")]), \
-                patch.object(PLAN, "run_preflight",
-                             side_effect=[(True, "ok"), (False, "test-failure")]), \
+                patch.object(PLAN, "run_preflight", return_value=(True, "ok")), \
+                patch.object(PLAN, "_run_mutant_batch",
+                             return_value={"one": ("killed", "test-failure")}), \
                 self.assertRaisesRegex(RuntimeError, "INVALID_MUTATION_EXCLUSION"):
             PLAN.preflight(killed, matcher, cases)
 
@@ -157,6 +158,87 @@ class RulePlanTests(unittest.TestCase):
         self.assertEqual(mutations["rule.pattern-receiver"]["pattern"],
                          "$_.mktemp($$$ARGS)")
 
+    def test_regex_alternatives_are_independently_mutated(self):
+        mutations = dict(PLAN.mutation_candidates({"regex": "^open$|^read$|^write$"}))
+        self.assertEqual(
+            mutations["rule.regex-alternative[1]-deleted"]["regex"],
+            "^open$|^write$",
+        )
+
+    def test_regex_split_ignores_escaped_group_and_class_bars(self):
+        self.assertEqual(PLAN._regex_alternatives(r"^(a|b)[|]c\|d$|^e$"),
+                         [r"^(a|b)[|]c\|d$", "^e$"])
+
+    def test_grouped_regex_alternatives_preserve_anchors_and_wrapper(self):
+        mutations = dict(PLAN.mutation_candidates({"regex": "^(?:open|read|write)$"}))
+        self.assertEqual(
+            mutations["rule.regex-alternative[0]-deleted"]["regex"],
+            "^(?:read|write)$",
+        )
+
+    def test_claim_matrix_requires_each_pairwise_combination(self):
+        plan = minimal_plan(
+            cases={"invalid": ["a()", "b()"], "valid": ["safe()"]},
+            claims={
+                "api": {"a": ["a()"], "b": ["b()"]},
+                "operator": {"call": ["a()", "b()"]},
+            },
+        )
+        PLAN.validate_plan(plan)
+        plan["claims"]["operator"]["call"] = ["a()"]
+        with self.assertRaisesRegex(ValueError, "CLAIM_PAIR_UNCOVERED.*api.b"):
+            PLAN.validate_plan(plan)
+
+    def test_claim_matrix_rejects_semantic_dimensions_and_valid_witnesses(self):
+        with self.assertRaisesRegex(ValueError, "syntax-only"):
+            PLAN.validate_plan(minimal_plan(claims={"runtime-type": {"file": ["danger()"]}}))
+        with self.assertRaisesRegex(ValueError, "non-invalid witnesses"):
+            PLAN.validate_plan(minimal_plan(claims={"api": {"safe": ["safe()"]}}))
+
+    def test_declared_metamorphic_cases_preserve_or_change_outcome(self):
+        plan = minimal_plan(metamorphic=[
+            {"source": "danger()", "transform": "callee-parenthesized",
+             "outcome": "equivalent"},
+            {"source": "safe()", "transform": "parenthesized", "outcome": "different"},
+        ])
+        matcher, cases = PLAN.validate_plan(plan)
+        self.assertEqual(matcher, {"pattern": "danger()"})
+        expanded = PLAN.expanded_cases(plan, cases)
+        self.assertIn("(danger)()", expanded["invalid"])
+        self.assertIn("(safe())", expanded["invalid"])
+
+    def test_metamorphic_rejects_unknown_or_inapplicable_transforms(self):
+        with self.assertRaisesRegex(ValueError, "invalid metamorphic"):
+            PLAN.validate_plan(minimal_plan(metamorphic=[
+                {"source": "danger()", "transform": "rename-symbol",
+                 "outcome": "equivalent"},
+            ]))
+        plan = minimal_plan(metamorphic=[
+            {"source": "danger()", "transform": "format-width", "outcome": "equivalent"},
+        ])
+        _matcher, cases = PLAN.validate_plan(plan)
+        with self.assertRaisesRegex(ValueError, "not applicable"):
+            PLAN.expanded_cases(plan, cases)
+
+    def test_metamorphic_derives_required_syntax_families(self):
+        cases = {
+            ("obj->field", "member-access-swap"): "obj.field",
+            ("ns::call()", "qualified-name"): "::ns::call()",
+            ('log("value")', "literal-concatenation"): 'log("value" "")',
+            ('log("%s", value)', "format-width"): 'log("%20s", value)',
+            ('log("%s", value)', "format-precision"): 'log("%.3s", value)',
+            ("danger()", "parenthesized"): "(danger())",
+        }
+        for (source, transform), expected in cases.items():
+            with self.subTest(transform=transform):
+                self.assertEqual(PLAN._metamorphic_source(source, transform), expected)
+
+    def test_compiled_plan_ir_matches_compatibility_artifacts(self):
+        path = ROOT / "plans/python/security/py-tempfile-mktemp.yml"
+        ir = PLAN.compile_plan_ir(path, run_checks=False)
+        legacy = PLAN.compile_plan(path, run_checks=False)
+        self.assertEqual(legacy, (ir.plan, ir.matcher, ir.rule_text, ir.fixture_text))
+
     def test_relation_only_mutants_are_not_counted_as_kills(self):
         matcher = {"all": [{"kind": "call"}, {"not": {"has": {"kind": "string"}}}]}
         plan = minimal_plan(rule=matcher)
@@ -196,16 +278,20 @@ class RulePlanTests(unittest.TestCase):
     def test_preflight_calls_share_one_cumulative_deadline(self):
         plan = minimal_plan(rule={"all": [{"kind": "call"}, {"pattern": "danger()"}]})
         matcher, cases = PLAN.validate_plan(plan)
+        deadlines = []
+
+        def batch(_items, _cases, _rule_id, deadline, _telemetry):
+            deadlines.append(deadline)
+            return {"one": ("killed", "test-failure")}
+
         with patch.object(PLAN, "compiled_mutations", return_value=[("one", "rule")]), \
                 patch.object(PLAN, "perf_counter", return_value=10.0), \
-                patch.object(PLAN, "run_preflight",
-                             side_effect=[(True, "ok"), (False, "test-failure")]) as run:
+                patch.object(PLAN, "run_preflight", return_value=(True, "ok")) as run, \
+                patch.object(PLAN, "_run_mutant_batch", side_effect=batch):
             PLAN.preflight(plan, matcher, cases)
-        self.assertEqual(run.call_count, 2)
-        self.assertEqual(
-            {call.kwargs["deadline"] for call in run.call_args_list},
-            {10.0 + PLAN.MAX_PREFLIGHT_SECONDS},
-        )
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(run.call_args.kwargs["deadline"], 10.0 + PLAN.MAX_PREFLIGHT_SECONDS)
+        self.assertEqual(deadlines, [10.0 + PLAN.MAX_PREFLIGHT_SECONDS])
 
     def test_exhausted_preflight_budget_fails_before_engine_run(self):
         with patch.object(PLAN, "perf_counter", side_effect=[5.0, 6.0]), \
@@ -221,9 +307,75 @@ class RulePlanTests(unittest.TestCase):
     def test_invalid_mutant_is_skipped(self):
         plan = minimal_plan(rule={"all": [{"kind": "call"}, {"pattern": "danger()"}]})
         matcher, cases = PLAN.validate_plan(plan)
-        outcomes = [(True, "ok"), *[(False, "invalid-mutant=bad rule")] * 10]
-        with patch.object(PLAN, "run_preflight", side_effect=outcomes):
+        with patch.object(PLAN, "run_preflight", return_value=(True, "ok")), \
+                patch.object(PLAN, "_run_mutant_batch", return_value={
+                    path: ("invalid", "bad rule")
+                    for path, _rule in PLAN.compiled_mutations(plan, matcher)
+                }):
             PLAN.preflight(plan, matcher, cases)
+
+    def test_mutants_share_one_engine_process_with_per_mutant_outcomes(self):
+        output = "PASS sample-mutant-0  ..\nFAIL sample-mutant-1  NM\nError: test failed."
+        result = SimpleNamespace(returncode=4, stdout=output, stderr="")
+        telemetry = PLAN.PhaseTelemetry()
+        rules = [
+            ("survivor", yaml.safe_dump({"id": "sample", "language": "python",
+                                         "message": "x", "severity": "warning",
+                                         "rule": {"pattern": "$_"}})),
+            ("killed", yaml.safe_dump({"id": "sample", "language": "python",
+                                       "message": "x", "severity": "warning",
+                                       "rule": {"pattern": "danger()"}})),
+        ]
+        with patch.object(PLAN.subprocess, "run", return_value=result) as run:
+            outcomes = PLAN._run_mutant_batch(
+                rules, {"invalid": ["danger()"], "valid": ["safe()"]},
+                "sample", float("inf"), telemetry)
+        self.assertEqual(outcomes["survivor"][0], "survived")
+        self.assertEqual(outcomes["killed"][0], "killed")
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(telemetry.engine_processes, 1)
+
+    def test_batch_runner_uses_one_process_for_two_valid_mutants(self):
+        result = SimpleNamespace(returncode=0, stdout="", stderr="")
+        rule = yaml.safe_dump({
+            "id": "sample", "language": "python", "message": "x", "severity": "warning",
+            "rule": {"pattern": "danger()"},
+        })
+        with patch.object(PLAN.subprocess, "run", return_value=result) as run:
+            PLAN._run_mutant_batch(
+                [("one", rule), ("two", rule)],
+                {"invalid": ["danger()"], "valid": ["safe()"]},
+                "sample", float("inf"), PLAN.PhaseTelemetry())
+        self.assertEqual(run.call_count, 1)
+
+    def test_unloadable_mutant_is_bisected_and_attributed(self):
+        load_error = SimpleNamespace(
+            returncode=2, stdout="", stderr="file is not a valid ast-grep rule")
+        passed = SimpleNamespace(returncode=0, stdout="PASS sample-mutant-0 ..", stderr="")
+        telemetry = PLAN.PhaseTelemetry()
+        valid_rule = yaml.safe_dump({
+            "id": "sample", "language": "python", "message": "x", "severity": "warning",
+            "rule": {"pattern": "danger()"},
+        })
+        with patch.object(PLAN.subprocess, "run",
+                          side_effect=[load_error, passed, load_error]):
+            outcomes = PLAN._run_mutant_batch(
+                [("valid", valid_rule), ("invalid", yaml.safe_dump({
+                    "id": "sample", "language": "python", "message": "x",
+                    "severity": "warning", "rule": {},
+                }))],
+                {"invalid": ["danger()"], "valid": ["safe()"]},
+                "sample", float("inf"), telemetry)
+        self.assertEqual(outcomes["valid"][0], "survived")
+        self.assertEqual(outcomes["invalid"][0], "invalid")
+        self.assertEqual(telemetry.engine_processes, 3)
+
+    def test_telemetry_separates_deterministic_counts_from_wall_clock(self):
+        telemetry = PLAN.PhaseTelemetry(engine_processes=2, mutants=9, wall_ms=37)
+        report = telemetry.report()
+        self.assertEqual(report["counts"]["engine_processes"], 2)
+        self.assertEqual(report["counts"]["mutants"], 9)
+        self.assertEqual(report["wall_clock_ms_informational"]["batched_engine"], 37)
 
     def test_two_named_branches_reach_both_witness_preflights(self):
         plan = minimal_plan(
@@ -304,6 +456,19 @@ class RulePlanCliTests(unittest.TestCase):
 
 
 class RuleMechanicsTests(unittest.TestCase):
+    def test_plan_transaction_compiles_each_plan_once(self):
+        path = ROOT / "plans/python/security/py-tempfile-mktemp.yml"
+        original = MECHANICS.PLAN.compile_plan_ir
+        with patch.object(MECHANICS, "plan_paths", return_value=[path]), \
+                patch.object(MECHANICS.PLAN, "compile_plan_ir", wraps=original) as compile_ir, \
+                patch.object(MECHANICS.PLAN, "preflight"), \
+                patch.object(MECHANICS, "stale_generated_artifacts", return_value=[]), \
+                patch.object(MECHANICS, "_changed_plan_artifacts", return_value=([], [])), \
+                patch.object(MECHANICS, "validate_plan_fixes", return_value=0), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(MECHANICS._plans_command(False), 0)
+        self.assertEqual(compile_ir.call_count, 1)
+
     def test_write_mode_locks_before_plan_transaction(self):
         events = []
 
@@ -354,14 +519,23 @@ class RuleMechanicsTests(unittest.TestCase):
                     patch.object(MECHANICS, "ROOT", root), \
                     patch.object(MECHANICS, "plan_paths", return_value=[plan_path]), \
                     patch.object(MECHANICS, "validate_plan_id_ownership"), \
-                    patch.object(MECHANICS, "compile_plan",
-                                 return_value=(rule_path, fixture_path, generated, generated)):
+                    patch.object(MECHANICS.PLAN, "compile_plan_ir",
+                                 return_value=SimpleNamespace(plan=minimal_plan())), \
+                    patch.object(MECHANICS, "_compiled_plan_artifacts", return_value=(
+                        SimpleNamespace(plan=minimal_plan()), rule_path, fixture_path,
+                        generated, generated)):
                 MECHANICS.plans_command(True)
 
     def test_regeneration_validates_candidate_fixes_before_writing(self):
         target = ROOT / "rules/python/security/py-sample.yml"
         updates = [(target, "id: py-sample\n", "owner")]
+        artifacts = (SimpleNamespace(plan=minimal_plan()), target, target,
+                     "id: py-sample\n", "id: py-sample\n")
         with patch.object(MECHANICS, "plan_paths", return_value=[Path("plan.yml")]), \
+                patch.object(MECHANICS.PLAN, "compile_plan_ir",
+                             return_value=artifacts[0]), \
+                patch.object(MECHANICS, "_compiled_plan_artifacts",
+                             return_value=artifacts), \
                 patch.object(MECHANICS, "validate_plan_id_ownership"), \
                 patch.object(MECHANICS, "stale_generated_artifacts", return_value=[]), \
                 patch.object(MECHANICS, "_changed_plan_artifacts",
@@ -372,6 +546,7 @@ class RuleMechanicsTests(unittest.TestCase):
                 self.assertRaisesRegex(RuntimeError, "FIX_PARSE_FAILED"):
             MECHANICS.plans_command(True)
         self.assertEqual(validate.call_args.args[1], {target.resolve(): "id: py-sample\n"})
+        self.assertEqual(validate.call_args.args[2], {Path("plan.yml"): artifacts})
         write.assert_not_called()
 
     def test_embedded_generation_marker_does_not_claim_ownership(self):

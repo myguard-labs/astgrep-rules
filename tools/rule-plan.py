@@ -2,10 +2,12 @@
 """Compile and preflight one canonical ast-grep rule plan."""
 
 import argparse
+import json
 import re
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 
@@ -31,7 +33,61 @@ PLAN_KEYS = {
     "match", "rule", "utils", "constraints", "labels", "fix",
     "transform", "rewriters", "files", "ignores", "url", "metadata", "cases",
     "mutation_limit", "mutation_exclusions", "oracles", "comments", "extensions",
+    "claims", "metamorphic",
 }
+
+CLAIM_DIMENSIONS = {
+    "api", "callee", "operator", "argument-position", "literal-form", "syntax",
+}
+METAMORPHIC_TRANSFORMS = {
+    "parenthesized", "callee-parenthesized", "qualified-name-spacing",
+    "member-access-spacing", "literal-spacing", "format-width", "format-precision",
+    "qualified-name", "member-access-swap", "literal-concatenation",
+}
+
+
+@dataclass(frozen=True)
+class CompiledPlan:
+    """One validated plan representation shared by every downstream phase."""
+
+    plan: dict
+    matcher: dict
+    cases: dict[str, list[str]]
+    rule_text: str
+    fixture_text: str
+
+
+@dataclass
+class PhaseTelemetry:
+    """Deterministic work counters plus informational wall-clock time."""
+
+    engine_processes: int = 0
+    mutants: int = 0
+    surviving_mutants: int = 0
+    invalid_mutants: int = 0
+    error_mutants: int = 0
+    load_validate_ms: int = 0
+    render_ms: int = 0
+    preflight_ms: int = 0
+    wall_ms: int = 0
+
+    def report(self) -> dict:
+        return {
+            "version": 1,
+            "counts": {
+                "engine_processes": self.engine_processes,
+                "mutants": self.mutants,
+                "survived": self.surviving_mutants,
+                "invalid": self.invalid_mutants,
+                "errors": self.error_mutants,
+            },
+            "wall_clock_ms_informational": {
+                "load_validate": self.load_validate_ms,
+                "render": self.render_ms,
+                "preflight": self.preflight_ms,
+                "batched_engine": self.wall_ms,
+            },
+        }
 RULE_CONFIG_KEYS = (
     "constraints", "utils", "transform", "fix", "rewriters", "labels", "files",
     "ignores", "url", "metadata",
@@ -337,6 +393,113 @@ def validate_oracles(plan: dict, cases: dict[str, list[str]]) -> None:
             raise ValueError("rules with fix require fixed output for every invalid source")
 
 
+def validate_claims(plan: dict, cases: dict[str, list[str]]) -> None:
+    """Require every declared syntactic claim and pair to have an invalid witness."""
+    claims = plan.get("claims", {})
+    if not isinstance(claims, dict):
+        raise TypeError("claims must be a mapping of syntactic dimensions")
+    unknown = sorted(set(claims) - CLAIM_DIMENSIONS)
+    if unknown:
+        raise ValueError("claims are syntax-only; unsupported dimensions: "
+                         + ", ".join(unknown))
+    invalid = set(cases["invalid"])
+    normalized = {}
+    for dimension, values in claims.items():
+        normalized[dimension] = _validated_claim_dimension(dimension, values, invalid)
+    _validate_claim_pairs(normalized)
+
+
+def _validated_claim_dimension(dimension: str, values, invalid: set[str]) -> dict:
+    if (not isinstance(values, dict) or not values
+            or any(not isinstance(name, str) or not name
+                   or not isinstance(witnesses, list) or not witnesses
+                   or any(not isinstance(witness, str) for witness in witnesses)
+                   for name, witnesses in values.items())):
+        raise ValueError(f"claim dimension {dimension} must map names to witness lists")
+    for name, witnesses in values.items():
+        if set(witnesses) - invalid:
+            raise ValueError(f"claim {dimension}.{name} has non-invalid witnesses")
+    return {name: set(witnesses) for name, witnesses in values.items()}
+
+
+def _validate_claim_pairs(normalized: dict) -> None:
+    dimensions = sorted(normalized)
+    for left_index, left in enumerate(dimensions):
+        for right in dimensions[left_index + 1:]:
+            for left_name, left_witnesses in normalized[left].items():
+                for right_name, right_witnesses in normalized[right].items():
+                    if not left_witnesses & right_witnesses:
+                        raise ValueError(
+                            f"CLAIM_PAIR_UNCOVERED: {left}.{left_name} x "
+                            f"{right}.{right_name}")
+
+
+def validate_metamorphic(plan: dict, cases: dict[str, list[str]]) -> None:
+    """Validate explicitly classified, bounded source transformations."""
+    entries = plan.get("metamorphic", [])
+    if not isinstance(entries, list):
+        raise TypeError("metamorphic must be a list")
+    known = set(cases["valid"] + cases["invalid"])
+    seen = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"source", "transform", "outcome"}:
+            raise ValueError("metamorphic entries require source, transform and outcome")
+        identity = (entry["source"], entry["transform"])
+        if (entry["source"] not in known
+                or entry["transform"] not in METAMORPHIC_TRANSFORMS
+                or entry["outcome"] not in {"equivalent", "different"}):
+            raise ValueError("invalid metamorphic entry")
+        if identity in seen:
+            raise ValueError("duplicate metamorphic entry")
+        seen.add(identity)
+
+
+def _metamorphic_source(source: str, transform: str) -> str:
+    if transform == "parenthesized":
+        return f"({source})"
+    if transform == "callee-parenthesized":
+        changed, count = re.subn(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()",
+                                 r"(\1)", source, count=1)
+    elif transform in {"qualified-name-spacing", "member-access-spacing"}:
+        changed, count = re.subn(r"\s*(->|\.)\s*", r" \1 ", source, count=1)
+    elif transform == "qualified-name":
+        changed, count = re.subn(r"(?<!:)\b([A-Za-z_]\w*::)", r"::\1", source, count=1)
+    elif transform == "member-access-swap":
+        changed, count = re.subn(r"->|\.", lambda match: "." if match[0] == "->" else "->",
+                                 source, count=1)
+    elif transform == "literal-concatenation":
+        changed, count = re.subn(
+            r'"([^"\\]+)"', lambda match: f'"{match[1]}" ""', source, count=1)
+    elif transform == "literal-spacing":
+        changed, count = re.subn(r"(['\"])\s+(['\"])", r"\1   \2", source, count=1)
+    elif transform == "format-width":
+        changed, count = re.subn(r"%(?![%0-9.*])", "%20", source, count=1)
+    elif transform == "format-precision":
+        changed, count = re.subn(r"%(?![%0-9.*])", "%.3", source, count=1)
+    else:  # validate_metamorphic owns the closed transform set.
+        raise ValueError(f"unsupported metamorphic transform: {transform}")
+    if count != 1 or changed == source:
+        raise ValueError(f"metamorphic transform {transform} is not applicable")
+    return changed
+
+
+def expanded_cases(plan: dict, cases: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Add declared equivalent and outcome-changing derived syntax cases."""
+    result = {key: list(values) for key, values in cases.items()}
+    source_class = {source: key for key, values in cases.items() for source in values}
+    for entry in plan.get("metamorphic", []):
+        transformed = _metamorphic_source(entry["source"], entry["transform"])
+        category = source_class[entry["source"]]
+        if entry["outcome"] == "different":
+            category = "valid" if category == "invalid" else "invalid"
+        other = "valid" if category == "invalid" else "invalid"
+        if transformed in result[other]:
+            raise ValueError("metamorphic result contradicts an existing case")
+        if transformed not in result[category]:
+            result[category].append(transformed)
+    return result
+
+
 def named_branches(plan: dict) -> list[dict]:
     match = plan.get("match", {})
     branches = match.get("any", []) if isinstance(match, dict) else []
@@ -351,6 +514,8 @@ def validate_plan(plan: dict) -> tuple[dict, dict[str, list[str]]]:
     validate_utilities(plan, matcher)
     validate_constraints(plan, matcher)
     validate_oracles(plan, cases)
+    validate_claims(plan, cases)
+    validate_metamorphic(plan, cases)
     branches = named_branches(plan)
     witnesses = [branch["witness"] for branch in branches]
     if len(witnesses) != len(set(witnesses)):
@@ -422,6 +587,89 @@ def run_preflight(rule_text: str, cases: dict[str, list[str]], rule_id: str,
     return False, f"{metrics} {kind}={detail}".strip()
 
 
+def _remaining(deadline: float) -> float:
+    remaining = min(MAX_ENGINE_SECONDS, deadline - perf_counter())
+    if remaining <= 0:
+        raise RuntimeError("preflight budget exhausted")
+    return remaining
+
+
+def _run_mutant_batch(items: list[tuple[str, str]], cases: dict[str, list[str]],
+                      rule_id: str, deadline: float,
+                      telemetry: PhaseTelemetry) -> dict[str, tuple[str, str]]:
+    """Run mutants together; bisect only batches an engine cannot load."""
+    if not items:
+        return {}
+    started = perf_counter()
+    with tempfile.TemporaryDirectory(prefix="rule-plan-mutants-") as directory:
+        root = Path(directory)
+        (root / "rules").mkdir()
+        (root / "tests").mkdir()
+        id_to_path = {}
+        malformed = {}
+        for index, (path, rule_text) in enumerate(items):
+            mutant_id = f"{rule_id}-mutant-{index}"
+            try:
+                rule = yaml.safe_load(rule_text)
+            except yaml.YAMLError as error:
+                malformed[path] = ("invalid", str(error)[:600])
+                continue
+            if not isinstance(rule, dict):
+                malformed[path] = ("invalid", "mutant rule is not a mapping")
+                continue
+            rule["id"] = mutant_id
+            (root / "rules" / f"{mutant_id}.yml").write_text(
+                yaml.safe_dump(rule, sort_keys=False), encoding="utf-8")
+            (root / "tests" / f"{mutant_id}.yml").write_text(
+                yaml.safe_dump({"id": mutant_id, **cases}, sort_keys=False),
+                encoding="utf-8")
+            id_to_path[mutant_id] = path
+        if not id_to_path:
+            return malformed
+        (root / "sgconfig.yml").write_text(
+            "ruleDirs: [rules]\ntestConfigs: [{testDir: tests}]\n", encoding="utf-8")
+        try:
+            remaining = _remaining(deadline)
+        except RuntimeError:
+            exhausted = {
+                path: ("error", "engine-error=preflight budget exhausted")
+                for path in id_to_path.values()
+            }
+            exhausted.update(malformed)
+            return exhausted
+        telemetry.engine_processes += 1
+        try:
+            result = subprocess.run(
+                [str(ENGINE), "test", "--include-off", "-c", str(root / "sgconfig.yml"),
+                 "--skip-snapshot-tests"], text=True, capture_output=True,
+                timeout=remaining, check=False)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            detail = f"engine-error={error}"
+            errors = {path: ("error", detail) for path in id_to_path.values()}
+            errors.update(malformed)
+            return errors
+    telemetry.wall_ms += int((perf_counter() - started) * 1000)
+    output = result.stdout + result.stderr
+    failed_ids = set(re.findall(r"^FAIL\s+(\S+)", output, flags=re.MULTILINE))
+    if result.returncode == 0 or "Error: test failed." in output:
+        outcomes = {
+            path: (("killed", "test-failure") if mutant_id in failed_ids
+                   else ("survived", "ok"))
+            for mutant_id, path in id_to_path.items()
+        }
+        outcomes.update(malformed)
+        return outcomes
+    if len(items) > 1:
+        middle = len(items) // 2
+        return {**malformed,
+            **_run_mutant_batch(items[:middle], cases, rule_id, deadline, telemetry),
+            **_run_mutant_batch(items[middle:], cases, rule_id, deadline, telemetry),
+        }
+    detail = " | ".join(output.splitlines()[-6:])[:600]
+    kind = "invalid" if "file is not a valid ast-grep rule" in output else "error"
+    return {**malformed, items[0][0]: (kind, detail)}
+
+
 def _qualified_pattern_mutations(pattern: str):
     qualified = re.fullmatch(
         r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)",
@@ -433,6 +681,53 @@ def _qualified_pattern_mutations(pattern: str):
     receiver, member, arguments = qualified.groups()
     yield "receiver", f"$_.{member}({arguments})"
     yield "member", f"{receiver}.$_({arguments})"
+
+
+def _regex_alternatives(pattern: str) -> list[str]:
+    """Split only top-level regex alternatives, preserving all syntax verbatim."""
+    parts, start, depth, escaped, in_class = [], 0, 0, False, False
+    for index, character in enumerate(pattern):
+        escaped, in_class, depth, separator = _regex_state(
+            character, escaped, in_class, depth)
+        if separator:
+            parts.append(pattern[start:index])
+            start = index + 1
+    parts.append(pattern[start:])
+    return parts if len(parts) > 1 and all(parts) else []
+
+
+def _regex_state(character: str, escaped: bool, in_class: bool,
+                 depth: int) -> tuple[bool, bool, int, bool]:
+    if escaped:
+        return False, in_class, depth, False
+    if character == "\\":
+        return True, in_class, depth, False
+    if character == "[":
+        return False, True, depth, False
+    if character == "]" and in_class:
+        return False, False, depth, False
+    if not in_class and character == "(":
+        return False, in_class, depth + 1, False
+    if not in_class and character == ")":
+        return False, in_class, max(0, depth - 1), False
+    separator = not in_class and depth == 0 and character == "|"
+    return False, in_class, depth, separator
+
+
+def _regex_alternative_mutations(pattern: str):
+    alternatives = _regex_alternatives(pattern)
+    prefix = suffix = ""
+    if not alternatives:
+        grouped = re.fullmatch(r"(\^?(?:\(\?:|\())(.+)(\)\$?)", pattern,
+                               flags=re.DOTALL)
+        if grouped:
+            prefix, body, suffix = grouped.groups()
+            alternatives = _regex_alternatives(body)
+    for index in range(len(alternatives)):
+        remaining = "|".join(
+            part for part_index, part in enumerate(alternatives)
+            if part_index != index)
+        yield index, prefix + remaining + suffix
 
 
 def _direct_mapping_mutations(value: dict, path: str):
@@ -452,6 +747,11 @@ def _direct_mapping_mutations(value: dict, path: str):
             yield f"{path}.regex-anchor", {
                 **value, key: child.removeprefix("^").removesuffix("$"),
             }
+        if key == "regex" and isinstance(child, str):
+            for index, mutation in _regex_alternative_mutations(child):
+                yield f"{path}.regex-alternative[{index}]-deleted", {
+                    **value, key: mutation,
+                }
 
 
 def mutation_candidates(value, path="rule"):
@@ -518,9 +818,12 @@ def _branch_mutant(plan: dict, branches: list[dict], deleted: int) -> dict:
 
 
 def _preflight_named_branches(plan: dict, cases: dict[str, list[str]],
-                              deadline: float) -> None:
+                              deadline: float,
+                              telemetry: PhaseTelemetry | None = None) -> None:
     branches = named_branches(plan)
     for index, branch in enumerate(branches):
+        if telemetry is not None:
+            telemetry.engine_processes += 1
         mutant = _branch_mutant(plan, branches, index)
         witness = {"invalid": [branch["witness"]], "valid": cases["valid"][:1]}
         survived, detail = run_preflight(
@@ -551,60 +854,93 @@ def compiled_mutations(plan: dict, matcher: dict) -> list[tuple[str, str]]:
     return candidates
 
 
-def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]]) -> None:
+def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]],
+              telemetry: PhaseTelemetry | None = None,
+              deadline: float | None = None) -> PhaseTelemetry:
     """Require contrasts and every selected mutant to fail closed."""
-    deadline = perf_counter() + MAX_PREFLIGHT_SECONDS
+    telemetry = telemetry or PhaseTelemetry()
+    cases = expanded_cases(plan, cases)
+    deadline = deadline or perf_counter() + MAX_PREFLIGHT_SECONDS
+    telemetry.engine_processes += 1
     passed, detail = run_preflight(
         render_rule(plan, matcher), cases, plan["id"], deadline=deadline)
     if not passed:
         raise RuntimeError(f"CONTRAST_PREFLIGHT_FAILED: {detail}")
-    _preflight_named_branches(plan, cases, deadline)
+    _preflight_named_branches(plan, cases, deadline, telemetry)
     candidates = compiled_mutations(plan, matcher)
     exclusions = set(plan.get("mutation_exclusions", {}))
     indexed = dict(candidates)
     unknown = sorted(exclusions - set(indexed))
     if unknown:
         raise RuntimeError(f"UNKNOWN_MUTATION_EXCLUSION: {', '.join(unknown)}")
-    for path in sorted(exclusions):
-        survived, exclusion_detail = run_preflight(
-            indexed[path], cases, plan["id"], deadline=deadline)
-        if (not survived or "engine-error=" in exclusion_detail
-                or "invalid-mutant=" in exclusion_detail):
-            raise RuntimeError(f"INVALID_MUTATION_EXCLUSION: {path}: {exclusion_detail}")
-    candidates = [(path, rule) for path, rule in candidates if path not in exclusions]
+    selected = candidates
     if len(candidates) > plan.get("mutation_limit", MAX_MUTATIONS):
         raise RuntimeError(
             f"MUTATION_BUDGET_EXCEEDED: {len(candidates)} exceeds "
             f"{plan.get('mutation_limit', MAX_MUTATIONS)}")
-    for path, rule_text in candidates[:plan.get("mutation_limit", MAX_MUTATIONS)]:
-        survived, mutation_detail = run_preflight(
-            rule_text, cases, plan["id"], deadline=deadline)
-        if survived:
+    outcomes = _run_mutant_batch(selected, cases, plan["id"], deadline, telemetry)
+    telemetry.mutants = len(selected)
+    telemetry.surviving_mutants = sum(
+        outcome == "survived" for outcome, _detail in outcomes.values())
+    telemetry.invalid_mutants = sum(
+        outcome == "invalid" for outcome, _detail in outcomes.values())
+    telemetry.error_mutants = sum(
+        outcome == "error" for outcome, _detail in outcomes.values())
+    for path in sorted(exclusions):
+        outcome, mutation_detail = outcomes[path]
+        if outcome != "survived":
+            raise RuntimeError(f"INVALID_MUTATION_EXCLUSION: {path}: {mutation_detail}")
+    candidates = [(path, rule) for path, rule in candidates if path not in exclusions]
+    for path, _rule_text in candidates[:plan.get("mutation_limit", MAX_MUTATIONS)]:
+        outcome, mutation_detail = outcomes[path]
+        if outcome == "survived":
             raise RuntimeError(f"MUTATION_SURVIVED: {path}")
-        if "invalid-mutant=" in mutation_detail:
+        if outcome == "invalid":
             continue
-        if "engine-error=" in mutation_detail:
+        if outcome == "error":
             raise RuntimeError(f"MUTATION_PREFLIGHT_ERROR: {path}: {mutation_detail}")
+    return telemetry
 
 
-def compile_plan(path: Path, *, run_checks=True) -> tuple[dict, dict, str, str]:
-    """Return validated plan, matcher, rule text and fixture text."""
+def compile_plan_ir(path: Path, *, run_checks=True,
+                    telemetry: PhaseTelemetry | None = None) -> CompiledPlan:
+    """Compile a plan once into the representation used by every phase."""
+    telemetry = telemetry or PhaseTelemetry()
+    started = perf_counter()
+    deadline = started + MAX_PREFLIGHT_SECONDS if run_checks else None
     plan = load_plan(path)
     matcher, cases = validate_plan(plan)
+    telemetry.load_validate_ms += int((perf_counter() - started) * 1000)
+    started = perf_counter()
     rule_text, fixture_text = render_rule(plan, matcher), render_fixture(plan, cases)
+    telemetry.render_ms += int((perf_counter() - started) * 1000)
     if run_checks:
         if not ENGINE.is_file():
             raise RuntimeError(f"pinned engine missing: {ENGINE}; run npm ci")
-        preflight(plan, matcher, cases)
-    return plan, matcher, rule_text, fixture_text
+        started = perf_counter()
+        preflight(plan, matcher, cases, telemetry, deadline)
+        telemetry.preflight_ms += int((perf_counter() - started) * 1000)
+    return CompiledPlan(plan, matcher, cases, rule_text, fixture_text)
+
+
+def compile_plan(path: Path, *, run_checks=True) -> tuple[dict, dict, str, str]:
+    """Compatibility tuple for callers; compilation itself has one owner."""
+    compiled = compile_plan_ir(path, run_checks=run_checks)
+    return compiled.plan, compiled.matcher, compiled.rule_text, compiled.fixture_text
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("plan", metavar="PLAN.yml", type=Path)
+    parser.add_argument("--telemetry", type=Path,
+                        help="write deterministic counters and informational wall time")
     args = parser.parse_args(argv)
-    plan, _, _, _ = compile_plan(args.plan)
-    print(f"plan ok: {plan['id']}")
+    telemetry = PhaseTelemetry()
+    compiled = compile_plan_ir(args.plan, telemetry=telemetry)
+    if args.telemetry:
+        payload = {**telemetry.report(), "plan": compiled.plan["id"]}
+        args.telemetry.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    print(f"plan ok: {compiled.plan['id']}")
     return 0
 
 
