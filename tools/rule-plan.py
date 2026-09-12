@@ -475,19 +475,19 @@ def _rule_with(plan: dict, matcher: dict, key=None, identity=None, mutant=None) 
     return render_rule(changed, matcher)
 
 
-def _has_positive_anchor(value, negated: bool = False) -> bool:
+def _has_positive_anchor(value) -> bool:
     """Return whether a rule tree still supplies an affirmative AST matcher."""
     if isinstance(value, dict):
         for key, child in value.items():
-            if key in {"kind", "pattern", "regex", "matches"} and not negated:
+            if key in {"kind", "pattern", "regex", "matches"}:
                 return True
             if key == "not":
                 continue
             if key in {"all", "any", "has", "inside", "follows", "precedes"} \
-                    and _has_positive_anchor(child, negated):
+                    and _has_positive_anchor(child):
                 return True
     elif isinstance(value, list):
-        return any(_has_positive_anchor(child, negated) for child in value)
+        return any(_has_positive_anchor(child) for child in value)
     return False
 
 

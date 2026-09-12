@@ -46,6 +46,14 @@ def run(command: list[str], env: dict[str, str] | None = None) -> None:
         raise SystemExit(result.returncode)
 
 
+def workflow_output(name: str, value: str) -> None:
+    """Publish optional GitHub Actions state without coupling standalone runs to CI."""
+    output = os.environ.get("GITHUB_OUTPUT")
+    if output:
+        with Path(output).open("a", encoding="utf-8") as stream:
+            stream.write(f"{name}={value}\n")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default=os.environ.get("BASE_SHA", "HEAD^"))
@@ -55,8 +63,10 @@ def main() -> int:
     if requires_full_suite(paths):
         run(["npm", "test"])
         run(["npm", "run", "test:mechanics"])
+        workflow_output("mechanics_ran", "true")
         print("fast gate escalated to full suite for infrastructure changes")
         return 0
+    workflow_output("mechanics_ran", "false")
     # Inventory enforces whole-pack layout, IDs, fixtures, snapshots and docs.
     # Each focused probe then enforces that rule's diagnostics, exact counts,
     # discovery and arm mutations without rescanning every rule in the pack.

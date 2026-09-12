@@ -4,6 +4,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import stat
 import sys
 import tempfile
@@ -339,6 +340,17 @@ class RuleMechanicsTests(unittest.TestCase):
                     patch.object(MECHANICS, "scan_rule", return_value=[]):
                 MECHANICS.validate_fix(rule, "danger()", "different()")
 
+    def test_fixer_rejects_missing_node_only_rewrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            rule = Path(directory) / "fix.yml"
+            rule.write_text(yaml.safe_dump({
+                "id": "cpp-missing-fix", "language": "cpp", "fix": "if () {}",
+                "rule": {"pattern": "danger()"},
+            }))
+            with self.assertRaisesRegex(RuntimeError,
+                                        "FIX_PARSE_FAILED: cpp-missing-fix"):
+                MECHANICS.validate_fix(rule, "danger()")
+
     def test_fixer_command_checks_every_invalid_fixture(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -419,6 +431,10 @@ class RuleMechanicsTests(unittest.TestCase):
 
 
 class ChangedGateTests(unittest.TestCase):
+    def test_workflow_skips_duplicate_mechanics_after_infrastructure_gate(self):
+        workflow = (ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
+        self.assertIn("if: steps.changed.outputs.mechanics_ran != 'true'", workflow)
+
     def test_rule_ids_include_plans_fixtures_rules_and_snapshots(self):
         paths = [
             "plans/python/security/py-one.yml",
@@ -432,6 +448,18 @@ class ChangedGateTests(unittest.TestCase):
         self.assertTrue(CHANGED.requires_full_suite(["tools/rule-plan.py"]))
         self.assertTrue(CHANGED.requires_full_suite(["tests/test_inventory.py"]))
         self.assertFalse(CHANGED.requires_full_suite(["rules/python/security/py-one.yml"]))
+
+    def test_infrastructure_fast_gate_runs_mechanics_once_and_marks_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "github-output"
+            with patch.object(CHANGED, "run") as run, \
+                    patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}), \
+                    patch("sys.argv", ["test-changed.py", "tools/rule-plan.py"]):
+                self.assertEqual(CHANGED.main(), 0)
+            self.assertEqual(output.read_text(encoding="utf-8"), "mechanics_ran=true\n")
+        self.assertEqual([call.args[0] for call in run.call_args_list], [
+            ["npm", "test"], ["npm", "run", "test:mechanics"],
+        ])
 
     def test_focused_gate_runs_inventory_and_each_changed_probe(self):
         paths = ["rules/python/security/py-one.yml"]

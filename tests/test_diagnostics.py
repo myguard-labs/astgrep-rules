@@ -20,16 +20,11 @@ CODERABBIT_IDS = {
 }
 
 
+@unittest.skipIf(
+    AST_GREP is None,
+    "ast-grep binary not found; install npm dependencies or a system binary",
+)
 class DiagnosticTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.ast_grep = AST_GREP
-        if AST_GREP is None:
-            raise unittest.SkipTest(
-                "ast-grep binary not found. Install with: "
-                "npm install (for local node_modules/.bin/ast-grep) or "
-                "install ast-grep to system PATH"
-            )
     def test_all_rules_emit_declared_diagnostics(self):
         rules = sorted(
             path for path in (ROOT / "rules").rglob("*.yml")

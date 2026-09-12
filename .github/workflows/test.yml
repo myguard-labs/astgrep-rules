@@ -14,6 +14,7 @@ jobs:
       - run: npm ci
       - run: python3 -m pip install -r requirements-dev.txt
       - name: Changed-rule gate
+        id: changed
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -22,6 +23,7 @@ jobs:
         if: github.event_name != 'pull_request'
         run: npm test
       - name: Generated artifacts and fixers
+        if: steps.changed.outputs.mechanics_ran != 'true'
         run: npm run test:mechanics
 
   # The PowerShell pack runs as its own job on purpose.

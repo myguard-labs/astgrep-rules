@@ -312,14 +312,13 @@ def validate_fix(rule_path: Path, source: str, expected: str | None = None) -> N
                                 capture_output=True, timeout=20, check=False)
         if second.returncode not in (0, 1) or target.read_text(encoding="utf-8") != after:
             raise RuntimeError(f"FIX_NOT_IDEMPOTENT: {rule['id']}")
-        parse = subprocess.run([str(ENGINE), "run", "-l", rule["language"],
-                                "--kind", "ERROR", "--json=compact", str(target)],
-                               text=True, capture_output=True, timeout=20, check=False)
-        try:
-            errors = json.loads(parse.stdout or "[]")
-        except json.JSONDecodeError as error:
-            raise RuntimeError(f"FIX_PARSE_FAILED: {rule['id']}: invalid JSON") from error
-        if parse.returncode not in (0, 1) or errors:
+        parse = subprocess.run(
+            [str(ENGINE), "run", "-l", rule["language"], "-p", after,
+             "--debug-query=sexp", "--stdin"], input="", text=True,
+            capture_output=True, timeout=20, check=False,
+        )
+        tree = parse.stdout + parse.stderr
+        if parse.returncode not in (0, 1) or re.search(r"\((?:ERROR|MISSING)\b", tree):
             raise RuntimeError(f"FIX_PARSE_FAILED: {rule['id']}")
 
 
