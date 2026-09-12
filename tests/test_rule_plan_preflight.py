@@ -233,6 +233,25 @@ class RulePlanPreflightTests(unittest.TestCase):
                 PLAN.validate_derived_syntax(
                     plan, cases, float("inf"), PLAN.PhaseTelemetry())
 
+    def test_c_callee_plan_is_schema_valid_and_passes_full_preflight(self):
+        source = "void f(){ danger(); }"
+        plan = minimal_plan(
+            language="c",
+            rule={"any": [
+                {"pattern": {"context": "danger();", "selector": "call_expression"}},
+                {"pattern": {"context": "(danger)();", "selector": "call_expression"}},
+            ]},
+            cases={
+                "invalid": [source], "valid": ["void f(){ safe(); }"],
+            },
+            metamorphic=[{
+                "source": source, "transform": "callee-parenthesized",
+                "outcome": "equivalent",
+            }],
+        )
+        matcher, cases = PLAN.validate_plan(plan)
+        PLAN.preflight(plan, matcher, cases)
+
     def test_literal_concatenation_is_limited_to_adjacent_literal_grammars(self):
         for language in ("javascript", "typescript", "java"):
             with self.subTest(language=language), \

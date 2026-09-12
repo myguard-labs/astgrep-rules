@@ -120,6 +120,8 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                 '(handlers[0])()',
             ('(handler)()', "callee-parenthesized", "python"):
                 '((handler))()',
+            ('void f(){ danger(); }', "callee-parenthesized", "c"):
+                'void f(){ (danger)(); }',
         }
         for (source, transform, language), expected in cases.items():
             with self.subTest(transform=transform):

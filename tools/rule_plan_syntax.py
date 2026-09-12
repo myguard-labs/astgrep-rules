@@ -50,11 +50,12 @@ def syntax_spans(source: str, language: str, kind: str | tuple[str, ...], extens
 def callee_spans(source: str, language: str, extension: str,
                  invoke) -> list[tuple[int, int]]:
     """Return exact `$CALLEE` child spans from CST call-expression matches."""
+    pattern = "$CALLEE($$$ARGS);" if language == "c" else "$CALLEE($$$ARGS)"
     with tempfile.TemporaryDirectory(prefix="rule-plan-callee-") as directory:
         path = Path(directory) / f"source.{extension}"
         path.write_text(source, encoding="utf-8")
         result = invoke([
-            "run", "-l", language, "-p", "$CALLEE($$$ARGS)",
+            "run", "-l", language, "-p", pattern,
             "--json=compact", str(path),
         ])
     if result.returncode not in (0, 1):
