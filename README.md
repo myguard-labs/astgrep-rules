@@ -97,21 +97,20 @@ inspect the diff; CI never accepts them automatically.
 ## Generate rules from plans
 
 For a complex rule, keep the matcher and test cases together in a versioned
-plan under `plans/`. Once you have written a plan, check and preview it before
-generating the rule and fixture. Replace the example path below with your plan:
+plan under `plans/`. Compile the plan, check every generated artifact, and then
+regenerate the plan-owned rules and fixtures:
 
 ```sh
-python3 tools/rule-scaffold.py --plan plans/python/security/py-my-rule.yml --check
-python3 tools/rule-scaffold.py --plan plans/python/security/py-my-rule.yml --dry-run
-npm run generate
+python3 tools/rule-plan.py plans/python/security/py-tempfile-mktemp.yml
 npm run generate:check
+npm run generate
 ```
 
 The generator checks the plan's structure, references, bindings, and expected
 matches before writing files. `generate:check` catches differences between
 plans and generated files, checks exact expected results, and rejects matcher
 or utility mutations that the tests fail to detect. The
-[plan guide](docs/complex-rules.md#generate-the-rule-and-contrast-matrix)
+[plan guide](docs/authoring.md#generate-from-a-canonical-plan)
 explains the format.
 
 For deeper checks, `tools/rule-mechanics.py` can suggest transformed test cases

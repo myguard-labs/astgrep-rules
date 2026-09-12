@@ -34,7 +34,8 @@ def rule_ids(paths: list[str]) -> list[str]:
 def requires_full_suite(paths: list[str]) -> bool:
     prefixes = ("tools/", ".github/workflows/")
     exact = {"package.json", "package-lock.json", "sgconfig.yml",
-             "sgconfig.powershell.yml"}
+             "sgconfig.powershell.yml", "tests/arm_coverage.json",
+             "tests/arm_coverage_powershell.json"}
     return any(path.startswith(prefixes) or path.startswith("tests/test_") or path in exact
                for path in paths)
 

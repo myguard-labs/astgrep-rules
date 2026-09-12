@@ -152,11 +152,11 @@ class RulePlanTests(unittest.TestCase):
         paths = [path for path, _rule in PLAN.compiled_mutations(plan, matcher)]
         self.assertNotIn("rule.all[0]-deleted", paths)
 
-    def test_affirmative_relational_matcher_keeps_mutation_candidate(self):
+    def test_affirmative_relation_only_mutant_is_not_a_candidate(self):
         matcher = {"all": [{"kind": "call"}, {"has": {"kind": "identifier"}}]}
         plan = minimal_plan(rule=matcher)
         paths = [path for path, _rule in PLAN.compiled_mutations(plan, matcher)]
-        self.assertIn("rule.all[0]-deleted", paths)
+        self.assertNotIn("rule.all[0]-deleted", paths)
 
     def test_constraint_any_arm_deletions_are_mutation_candidates(self):
         matcher = {"pattern": "danger($ARG)"}
@@ -447,6 +447,9 @@ class ChangedGateTests(unittest.TestCase):
     def test_infrastructure_changes_escalate_but_rule_changes_do_not(self):
         self.assertTrue(CHANGED.requires_full_suite(["tools/rule-plan.py"]))
         self.assertTrue(CHANGED.requires_full_suite(["tests/test_inventory.py"]))
+        self.assertTrue(CHANGED.requires_full_suite(["tests/arm_coverage.json"]))
+        self.assertTrue(CHANGED.requires_full_suite(
+            ["tests/arm_coverage_powershell.json"]))
         self.assertFalse(CHANGED.requires_full_suite(["rules/python/security/py-one.yml"]))
 
     def test_infrastructure_fast_gate_runs_mechanics_once_and_marks_output(self):

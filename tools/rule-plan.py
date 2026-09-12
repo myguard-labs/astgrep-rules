@@ -483,8 +483,7 @@ def _has_positive_anchor(value) -> bool:
                 return True
             if key == "not":
                 continue
-            if key in {"all", "any", "has", "inside", "follows", "precedes"} \
-                    and _has_positive_anchor(child):
+            if key in {"all", "any"} and _has_positive_anchor(child):
                 return True
     elif isinstance(value, list):
         return any(_has_positive_anchor(child) for child in value)
