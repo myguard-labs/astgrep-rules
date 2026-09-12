@@ -177,6 +177,14 @@ class RulePlanPreflightTests(unittest.TestCase):
             PLAN.preflight(plan, matcher, cases)
         contrast.assert_not_called()
 
+        error_scan = SimpleNamespace(returncode=0, stdout="[]", stderr="")
+        failed_cst = SimpleNamespace(returncode=2, stdout="query failed", stderr="")
+        with patch.object(PLAN, "run_engine", side_effect=[error_scan, failed_cst]), \
+                patch.object(PLAN, "run_preflight") as contrast, \
+                self.assertRaisesRegex(RuntimeError, "METAMORPHIC_PARSE_ERROR"):
+            PLAN.preflight(plan, matcher, cases)
+        contrast.assert_not_called()
+
     def test_metamorphic_parser_checks_actual_derived_cst(self):
         good = minimal_plan(metamorphic=[
             {"source": "first = 1\ndanger()", "transform": "callee-parenthesized",

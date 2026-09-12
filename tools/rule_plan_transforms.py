@@ -152,17 +152,14 @@ def _transform_format_conversion(source: str, language: str,
     kinds = _lexical_kinds(source, language)
     match = next((candidate for candidate in FORMAT_CONVERSION.finditer(source)
                   if set(kinds[candidate.start():candidate.end()]) == {"string"}
-                  and _preceding_percent_count(source, candidate.start()) % 2 == 0), None)
+                  and _preceding_percent_count(source, candidate.start()) % 2 == 0
+                  and not candidate.group("precision" if precision else "width")), None)
     if match is None:
         return source, 0
     parts = match.groupdict(default="")
     if precision:
-        if parts["precision"]:
-            return source, 0
         parts["precision"] = ".3"
     else:
-        if parts["width"]:
-            return source, 0
         parts["width"] = "20"
     replacement = (f"%{parts['flags']}{parts['width']}{parts['precision']}"
                    f"{parts['length']}{parts['conversion']}")

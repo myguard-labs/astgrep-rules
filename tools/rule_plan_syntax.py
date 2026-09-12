@@ -1,10 +1,20 @@
 """Pinned-engine CST targeting and recovery validation for rule plans."""
 
 import json
-import re
 import tempfile
 from itertools import pairwise
 from pathlib import Path
+
+import yaml
+
+ROOT_KINDS = {
+    "bash": "program", "c": "translation_unit", "cpp": "translation_unit",
+    "csharp": "compilation_unit", "go": "source_file", "html": "fragment",
+    "java": "program", "javascript": "program", "kotlin": "source_file",
+    "lua": "chunk", "php": "program", "python": "module", "ruby": "program",
+    "rust": "source_file", "scala": "compilation_unit", "swift": "source_file",
+    "typescript": "program",
+}
 
 CST_TARGET_KINDS: dict[str, dict[str, str | tuple[str, ...]]] = {
     "callee-parenthesized": {
@@ -97,11 +107,14 @@ def validate_full_source(source: str, language: str, extension: str,
         result = invoke(
             ["run", "-l", language, "-k", "ERROR", "--json=compact", str(path)],
             deadline=deadline)
-        cst = invoke(
-            ["run", "-l", language, "-p", source, "--debug-query=sexp", "--stdin"],
-            deadline=deadline, input_text="")
+        full_rule = yaml.safe_dump({
+            "id": "full-source", "language": language,
+            "rule": {"pattern": {"context": source, "selector": ROOT_KINDS[language]}},
+        })
+        cst = invoke(["scan", "--inline-rules", full_rule, "--json=compact", str(path)],
+                     deadline=deadline)
     errors = json.loads(result.stdout or "[]")
-    recovery = cst.stdout + cst.stderr
-    if (result.returncode not in (0, 1) or not isinstance(errors, list) or errors
-            or re.search(r"\((?:ERROR|MISSING)\b", recovery)):
+    if (result.returncode not in (0, 1) or cst.returncode != 0
+            or not isinstance(errors, list) or errors
+            or not json.loads(cst.stdout or "[]")):
         raise RuntimeError("METAMORPHIC_PARSE_ERROR: derived source is malformed")

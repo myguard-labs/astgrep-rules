@@ -178,6 +178,10 @@ class RulePlanMetamorphicTests(unittest.TestCase):
             ('log("%% literal: %s", value)', "format-width",
              'log("%% literal: %20s", value)'),
             ('log("%%%s", value)', "format-precision", 'log("%%%.3s", value)'),
+            ('log("%20s %s", first, second)', "format-width",
+             'log("%20s %20s", first, second)'),
+            ('log("%.2s %s", first, second)', "format-precision",
+             'log("%.2s %.3s", first, second)'),
         ]
         for source, transform, expected in transformed:
             with self.subTest(source=source, transform=transform):
