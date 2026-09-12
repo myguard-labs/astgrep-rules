@@ -54,7 +54,8 @@ def syntax_spans(source: str, language: str, kind: str | tuple[str, ...], extens
     ]
 
 
-def literal_gap_spans(source: str, language: str, extension: str, invoke):
+def literal_gap_spans(source: str, language: str, extension: str,
+                      invoke) -> list[tuple[int, int]]:
     """Return whitespace gaps bounded by two distinct string-literal CST nodes."""
     kind = "string" if language == "python" else "string_literal"
     literals = sorted(syntax_spans(source, language, kind, extension, invoke))

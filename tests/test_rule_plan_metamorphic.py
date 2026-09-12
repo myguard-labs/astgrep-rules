@@ -152,7 +152,7 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                     PLAN._metamorphic_source(  # pylint: disable=protected-access
                         source, transform, language), expected)
 
-    def test_format_transforms_skip_escaped_percent_and_existing_fields(self):
+    def test_literal_spacing_requires_adjacent_literal_nodes_on_one_line(self):
         for language in ("c", "cpp"):
             with self.subTest(transform="literal-spacing", language=language):
                 self.assertEqual(
@@ -166,6 +166,8 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                     ValueError, "not applicable"):
                 PLAN._metamorphic_source(  # pylint: disable=protected-access
                     source, "literal-spacing", language)
+
+    def test_format_transforms_skip_escaped_percent_and_existing_fields(self):
         transformed = [
             ('log("%% literal: %s", value)', "format-width",
              'log("%% literal: %20s", value)'),
