@@ -339,13 +339,16 @@ class RulePlanPreflightTests(unittest.TestCase):
                     "source": '"a"\n"b"', "transform": "literal-spacing",
                     "outcome": "equivalent",
                 }], cases={"invalid": ['"a"\n"b"'], "valid": ["safe();"]}))
-        plan = minimal_plan(metamorphic=[{
-            "source": '"a"\n"b"', "transform": "literal-spacing",
-            "outcome": "equivalent",
-        }], cases={"invalid": ['"a"\n"b"'], "valid": ["safe()"]})
-        _matcher, cases = PLAN.validate_plan(plan)
-        with self.assertRaisesRegex(ValueError, "not applicable"):
-            PLAN.expanded_cases(plan, cases)
+        for separator in ("\n", "\r", "\r\n"):
+            source = f'"a"{separator}"b"'
+            plan = minimal_plan(metamorphic=[{
+                "source": source, "transform": "literal-spacing",
+                "outcome": "equivalent",
+            }], cases={"invalid": [source], "valid": ["safe()"]})
+            _matcher, cases = PLAN.validate_plan(plan)
+            with self.subTest(separator=repr(separator)), \
+                    self.assertRaisesRegex(ValueError, "not applicable"):
+                PLAN.expanded_cases(plan, cases)
 
     def test_engine_timeout_terminates_descendant_process_group(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -153,6 +153,10 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                         source, transform, language), expected)
 
     def test_literal_spacing_requires_adjacent_literal_nodes_on_one_line(self):
+        self.assertEqual(
+            PLAN._metamorphic_source(  # pylint: disable=protected-access
+                'value = "a"\t"b"', "literal-spacing", "python"),
+            'value = "a"   "b"')
         for language in ("c", "cpp"):
             with self.subTest(transform="literal-spacing", language=language):
                 self.assertEqual(
@@ -161,7 +165,9 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                     'const char *x = "a"   "b";')
         for source, language in (('danger(" ")', "python"),
                                  ('danger(" ");', "c"),
-                                 ('"a"\n"b"', "python")):
+                                 ('"a"\n"b"', "python"),
+                                 ('"a"\r"b"', "python"),
+                                 ('"a"\r\n"b"', "python")):
             with self.subTest(source=source), self.assertRaisesRegex(
                     ValueError, "not applicable"):
                 PLAN._metamorphic_source(  # pylint: disable=protected-access

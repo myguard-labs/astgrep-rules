@@ -61,7 +61,7 @@ def literal_gap_spans(source: str, language: str, extension: str,
     literals = sorted(syntax_spans(source, language, kind, extension, invoke))
     return [(left[1], right[0]) for left, right in pairwise(literals)
             if source[left[1]:right[0]].isspace()
-            and "\n" not in source[left[1]:right[0]]]
+            and not set(source[left[1]:right[0]]) & {"\r", "\n"}]
 
 
 def callee_spans(source: str, language: str, extension: str,
