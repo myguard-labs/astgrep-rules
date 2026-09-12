@@ -17,10 +17,12 @@ from time import perf_counter
 from types import MappingProxyType
 
 import rule_plan_batches as BATCHES
+import rule_plan_syntax as SYNTAX
+import rule_plan_transforms as TRANSFORMS
 import yaml
 from rule_plan_telemetry import PhaseTelemetry
-from rule_plan_transforms import metamorphic_source as _metamorphic_source
-from rule_plan_transforms import regex_alternatives as _regex_alternatives
+
+_regex_alternatives = TRANSFORMS.regex_alternatives
 
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE = ROOT / "node_modules" / ".bin" / "ast-grep"
@@ -57,7 +59,9 @@ METAMORPHIC_LANGUAGES = {
     "parenthesized": set(LANGUAGES) - {"bash", "html"},
     "callee-parenthesized": {"c", "cpp", "javascript", "typescript", "python"},
     "qualified-name-spacing": {"python", "javascript", "typescript", "java", "php"},
-    "member-access-spacing": {"c", "cpp", "javascript", "typescript", "java", "go"},
+    "member-access-spacing": {
+        "c", "cpp", "javascript", "typescript", "java", "go", "php",
+    },
     "literal-spacing": {"c", "cpp", "javascript", "typescript", "python"},
     "format-width": {"c", "cpp", "go"},
     "format-precision": {"c", "cpp", "go"},
@@ -473,6 +477,19 @@ def validate_metamorphic(plan: dict, cases: dict[str, list[str]]) -> None:
         seen.add(identity)
 
 
+def _metamorphic_source(source: str, transform: str, language: str) -> str:
+    kind = SYNTAX.target_kind(transform, language)
+    spans = SYNTAX.syntax_spans(
+        source, language, kind, LANGUAGE_EXTENSIONS[language], _syntax_run) \
+        if kind else None
+    return TRANSFORMS.metamorphic_source(source, transform, language, spans)
+
+
+def _syntax_run(arguments: list[str], deadline: float | None = None, **kwargs):
+    timeout = _remaining(deadline) if deadline is not None else MAX_ENGINE_SECONDS
+    return run_engine([str(ENGINE), *arguments], timeout=timeout, **kwargs)
+
+
 def expanded_cases(plan: dict, cases: dict[str, list[str]]) -> dict[str, list[str]]:
     """Add declared equivalent and outcome-changing derived syntax cases."""
     result = {key: list(values) for key, values in cases.items()}
@@ -499,26 +516,14 @@ def validate_derived_syntax(plan: dict, cases: dict[str, list[str]], deadline: f
     for source in derived["valid"] + derived["invalid"]:
         if source in originals:
             continue
-        telemetry.engine_processes += 1
-        _validate_full_source(plan["language"], source, deadline)
-
-
-def _validate_full_source(language: str, source: str, deadline: float) -> None:
-    """Parse a program file and reject tree-sitter recovery nodes."""
-    extension = LANGUAGE_EXTENSIONS[language]
-    try:
-        with tempfile.TemporaryDirectory(prefix="rule-plan-source-") as directory:
-            path = Path(directory) / f"derived.{extension}"
-            path.write_text(source, encoding="utf-8")
-            result = run_engine(
-                [str(ENGINE), "run", "-l", language, "-k", "ERROR",
-                 "--json=compact", str(path)], timeout=_remaining(deadline))
-        errors = json.loads(result.stdout or "[]")
-    except (OSError, subprocess.TimeoutExpired, RuntimeError,
-            json.JSONDecodeError) as error:
-        raise RuntimeError(f"METAMORPHIC_PARSE_ERROR: {error}") from error
-    if result.returncode not in (0, 1) or not isinstance(errors, list) or errors:
-        raise RuntimeError("METAMORPHIC_PARSE_ERROR: derived source is malformed")
+        telemetry.engine_processes += 2
+        try:
+            SYNTAX.validate_full_source(
+                source, plan["language"], LANGUAGE_EXTENSIONS[plan["language"]],
+                deadline, _syntax_run)
+        except (OSError, subprocess.TimeoutExpired, RuntimeError,
+                json.JSONDecodeError) as error:
+            raise RuntimeError(f"METAMORPHIC_PARSE_ERROR: {error}") from error
 
 
 def named_branches(plan: dict) -> list[dict]:
@@ -683,9 +688,15 @@ def _run_mutant_batch(items: list[tuple[str, str]], cases: dict[str, list[str]],
         id_to_path, malformed = _materialize_mutants(root, items, cases, rule_id)
         if not id_to_path:
             return malformed
-        result, errors = BATCHES.execute(
-            root, id_to_path, malformed, deadline, telemetry,
-            ENGINE, _remaining, run_engine)
+
+        def invoke():
+            remaining = _remaining(deadline)
+            telemetry.engine_processes += 1
+            return run_engine(
+                [str(ENGINE), "test", "--include-off", "-c", str(root / "sgconfig.yml"),
+                 "--skip-snapshot-tests"], timeout=remaining)
+
+        result, errors = BATCHES.execute(id_to_path, malformed, invoke)
         if errors is not None:
             return errors
     telemetry.wall_ms += int((perf_counter() - started) * 1000)
@@ -724,7 +735,8 @@ def _regex_alternative_mutations(pattern: str):
             pattern, flags=re.DOTALL)
         if grouped:
             prefix, body, suffix = grouped.groups()
-            verbose = prefix.startswith("(?") and "x" in prefix.partition(":")[0]
+            group_prefix = prefix.removeprefix("^")
+            verbose = group_prefix.startswith("(?") and "x" in group_prefix.partition(":")[0]
             alternatives = _regex_alternatives(body, verbose=verbose)
     for index in range(len(alternatives)):
         remaining = "|".join(

@@ -82,41 +82,48 @@ def _javascript_regex_end(source: str, index: int) -> int | None:
 
 
 def _replace_first(source: str, expression: re.Pattern, replacement,
-                   allowed: set[str], language: str) -> tuple[str, int]:
+                   language: str, target) -> tuple[str, int]:
+    allowed, syntax_spans = target
     kinds = _lexical_kinds(source, language)
     for match in expression.finditer(source):
-        if set(kinds[match.start():match.end()]) <= allowed:
+        in_syntax = syntax_spans is None or any(
+            start <= match.start() and match.end() <= end for start, end in syntax_spans)
+        if in_syntax and set(kinds[match.start():match.end()]) <= allowed:
             value = replacement(match) if callable(replacement) else match.expand(replacement)
             return source[:match.start()] + value + source[match.end():], 1
     return source, 0
 
 
-def metamorphic_source(source: str, transform: str, language: str) -> str:
+def metamorphic_source(source: str, transform: str, language: str,
+                       syntax_spans: list[tuple[int, int]] | None = None) -> str:
     """Apply one transform only to a token of the intended lexical class."""
     if transform == "parenthesized":
         return f"({source})"
     if transform == "callee-parenthesized":
         changed, count = _replace_first(
             source, re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()"),
-            r"(\1)", {"code"}, language)
+            r"(\1)", language, ({"code"}, syntax_spans))
     elif transform in {"qualified-name-spacing", "member-access-spacing"}:
         changed, count = _replace_first(
-            source, re.compile(r"\s*(->|\.)\s*"), r" \1 ", {"code"}, language)
+            source, re.compile(r"\s*(->|\.)\s*"), r" \1 ", language,
+            ({"code"}, syntax_spans))
     elif transform == "qualified-name":
         changed, count = _replace_first(
-            source, re.compile(r"(?<!:)\b([A-Za-z_]\w*::)"), r"::\1", {"code"}, language)
+            source, re.compile(r"(?<!:)\b([A-Za-z_]\w*::)"), r"::\1", language,
+            ({"code"}, None))
     elif transform == "member-access-swap":
         changed, count = _replace_first(
             source, re.compile(r"->|\."),
-            lambda match: "." if match[0] == "->" else "->", {"code"}, language)
+            lambda match: "." if match[0] == "->" else "->", language,
+            ({"code"}, syntax_spans))
     elif transform == "literal-concatenation":
         changed, count = _replace_first(
             source, re.compile(r'"([^"\\]+)"'),
-            lambda match: f'"{match[1]}" ""', {"string"}, language)
+            lambda match: f'"{match[1]}" ""', language, ({"string"}, None))
     elif transform == "literal-spacing":
         changed, count = _replace_first(
-            source, re.compile(r"(['\"])\s+(['\"])"), r"\1   \2",
-            {"code", "string"}, language)
+            source, re.compile(r"(['\"])\s+(['\"])"), r"\1   \2", language,
+            ({"code", "string"}, None))
     elif transform == "format-width":
         changed, count = _transform_format_conversion(source, language, precision=False)
     elif transform == "format-precision":

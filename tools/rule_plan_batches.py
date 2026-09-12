@@ -24,20 +24,11 @@ def classify(result, id_to_path, malformed):
     return outcomes
 
 
-def execute(root, id_to_path, malformed, deadline, telemetry,
-            engine, remaining, run_engine):
+def execute(id_to_path, malformed, invoke):
     """Execute one materialized batch and return its result or attributed errors."""
     try:
-        timeout = remaining(deadline)
-    except RuntimeError:
-        return None, batch_error(
-            id_to_path.values(), malformed, "engine-error=preflight budget exhausted")
-    telemetry.engine_processes += 1
-    try:
-        result = run_engine(
-            [str(engine), "test", "--include-off", "-c", str(root / "sgconfig.yml"),
-             "--skip-snapshot-tests"], timeout=timeout)
-    except (OSError, subprocess.TimeoutExpired) as error:
+        result = invoke()
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
         return None, batch_error(
             id_to_path.values(), malformed, f"engine-error={error}")
     return result, None

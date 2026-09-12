@@ -97,6 +97,13 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                 '[/obj.field/, obj . field]',
             ('x // y; danger()', "callee-parenthesized", "python"):
                 'x // y; (danger)()',
+            ('function f(){ return /obj.field/; } obj.field;',
+             "member-access-spacing", "javascript"):
+                'function f(){ return /obj.field/; } obj . field;',
+            ('# $fake->field\n$obj->field;', "member-access-spacing", "php"):
+                '# $fake->field\n$obj -> field;',
+            ('void f() { danger(); }', "callee-parenthesized", "cpp"):
+                'void f() { (danger)(); }',
         }
         for (source, transform, language), expected in cases.items():
             with self.subTest(transform=transform):

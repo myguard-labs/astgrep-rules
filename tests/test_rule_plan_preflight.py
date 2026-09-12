@@ -181,9 +181,10 @@ class RulePlanPreflightTests(unittest.TestCase):
             good, good_cases, float("inf"), PLAN.PhaseTelemetry())
 
         bad = minimal_plan(
-            cases={"invalid": ["first = 1\ndanger("], "valid": ["safe()"]},
+            cases={"invalid": ["first = 1\ndanger()\nif"], "valid": ["safe()"]},
             metamorphic=[
-                {"source": "first = 1\ndanger(", "transform": "callee-parenthesized",
+                {"source": "first = 1\ndanger()\nif",
+                 "transform": "callee-parenthesized",
                  "outcome": "equivalent"},
             ],
         )
@@ -191,6 +192,20 @@ class RulePlanPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "METAMORPHIC_PARSE_ERROR"):
             PLAN.validate_derived_syntax(
                 bad, bad_cases, float("inf"), PLAN.PhaseTelemetry())
+
+    def test_full_source_parser_rejects_cpp_missing_node_recovery(self):
+        source = "void f(){if () {} obj->field;}"
+        plan = minimal_plan(
+            language="cpp", cases={"invalid": [source], "valid": ["int value = 1;"]},
+            metamorphic=[{
+                "source": source, "transform": "member-access-spacing",
+                "outcome": "equivalent",
+            }],
+        )
+        _matcher, cases = PLAN.validate_plan(plan)
+        with self.assertRaisesRegex(RuntimeError, "METAMORPHIC_PARSE_ERROR"):
+            PLAN.validate_derived_syntax(
+                plan, cases, float("inf"), PLAN.PhaseTelemetry())
 
     def test_literal_concatenation_is_limited_to_adjacent_literal_grammars(self):
         for language in ("javascript", "typescript", "java"):
