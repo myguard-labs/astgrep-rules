@@ -332,6 +332,13 @@ class RulePlanPreflightTests(unittest.TestCase):
                     "source": "danger()", "transform": "literal-concatenation",
                     "outcome": "equivalent",
                 }]))
+        for language in ("javascript", "typescript"):
+            with self.subTest(transform="literal-spacing", language=language), \
+                    self.assertRaisesRegex(ValueError, f"does not support {language}"):
+                PLAN.validate_plan(minimal_plan(language=language, metamorphic=[{
+                    "source": '"a"\n"b"', "transform": "literal-spacing",
+                    "outcome": "equivalent",
+                }], cases={"invalid": ['"a"\n"b"'], "valid": ["safe();"]}))
 
     def test_engine_timeout_terminates_descendant_process_group(self):
         with tempfile.TemporaryDirectory() as directory:

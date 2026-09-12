@@ -153,6 +153,12 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                         source, transform, language), expected)
 
     def test_format_transforms_skip_escaped_percent_and_existing_fields(self):
+        for language in ("c", "cpp"):
+            with self.subTest(transform="literal-spacing", language=language):
+                self.assertEqual(
+                    PLAN._metamorphic_source(  # pylint: disable=protected-access
+                        'const char *x = "a" "b";', "literal-spacing", language),
+                    'const char *x = "a"   "b";')
         for source, language in (('danger(" ")', "python"),
                                  ('const re = /" "/;', "javascript")):
             with self.subTest(source=source), self.assertRaisesRegex(

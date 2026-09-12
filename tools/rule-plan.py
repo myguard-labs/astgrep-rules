@@ -62,7 +62,7 @@ METAMORPHIC_LANGUAGES = {
     "member-access-spacing": {
         "c", "cpp", "javascript", "typescript", "java", "go", "php",
     },
-    "literal-spacing": {"c", "cpp", "javascript", "typescript", "python"},
+    "literal-spacing": {"c", "cpp", "python"},
     "format-width": {"c", "cpp", "go"},
     "format-precision": {"c", "cpp", "go"},
     "qualified-name": {"c", "cpp"},
