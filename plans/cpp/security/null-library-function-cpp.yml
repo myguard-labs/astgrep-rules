@@ -13,28 +13,19 @@ comments:
 extensions:
   ast-grep-essentials: true
 mutation_exclusions:
-  rule.any[0].has.field: >-
-    The C++ grammar exposes the source call as the only direct named call child
-    in the defended subscript fixture, so removing the field selector does not
-    change that contrast; the selector remains to state the operand boundary.
-  rule.any[1].has.field: >-
-    The member-access contrast has one direct call child; the field selector is
-    retained to document that only the object operand is inspected.
-  rule.any[2].has.field: >-
-    The unary-dereference contrast has one direct call child; the field
-    selector is retained to document that only its operand is inspected.
-  rule.any[3].all[0].has.field: >-
-    A call expression has one direct function child, making this selector
-    mechanically redundant while it documents the callee boundary.
-  rule.any[3].all[1].has.field: >-
-    A call expression has one direct argument-list child, making this selector
-    mechanically redundant while it prevents accidental traversal changes.
-  rule.any[3].all[1].has.any[1].has.has.field: >-
-    Assignment fixtures expose a single direct RHS call; the selector records
-    that a source call on the assignment LHS is outside the claim.
-  utils.null-return-call.has.field: >-
-    A call expression has one direct function child, making this selector
-    mechanically redundant while it documents that arguments are not names.
+  rule.all[1].any[0].has.field: 'The field selector documents the subscript operand; the C++ contrast has only one direct call child.'
+  rule.all[1].any[1].has.field: 'The field selector documents the member object; the C++ contrast has only one direct call child.'
+  rule.all[1].any[2].has.field: 'The field selector documents the unary operand; the C++ contrast has only one direct call child.'
+  rule.all[1].any[3].all[0].has.field: 'A call has one direct callee child; the field selector records the API-name boundary.'
+  rule.all[1].any[4].all[0].has.field: 'A call has one direct callee child; the field selector records the API-name boundary.'
+  rule.all[1].any[5].all[0].has.field: 'A call has one direct callee child; the field selector records the API-name boundary.'
+  rule.all[1].any[6].all[0].has.field: 'A call has one direct callee child; the field selector records the API-name boundary.'
+  rule.all[1].any[6].all[1].has.field: 'A call has one direct argument-list child; the field selector records the positional boundary.'
+  rule.all[1].any[6].all[1].has.all[0].has.kind: 'The percent-s regex can only match a string literal token in the C++ argument contrasts; the kind states the literal-format contract.'
+  utils.null-return-call.has.field: 'A call has one direct callee child; the field selector prevents arguments from becoming function names.'
+  utils.null-return-assignment.has.field: 'An assignment has one direct RHS child in these contrasts; the selector records the RHS-only contract.'
+  utils.null-return-paren-one.has.stopBy: 'Neighbor is the engine default here; spelling it pins the transparent single-wrapper boundary.'
+  utils.null-return-paren-two.has.stopBy: 'Neighbor is the engine default here; spelling it pins the transparent double-wrapper boundary.'
 message: >-
   A library function that may return NULL is dereferenced or passed directly
   to a library function that requires a valid pointer, without a NULL check.
@@ -43,42 +34,103 @@ note: >-
   [REFERENCES]
       - https://wiki.sei.cmu.edu/confluence/display/c/EXP34-C.+Do+not+dereference+null+pointers
 rule:
-  any:
-    - kind: subscript_expression
-      has:
-        field: argument
-        matches: null-return-call
-    - kind: field_expression
-      has:
-        field: argument
-        matches: null-return-call
-    - kind: pointer_expression
-      has:
-        field: argument
-        matches: null-return-call
-    - kind: call_expression
-      all:
-        - has:
-            field: function
-            matches: pointer-consuming-function
-        - has:
-            field: arguments
-            any:
-              - has:
-                  matches: null-return-call
-              - has:
-                  kind: assignment_expression
-                  has:
-                    field: right
-                    matches: null-return-call
+  all:
+    - not:
+        inside:
+          stopBy: end
+          kind: ERROR
+    - any:
+        - kind: subscript_expression
+          has:
+            field: argument
+            matches: null-return-operand
+        - kind: field_expression
+          has:
+            field: argument
+            matches: null-return-operand
+        - kind: pointer_expression
+          has:
+            field: argument
+            matches: null-return-operand
+        - kind: call_expression
+          all:
+            - has:
+                field: function
+                matches: first-pointer-consumer
+            - has:
+                field: arguments
+                has:
+                  nthChild: 1
+                  matches: unsafe-pointer-operand
+        - kind: call_expression
+          all:
+            - has:
+                field: function
+                matches: second-pointer-consumer
+            - has:
+                field: arguments
+                has:
+                  nthChild: 2
+                  matches: unsafe-pointer-operand
+        - kind: call_expression
+          all:
+            - has:
+                field: function
+                regex: '^(?:(?:::|std::)?fwrite)$'
+            - has:
+                field: arguments
+                has:
+                  nthChild: 4
+                  matches: unsafe-pointer-operand
+        - kind: call_expression
+          all:
+            - has:
+                field: function
+                regex: '^(?:(?:::|std::)?fprintf)$'
+            - has:
+                field: arguments
+                all:
+                  - has:
+                      nthChild: 2
+                      kind: string_literal
+                      regex: '%s'
+                  - has:
+                      nthChild: 3
+                      matches: unsafe-pointer-operand
 utils:
   null-return-call:
     kind: call_expression
     has:
       field: function
       regex: '^(?:(?:::|std::)?(?:fgets|fopen|getenv|getgrent|getgrgid|getgrnam|getlogin|getpwent|getpwnam|getpwuid|getpwuuid|gets|inet_ntop|realpath|tempnam|tmpfile|tmpnam|memchr|strcasestr_l|strcasestr|strchr|strnstr|strpbrk|strrchr|strstr|strtok_r|strtok))$'
-  pointer-consuming-function:
-    regex: '^(?:(?:::|std::)?(?:atof|atoi|atol_l|atol|atoll_l|atoll|getc|fprintf|fgetpos|fseek|fseeko|fsetpos|ftell|ftello|rewind|strlen|strtoimax|strtod|strtol|strtoul|strtoll|strtoq|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|strpcpy|wcpcpy|wcpncpy|fwrite))$'
+  null-return-paren-one:
+    kind: parenthesized_expression
+    has:
+      stopBy: neighbor
+      matches: null-return-call
+  null-return-paren-two:
+    kind: parenthesized_expression
+    has:
+      stopBy: neighbor
+      matches: null-return-paren-one
+  null-return-operand:
+    any:
+      - matches: null-return-call
+      - matches: null-return-paren-one
+      - matches: null-return-paren-two
+  null-return-assignment:
+    kind: assignment_expression
+    has:
+      field: right
+      matches: null-return-operand
+  unsafe-pointer-operand:
+    any:
+      - matches: null-return-operand
+      - matches: null-return-assignment
+  first-pointer-consumer:
+    regex: '^(?:(?:::|std::)?(?:atof|atoi|atol_l|atol|atoll_l|atoll|getc|fprintf|fgetpos|fseek|fseeko|fsetpos|ftell|ftello|rewind|strlen|strtoimax|strtod|strtol|strtoul|strtoll|strtoq|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy|fwrite))$'
+  second-pointer-consumer:
+    regex: '^(?:(?:::|std::)?(?:fprintf|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy))$'
 cases:
   valid:
     - |
@@ -122,12 +174,31 @@ cases:
       void consumer_shape_controls() {
         project::consume(getenv("FOO"));
         strlen(known_nonnull);
+        strlen((known_nonnull));
         fwrite(data, 1, 1, stream = known_file);
+        consume(a, b, c, getenv("FOURTH"));
+        log_message(stream, "%s", getenv("THIRD"));
+        mystrlen(getenv("FIRST"));
+        mystrcpy(buffer, getenv("SECOND"));
+        myfwrite(a, b, c, getenv("FOURTH_SUFFIX"));
+        myfprintf(stream, "%s", getenv("THIRD_SUFFIX"));
       }
     - |
       void lexical_controls() {
         // strcpy(buf, getenv("COMMENT"));
         const char *example = "fwrite(data, 1, 1, fopen(path, mode))";
+      }
+    - |
+      void malformed( {
+        strcpy(buf, getenv("BROKEN"));
+      }
+    - |
+      void pointer_format_control() {
+        fprintf(stderr, "%p", memchr(data, needle, length));
+        fprintf(stderr, "%s", known_nonnull);
+        fprintf(stderr, "%s", known_nonnull, getenv("UNUSED"));
+        fprintf(stderr, "%p", getenv("POINTER"), "%s");
+        fwrite(data, size, getenv("COUNT"), stream);
       }
   invalid:
     - |
@@ -158,3 +229,19 @@ cases:
       char direct_dereference() { return *getenv("NAME"); }
     - |
       long qualified_sink() { return std::strlen(::getenv("NAME")); }
+    - |
+      char parenthesized_subscript() { return ((getenv("NAME")))[0]; }
+    - |
+      char parenthesized_member() { return (fopen("file", "r"))->flags; }
+    - |
+      char parenthesized_dereference() { return *((getenv("NAME"))); }
+    - |
+      long parenthesized_sink() { return strlen((getenv("NAME"))); }
+    - |
+      int parenthesized_assignment() { return getc(stream = (fopen(path, "r"))); }
+    - |
+      char *stpcpy_source() { return stpcpy(destination, getenv("NAME")); }
+    - |
+      void unsafe_string_format() {
+        fprintf(stderr, "%s", memchr(data, needle, length));
+      }

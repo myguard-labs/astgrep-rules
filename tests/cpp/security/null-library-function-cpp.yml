@@ -42,12 +42,31 @@ valid:
   void consumer_shape_controls() {
     project::consume(getenv("FOO"));
     strlen(known_nonnull);
+    strlen((known_nonnull));
     fwrite(data, 1, 1, stream = known_file);
+    consume(a, b, c, getenv("FOURTH"));
+    log_message(stream, "%s", getenv("THIRD"));
+    mystrlen(getenv("FIRST"));
+    mystrcpy(buffer, getenv("SECOND"));
+    myfwrite(a, b, c, getenv("FOURTH_SUFFIX"));
+    myfprintf(stream, "%s", getenv("THIRD_SUFFIX"));
   }
 - |
   void lexical_controls() {
     // strcpy(buf, getenv("COMMENT"));
     const char *example = "fwrite(data, 1, 1, fopen(path, mode))";
+  }
+- |
+  void malformed( {
+    strcpy(buf, getenv("BROKEN"));
+  }
+- |
+  void pointer_format_control() {
+    fprintf(stderr, "%p", memchr(data, needle, length));
+    fprintf(stderr, "%s", known_nonnull);
+    fprintf(stderr, "%s", known_nonnull, getenv("UNUSED"));
+    fprintf(stderr, "%p", getenv("POINTER"), "%s");
+    fwrite(data, size, getenv("COUNT"), stream);
   }
 invalid:
 - |
@@ -78,3 +97,19 @@ invalid:
   char direct_dereference() { return *getenv("NAME"); }
 - |
   long qualified_sink() { return std::strlen(::getenv("NAME")); }
+- |
+  char parenthesized_subscript() { return ((getenv("NAME")))[0]; }
+- |
+  char parenthesized_member() { return (fopen("file", "r"))->flags; }
+- |
+  char parenthesized_dereference() { return *((getenv("NAME"))); }
+- |
+  long parenthesized_sink() { return strlen((getenv("NAME"))); }
+- |
+  int parenthesized_assignment() { return getc(stream = (fopen(path, "r"))); }
+- |
+  char *stpcpy_source() { return stpcpy(destination, getenv("NAME")); }
+- |
+  void unsafe_string_format() {
+    fprintf(stderr, "%s", memchr(data, needle, length));
+  }

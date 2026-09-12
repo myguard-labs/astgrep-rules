@@ -21,34 +21,95 @@ utils:
     has:
       field: function
       regex: ^(?:(?:::|std::)?(?:fgets|fopen|getenv|getgrent|getgrgid|getgrnam|getlogin|getpwent|getpwnam|getpwuid|getpwuuid|gets|inet_ntop|realpath|tempnam|tmpfile|tmpnam|memchr|strcasestr_l|strcasestr|strchr|strnstr|strpbrk|strrchr|strstr|strtok_r|strtok))$
-  pointer-consuming-function:
-    regex: ^(?:(?:::|std::)?(?:atof|atoi|atol_l|atol|atoll_l|atoll|getc|fprintf|fgetpos|fseek|fseeko|fsetpos|ftell|ftello|rewind|strlen|strtoimax|strtod|strtol|strtoul|strtoll|strtoq|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|strpcpy|wcpcpy|wcpncpy|fwrite))$
+  null-return-paren-one:
+    kind: parenthesized_expression
+    has:
+      stopBy: neighbor
+      matches: null-return-call
+  null-return-paren-two:
+    kind: parenthesized_expression
+    has:
+      stopBy: neighbor
+      matches: null-return-paren-one
+  null-return-operand:
+    any:
+    - matches: null-return-call
+    - matches: null-return-paren-one
+    - matches: null-return-paren-two
+  null-return-assignment:
+    kind: assignment_expression
+    has:
+      field: right
+      matches: null-return-operand
+  unsafe-pointer-operand:
+    any:
+    - matches: null-return-operand
+    - matches: null-return-assignment
+  first-pointer-consumer:
+    regex: ^(?:(?:::|std::)?(?:atof|atoi|atol_l|atol|atoll_l|atoll|getc|fprintf|fgetpos|fseek|fseeko|fsetpos|ftell|ftello|rewind|strlen|strtoimax|strtod|strtol|strtoul|strtoll|strtoq|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy|fwrite))$
+  second-pointer-consumer:
+    regex: ^(?:(?:::|std::)?(?:fprintf|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|stpcpy|wcpcpy|wcpncpy))$
 rule:
-  any:
-  - kind: subscript_expression
-    has:
-      field: argument
-      matches: null-return-call
-  - kind: field_expression
-    has:
-      field: argument
-      matches: null-return-call
-  - kind: pointer_expression
-    has:
-      field: argument
-      matches: null-return-call
-  - kind: call_expression
-    all:
-    - has:
-        field: function
-        matches: pointer-consuming-function
-    - has:
-        field: arguments
-        any:
-        - has:
-            matches: null-return-call
-        - has:
-            kind: assignment_expression
-            has:
-              field: right
-              matches: null-return-call
+  all:
+  - not:
+      inside:
+        stopBy: end
+        kind: ERROR
+  - any:
+    - kind: subscript_expression
+      has:
+        field: argument
+        matches: null-return-operand
+    - kind: field_expression
+      has:
+        field: argument
+        matches: null-return-operand
+    - kind: pointer_expression
+      has:
+        field: argument
+        matches: null-return-operand
+    - kind: call_expression
+      all:
+      - has:
+          field: function
+          matches: first-pointer-consumer
+      - has:
+          field: arguments
+          has:
+            nthChild: 1
+            matches: unsafe-pointer-operand
+    - kind: call_expression
+      all:
+      - has:
+          field: function
+          matches: second-pointer-consumer
+      - has:
+          field: arguments
+          has:
+            nthChild: 2
+            matches: unsafe-pointer-operand
+    - kind: call_expression
+      all:
+      - has:
+          field: function
+          regex: ^(?:(?:::|std::)?fwrite)$
+      - has:
+          field: arguments
+          has:
+            nthChild: 4
+            matches: unsafe-pointer-operand
+    - kind: call_expression
+      all:
+      - has:
+          field: function
+          regex: ^(?:(?:::|std::)?fprintf)$
+      - has:
+          field: arguments
+          all:
+          - has:
+              nthChild: 2
+              kind: string_literal
+              regex: '%s'
+          - has:
+              nthChild: 3
+              matches: unsafe-pointer-operand

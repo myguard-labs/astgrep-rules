@@ -26,7 +26,12 @@ the caller must first establish what `.len` means.
   cannot be NULL. It does not model types, overload resolution, wrappers,
   aliases, macros, prior checks, control flow, or platform-specific return
   contracts; unqualified, global-qualified, and `std::` spellings are the only
-  supported function forms.
+  supported function forms, with at most two transparent parenthesis layers.
+  For `fprintf`, the format-sensitive arm covers a direct third argument when
+  the literal format contains `%s`; it does not parse escaped directives,
+  positional directives, `*` widths, or later variadic arguments. Calls nested
+  in parser `ERROR` recovery nodes are excluded; fix malformed C++ before
+  treating the absence of a finding as safe.
 - `nginx-cpp-line-comment` and `nginx-plain-inline` enforce nginx source style
   purely by syntax. They cannot identify whether a C file belongs to nginx, so
   consumers must scope these informational rules to nginx core and module

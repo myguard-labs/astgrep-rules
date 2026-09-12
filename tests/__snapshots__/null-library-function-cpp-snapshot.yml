@@ -1,6 +1,29 @@
 id: null-library-function-cpp
 snapshots:
   ? |
+    char *stpcpy_source() { return stpcpy(destination, getenv("NAME")); }
+  : labels:
+    - source: stpcpy(destination, getenv("NAME"))
+      style: primary
+      start: 31
+      end: 66
+    - source: stpcpy
+      style: secondary
+      start: 31
+      end: 37
+    - source: getenv
+      style: secondary
+      start: 51
+      end: 57
+    - source: getenv("NAME")
+      style: secondary
+      start: 51
+      end: 65
+    - source: getenv("NAME")
+      style: secondary
+      start: 51
+      end: 65
+  ? |
     char direct_dereference() { return *getenv("NAME"); }
   : labels:
     - source: '*getenv("NAME")'
@@ -30,6 +53,71 @@ snapshots:
       style: secondary
       start: 30
       end: 50
+  ? |
+    char parenthesized_dereference() { return *((getenv("NAME"))); }
+  : labels:
+    - source: '*((getenv("NAME")))'
+      style: primary
+      start: 42
+      end: 61
+    - source: getenv
+      style: secondary
+      start: 45
+      end: 51
+    - source: getenv("NAME")
+      style: secondary
+      start: 45
+      end: 59
+    - source: (getenv("NAME"))
+      style: secondary
+      start: 44
+      end: 60
+    - source: ((getenv("NAME")))
+      style: secondary
+      start: 43
+      end: 61
+  ? |
+    char parenthesized_member() { return (fopen("file", "r"))->flags; }
+  : labels:
+    - source: (fopen("file", "r"))->flags
+      style: primary
+      start: 37
+      end: 64
+    - source: fopen
+      style: secondary
+      start: 38
+      end: 43
+    - source: fopen("file", "r")
+      style: secondary
+      start: 38
+      end: 56
+    - source: (fopen("file", "r"))
+      style: secondary
+      start: 37
+      end: 57
+  ? |
+    char parenthesized_subscript() { return ((getenv("NAME")))[0]; }
+  : labels:
+    - source: ((getenv("NAME")))[0]
+      style: primary
+      start: 40
+      end: 61
+    - source: getenv
+      style: secondary
+      start: 42
+      end: 48
+    - source: getenv("NAME")
+      style: secondary
+      start: 42
+      end: 56
+    - source: (getenv("NAME"))
+      style: secondary
+      start: 41
+      end: 57
+    - source: ((getenv("NAME")))
+      style: secondary
+      start: 40
+      end: 58
   ? |
     char subscript_identifier(int index) { return std::getenv("NAME")[index]; }
   : labels:
@@ -61,6 +149,64 @@ snapshots:
       start: 33
       end: 47
   ? |
+    int parenthesized_assignment() { return getc(stream = (fopen(path, "r"))); }
+  : labels:
+    - source: getc(stream = (fopen(path, "r")))
+      style: primary
+      start: 40
+      end: 73
+    - source: getc
+      style: secondary
+      start: 40
+      end: 44
+    - source: fopen
+      style: secondary
+      start: 55
+      end: 60
+    - source: fopen(path, "r")
+      style: secondary
+      start: 55
+      end: 71
+    - source: (fopen(path, "r"))
+      style: secondary
+      start: 54
+      end: 72
+    - source: stream = (fopen(path, "r"))
+      style: secondary
+      start: 45
+      end: 72
+    - source: stream = (fopen(path, "r"))
+      style: secondary
+      start: 45
+      end: 72
+  ? |
+    long parenthesized_sink() { return strlen((getenv("NAME"))); }
+  : labels:
+    - source: strlen((getenv("NAME")))
+      style: primary
+      start: 35
+      end: 59
+    - source: strlen
+      style: secondary
+      start: 35
+      end: 41
+    - source: getenv
+      style: secondary
+      start: 43
+      end: 49
+    - source: getenv("NAME")
+      style: secondary
+      start: 43
+      end: 57
+    - source: (getenv("NAME"))
+      style: secondary
+      start: 42
+      end: 58
+    - source: (getenv("NAME"))
+      style: secondary
+      start: 42
+      end: 58
+  ? |
     long qualified_sink() { return std::strlen(::getenv("NAME")); }
   : labels:
     - source: std::strlen(::getenv("NAME"))
@@ -79,10 +225,10 @@ snapshots:
       style: secondary
       start: 43
       end: 59
-    - source: (::getenv("NAME"))
+    - source: ::getenv("NAME")
       style: secondary
-      start: 42
-      end: 60
+      start: 43
+      end: 59
   ? |
     void f() {
        char buf[128];
@@ -105,10 +251,10 @@ snapshots:
       style: secondary
       start: 44
       end: 57
-    - source: (buf, getenv("FOO"))
+    - source: getenv("FOO")
       style: secondary
-      start: 38
-      end: 58
+      start: 44
+      end: 57
   ? |
     void test_getc() {
      int c = getc(fptr = fopen(file_name, "r"));
@@ -134,10 +280,39 @@ snapshots:
       style: secondary
       start: 33
       end: 61
-    - source: (fptr = fopen(file_name, "r"))
+    - source: fptr = fopen(file_name, "r")
+      style: secondary
+      start: 33
+      end: 61
+  ? |
+    void unsafe_string_format() {
+      fprintf(stderr, "%s", memchr(data, needle, length));
+    }
+  : labels:
+    - source: fprintf(stderr, "%s", memchr(data, needle, length))
+      style: primary
+      start: 32
+      end: 83
+    - source: fprintf
       style: secondary
       start: 32
-      end: 62
+      end: 39
+    - source: '"%s"'
+      style: secondary
+      start: 48
+      end: 52
+    - source: memchr
+      style: secondary
+      start: 54
+      end: 60
+    - source: memchr(data, needle, length)
+      style: secondary
+      start: 54
+      end: 82
+    - source: (stderr, "%s", memchr(data, needle, length))
+      style: secondary
+      start: 39
+      end: 83
   ? |
     {
      FILE *fptr;
@@ -164,10 +339,10 @@ snapshots:
       style: secondary
       start: 36
       end: 64
-    - source: ("foo", 3, 1, fptr = fopen("foo.txt", "w"))
+    - source: fptr = fopen("foo.txt", "w")
       style: secondary
-      start: 22
-      end: 65
+      start: 36
+      end: 64
   ? |
     {
      fwrite("foo", 3, 1, fopen("foo.txt", "w"));
@@ -189,7 +364,7 @@ snapshots:
       style: secondary
       start: 23
       end: 44
-    - source: ("foo", 3, 1, fopen("foo.txt", "w"))
+    - source: fopen("foo.txt", "w")
       style: secondary
-      start: 9
-      end: 45
+      start: 23
+      end: 44
