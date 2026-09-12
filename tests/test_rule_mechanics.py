@@ -304,6 +304,26 @@ class RulePlanCliTests(unittest.TestCase):
 
 
 class RuleMechanicsTests(unittest.TestCase):
+    def test_write_mode_locks_before_plan_transaction(self):
+        events = []
+
+        @contextlib.contextmanager
+        def lock():
+            events.append("lock-enter")
+            yield
+            events.append("lock-exit")
+
+        def transaction(write):
+            self.assertTrue(write)
+            self.assertEqual(events, ["lock-enter"])
+            events.append("transaction")
+            return 0
+
+        with patch.object(MECHANICS.SCAFFOLD, "cli_scaffold_lock", return_value=lock()), \
+                patch.object(MECHANICS, "_plans_command", side_effect=transaction):
+            self.assertEqual(MECHANICS.plans_command(True), 0)
+        self.assertEqual(events, ["lock-enter", "transaction", "lock-exit"])
+
     def test_oracle_mismatch_fails_exactly(self):
         plan = minimal_plan(oracles={"danger()": {"count": 2}})
         finding = {"text": "danger()", "range": {"byteOffset": {"start": 0, "end": 8}}}

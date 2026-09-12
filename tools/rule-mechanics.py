@@ -220,7 +220,7 @@ def validate_plan_fixes(paths: list[Path], rendered_rules: dict[Path, str] | Non
     return checked
 
 
-def plans_command(write: bool) -> int:
+def _plans_command(write: bool) -> int:
     paths = plan_paths()
     validate_plan_id_ownership(paths)
     stale = stale_generated_artifacts(paths)
@@ -238,14 +238,21 @@ def plans_command(write: bool) -> int:
     rendered_rules = {target.resolve(): content for target, content, _owner in updates}
     fixed = validate_plan_fixes(paths, rendered_rules if write else None)
     if write:
-        with SCAFFOLD.cli_scaffold_lock():
-            _write_plan_artifacts(updates)
-            if sync_diagnostic_count(True, {path.stem for path in paths}):
-                drift.append("tests/test_diagnostics.py")
+        _write_plan_artifacts(updates)
+        if sync_diagnostic_count(True, {path.stem for path in paths}):
+            drift.append("tests/test_diagnostics.py")
     print(f"{'regenerated' if write else 'verified'} {len(paths)} canonical plan(s)"
           + (f"; {len(drift)} artifact(s) updated" if write else "")
           + f"; {fixed} exact fix oracle(s)")
     return 0
+
+
+def plans_command(write: bool) -> int:
+    """Check plans, locking the complete discovery-to-write transaction when mutating."""
+    if not write:
+        return _plans_command(False)
+    with SCAFFOLD.cli_scaffold_lock():
+        return _plans_command(True)
 
 
 def sync_diagnostic_count(write: bool, planned_ids: set[str]) -> bool:
