@@ -202,9 +202,13 @@ def validate_plan_fixes(paths: list[Path]) -> int:
         if "fix" not in plan:
             continue
         rule_path = ROOT / "rules" / plan["language"] / plan["category"] / f"{plan['id']}.yml"
+        valid_sources = set(plan["cases"]["valid"])
         for source, oracle in plan.get("oracles", {}).items():
             if "fixed" in oracle:
-                validate_fix(rule_path, source, oracle["fixed"])
+                validate_fix(
+                    rule_path, source, oracle["fixed"],
+                    allow_no_change=source in valid_sources,
+                )
                 checked += 1
     return checked
 
@@ -283,7 +287,8 @@ def metamorph_command(path: Path) -> int:
     return 0
 
 
-def validate_fix(rule_path: Path, source: str, expected: str | None = None) -> None:
+def validate_fix(rule_path: Path, source: str, expected: str | None = None,
+                 *, allow_no_change: bool = False) -> None:
     rule = yaml.safe_load(rule_path.read_text(encoding="utf-8"))
     if "fix" not in rule:
         return
@@ -301,7 +306,7 @@ def validate_fix(rule_path: Path, source: str, expected: str | None = None) -> N
         if result.returncode not in (0, 1):
             raise RuntimeError(f"FIX_FAILED: {rule['id']}: {result.stderr[-400:]}")
         after = target.read_text(encoding="utf-8")
-        if after == before:
+        if after == before and not allow_no_change:
             raise RuntimeError(f"FIX_NO_CHANGE: {rule['id']}")
         if expected is not None and after != expected:
             raise RuntimeError(f"FIX_OUTPUT_MISMATCH: {rule['id']}")

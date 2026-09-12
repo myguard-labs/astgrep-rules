@@ -267,6 +267,21 @@ class RulePlanFixTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "every invalid source"):
             PLAN.validate_plan(plan)
 
+    def test_valid_fixed_oracle_may_expect_no_change(self):
+        plan = minimal_plan(
+            fix="safe()",
+            cases={"invalid": ["danger()"], "valid": ["safe()"]},
+            oracles={
+                "danger()": {"fixed": "safe()"},
+                "safe()": {"fixed": "safe()"},
+            },
+        )
+        with patch.object(MECHANICS.PLAN, "load_plan", return_value=plan), \
+                patch.object(MECHANICS, "validate_fix") as validate:
+            self.assertEqual(MECHANICS.validate_plan_fixes([Path("plan.yml")]), 2)
+        self.assertFalse(validate.call_args_list[0].kwargs["allow_no_change"])
+        self.assertTrue(validate.call_args_list[1].kwargs["allow_no_change"])
+
 
 class RulePlanCliTests(unittest.TestCase):
     def test_rule_plan_help_is_clean(self):
