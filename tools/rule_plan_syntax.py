@@ -17,11 +17,6 @@ ROOT_KINDS = {
 }
 
 CST_TARGET_KINDS: dict[str, dict[str, str | tuple[str, ...]]] = {
-    "callee-parenthesized": {
-        "c": "call_expression", "cpp": "call_expression",
-        "javascript": "call_expression", "typescript": "call_expression",
-        "python": "call", "java": "method_invocation",
-    },
     "member-access-spacing": {
         "c": "field_expression", "cpp": "field_expression",
         "javascript": "member_expression", "typescript": "member_expression",
@@ -36,6 +31,20 @@ CST_TARGET_KINDS: dict[str, dict[str, str | tuple[str, ...]]] = {
     },
     "member-access-swap": {"c": "field_expression", "cpp": "field_expression"},
 }
+
+
+def rule_spans(source: str, extension: str, rule_text: str, invoke) -> list[tuple[int, int]]:
+    """Return source spans matched by the plan's rendered rule."""
+    with tempfile.TemporaryDirectory(prefix="rule-plan-findings-") as directory:
+        path = Path(directory) / f"source.{extension}"
+        path.write_text(source, encoding="utf-8")
+        result = invoke(["scan", "--inline-rules", rule_text, "--json=compact", str(path)])
+    if result.returncode not in (0, 1):
+        raise RuntimeError(f"METAMORPHIC_TARGET_ERROR: {result.stderr[-500:]}")
+    encoded = source.encode("utf-8")
+    return [(len(encoded[:row["range"]["byteOffset"]["start"]].decode("utf-8")),
+             len(encoded[:row["range"]["byteOffset"]["end"]].decode("utf-8")))
+            for row in json.loads(result.stdout or "[]")]
 
 
 def target_kind(transform: str, language: str) -> str | tuple[str, ...] | None:

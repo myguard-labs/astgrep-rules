@@ -30,18 +30,44 @@ class RulePlanMetamorphicTests(unittest.TestCase):
             PLAN.validate_plan(minimal_plan(claims={"api": {"safe": ["safe()"]}}))
         with self.assertRaisesRegex(ValueError, "dimension names must be strings"):
             PLAN.validate_plan(minimal_plan(claims={1: {"api": ["danger()"]}}))
+        for name in (" ", " padded", "padded ", "line\nbreak", "tab\tname"):
+            with self.subTest(name=repr(name)), self.assertRaisesRegex(
+                    ValueError, "must map names"):
+                PLAN.validate_plan(minimal_plan(claims={"api": {name: ["danger()"]}}))
 
     def test_declared_metamorphic_cases_preserve_or_change_outcome(self):
         plan = minimal_plan(metamorphic=[
-            {"source": "danger()", "transform": "callee-parenthesized",
+            {"source": "safe(); danger()", "transform": "callee-parenthesized",
              "outcome": "equivalent"},
-            {"source": "safe()", "transform": "parenthesized", "outcome": "different"},
-        ])
+        ], cases={"invalid": ["safe(); danger()"], "valid": ["safe()"]})
         matcher, cases = PLAN.validate_plan(plan)
         self.assertEqual(matcher, {"pattern": "danger()"})
         expanded = PLAN.expanded_cases(plan, cases)
-        self.assertIn("(danger)()", expanded["invalid"])
-        self.assertIn("(safe())", expanded["invalid"])
+        self.assertIn("safe(); (danger)()", expanded["invalid"])
+
+        unmatched = minimal_plan(metamorphic=[{
+            "source": "safe()", "transform": "callee-parenthesized",
+            "outcome": "different",
+        }])
+        _matcher, cases = PLAN.validate_plan(unmatched)
+        with self.assertRaisesRegex(ValueError, "not applicable"):
+            PLAN.expanded_cases(unmatched, cases)
+
+        for language, source, expected in (
+            ("c", "int x='%s'; log(\"%s\", value);",
+             "int x='%s'; log(\"%20s\", value);"),
+            ("go", "fake := `%s`; log(\"%s\", value)",
+             "fake := `%s`; log(\"%20s\", value)"),
+        ):
+            with self.subTest(language=language):
+                plan = minimal_plan(
+                    language=language, rule={"pattern": 'log("%s", value)'},
+                    cases={"invalid": [source], "valid": ["safe()"]},
+                    metamorphic=[{"source": source, "transform": "format-width",
+                                  "outcome": "equivalent"}],
+                )
+                _matcher, cases = PLAN.validate_plan(plan)
+                self.assertIn(expected, PLAN.expanded_cases(plan, cases)["invalid"])
 
     def test_metamorphic_rejects_unknown_or_inapplicable_transforms(self):
         with self.assertRaisesRegex(ValueError, "invalid metamorphic"):

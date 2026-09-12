@@ -125,13 +125,15 @@ def metamorphic_source(source: str, transform: str, language: str,
     elif transform == "literal-concatenation":
         changed, count = _replace_first(
             source, re.compile(r'"([^"\\]+)"'),
-            lambda match: f'"{match[1]}" ""', language, ({"string"}, None))
+            lambda match: f'"{match[1]}" ""', language, ({"string"}, syntax_spans))
     elif transform == "literal-spacing":
         changed, count = _space_literal_gap(source, syntax_spans)
     elif transform == "format-width":
-        changed, count = _transform_format_conversion(source, language, precision=False)
+        changed, count = _transform_format_conversion(
+            source, language, precision=False, syntax_spans=syntax_spans)
     elif transform == "format-precision":
-        changed, count = _transform_format_conversion(source, language, precision=True)
+        changed, count = _transform_format_conversion(
+            source, language, precision=True, syntax_spans=syntax_spans)
     else:
         raise ValueError(f"unsupported metamorphic transform: {transform}")
     if count != 1 or changed == source:
@@ -148,12 +150,16 @@ def _space_literal_gap(source: str,
 
 
 def _transform_format_conversion(source: str, language: str,
-                                 *, precision: bool) -> tuple[str, int]:
+                                 *, precision: bool,
+                                 syntax_spans=None) -> tuple[str, int]:
     kinds = _lexical_kinds(source, language)
     match = next((candidate for candidate in FORMAT_CONVERSION.finditer(source)
                   if set(kinds[candidate.start():candidate.end()]) == {"string"}
                   and _preceding_percent_count(source, candidate.start()) % 2 == 0
-                  and not candidate.group("precision" if precision else "width")), None)
+                  and not candidate.group("precision" if precision else "width")
+                  and (syntax_spans is None or any(
+                      start <= candidate.start() and candidate.end() <= end
+                      for start, end in syntax_spans))), None)
     if match is None:
         return source, 0
     parts = match.groupdict(default="")

@@ -2,6 +2,7 @@ from tests.mechanics_test_support import (
     PLAN,
     Path,
     SimpleNamespace,
+    json,
     minimal_plan,
     patch,
     subprocess,
@@ -171,7 +172,10 @@ class RulePlanPreflightTests(unittest.TestCase):
         ])
         matcher, cases = PLAN.validate_plan(plan)
         malformed = SimpleNamespace(returncode=0, stdout="(ERROR)", stderr="")
-        with patch.object(PLAN, "run_engine", return_value=malformed), \
+        finding = SimpleNamespace(returncode=0, stderr="", stdout=json.dumps([{
+            "range": {"byteOffset": {"start": 0, "end": 8}},
+        }]))
+        with patch.object(PLAN, "run_engine", side_effect=[finding, malformed, malformed]), \
                 patch.object(PLAN, "run_preflight") as contrast, \
                 self.assertRaisesRegex(RuntimeError, "METAMORPHIC_PARSE_ERROR"):
             PLAN.preflight(plan, matcher, cases)
@@ -179,7 +183,8 @@ class RulePlanPreflightTests(unittest.TestCase):
 
         error_scan = SimpleNamespace(returncode=0, stdout="[]", stderr="")
         failed_cst = SimpleNamespace(returncode=2, stdout="query failed", stderr="")
-        with patch.object(PLAN, "run_engine", side_effect=[error_scan, failed_cst]), \
+        with patch.object(PLAN, "run_engine",
+                          side_effect=[finding, error_scan, failed_cst]), \
                 patch.object(PLAN, "run_preflight") as contrast, \
                 self.assertRaisesRegex(RuntimeError, "METAMORPHIC_PARSE_ERROR"):
             PLAN.preflight(plan, matcher, cases)
@@ -284,7 +289,7 @@ class RulePlanPreflightTests(unittest.TestCase):
         with patch.object(PLAN, "run_engine", wraps=PLAN.run_engine) as processes:
             PLAN.preflight(plan, matcher, cases, telemetry)
         self.assertEqual(processes.call_count, telemetry.engine_processes)
-        self.assertEqual(processes.call_count, 14)
+        self.assertEqual(processes.call_count, 18)
 
     def test_expired_deadline_stops_before_target_discovery_process(self):
         plan = minimal_plan(metamorphic=[{

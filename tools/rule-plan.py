@@ -70,17 +70,14 @@ METAMORPHIC_LANGUAGES = {
     "literal-concatenation": {"c", "cpp", "python"},
 }
 
-
 @dataclass(frozen=True)
 class CompiledPlan:
     """One validated plan representation shared by every downstream phase."""
-
     plan: Mapping[str, object]
     matcher: Mapping[str, object]
     cases: Mapping[str, object]
     rule_text: str
     fixture_text: str
-
 
 def _deep_freeze(value):
     if isinstance(value, dict):
@@ -102,12 +99,10 @@ def thaw(value):
         return {thaw(child) for child in value}
     return copy.deepcopy(value)
 
-
 RULE_CONFIG_KEYS = (
     "constraints", "utils", "transform", "fix", "rewriters", "labels", "files",
     "ignores", "url", "metadata",
 )
-
 
 class LiteralStr(str):
     """Render multiline fixture sources as readable YAML blocks."""
@@ -115,7 +110,6 @@ class LiteralStr(str):
 
 class FoldedStr(str):
     """Render diagnostic prose as readable folded YAML."""
-
 
 def _literal(dumper, data):
     return dumper.represent_scalar(
@@ -128,7 +122,6 @@ yaml.SafeDumper.add_representer(
     FoldedStr,
     lambda dumper, data: dumper.represent_scalar("tag:yaml.org,2002:str", data, style=">"),
 )
-
 
 def load_plan(path: Path) -> dict:
     """Load a closed v1 plan schema."""
@@ -312,7 +305,6 @@ def validate_utilities(plan: dict, matcher: dict) -> None:
     if missing:
         raise ValueError(f"undefined local utilities: {', '.join(missing)}")
     reached, active = set(), set()
-
     def visit(key: str) -> None:
         if key in active:
             raise ValueError(f"utility dependency cycle at {key}")
@@ -323,7 +315,6 @@ def validate_utilities(plan: dict, matcher: dict) -> None:
             visit(dependency)
         active.remove(key)
         reached.add(key)
-
     for root in matcher_roots | constraint_roots:
         visit(root)
     unused = sorted(set(utilities) - reached)
@@ -428,7 +419,8 @@ def validate_claims(plan: dict, cases: dict[str, list[str]]) -> None:
 
 def _validated_claim_dimension(dimension: str, values, invalid: set[str]) -> dict:
     if (not isinstance(values, dict) or not values
-            or any(not isinstance(name, str) or not name
+            or any(not isinstance(name, str) or not name or name != name.strip()
+                   or not name.isprintable()
                    or not isinstance(witnesses, list) or not witnesses
                    or any(not isinstance(witness, str) for witness in witnesses)
                    for name, witnesses in values.items())):
@@ -476,9 +468,9 @@ def validate_metamorphic(plan: dict, cases: dict[str, list[str]]) -> None:
             raise ValueError("duplicate metamorphic entry")
         seen.add(identity)
 
-
-def _metamorphic_source(source: str, transform: str, language: str, deadline: float | None = None,
-                        telemetry: PhaseTelemetry | None = None) -> str:
+def _metamorphic_source(
+        source: str, transform: str, language: str, context=None) -> str:
+    deadline, telemetry, findings = context or (None, None, None)
     ext = LANGUAGE_EXTENSIONS[language]
     invoke = partial(_syntax_run, deadline=deadline, telemetry=telemetry)
     if transform == "callee-parenthesized":
@@ -488,8 +480,12 @@ def _metamorphic_source(source: str, transform: str, language: str, deadline: fl
     else:
         kind = SYNTAX.target_kind(transform, language)
         spans = SYNTAX.syntax_spans(source, language, kind, ext, invoke) if kind else None
+    if findings is not None:
+        spans = [span for span in (spans or findings) if any(
+            span[0] < end and start < span[1] for start, end in findings)]
+        if transform == "parenthesized" and not findings:
+            raise ValueError(f"metamorphic transform {transform} is not applicable")
     return TRANSFORMS.metamorphic_source(source, transform, language, spans)
-
 
 def _syntax_run(arguments: list[str], deadline: float | None = None, telemetry=None, **kwargs):
     timeout = _remaining(deadline) if deadline is not None else MAX_ENGINE_SECONDS
@@ -497,15 +493,20 @@ def _syntax_run(arguments: list[str], deadline: float | None = None, telemetry=N
         telemetry.engine_processes += 1
     return run_engine([str(ENGINE), *arguments], timeout=timeout, **kwargs)
 
-
 def expanded_cases(plan: dict, cases: dict[str, list[str]], deadline: float | None = None,
-                   telemetry: PhaseTelemetry | None = None) -> dict[str, list[str]]:
+                   telemetry: PhaseTelemetry | None = None,
+                   bind_findings=True) -> dict[str, list[str]]:
     """Add declared equivalent and outcome-changing derived syntax cases."""
     result = {key: list(values) for key, values in cases.items()}
     source_class = {source: key for key, values in cases.items() for source in values}
     for entry in plan.get("metamorphic", []):
+        findings = SYNTAX.rule_spans(
+            entry["source"], LANGUAGE_EXTENSIONS[plan["language"]],
+            render_rule(plan, plan_matcher(plan)), partial(
+                _syntax_run, deadline=deadline, telemetry=telemetry)) if bind_findings else None
         transformed = _metamorphic_source(
-            entry["source"], entry["transform"], plan["language"], deadline, telemetry)
+            entry["source"], entry["transform"], plan["language"],
+            (deadline, telemetry, findings))
         category = source_class[entry["source"]]
         if entry["outcome"] == "different":
             category = "valid" if category == "invalid" else "invalid"
@@ -522,7 +523,7 @@ def validate_derived_syntax(plan: dict, cases: dict[str, list[str]], deadline: f
                             expanded: dict[str, list[str]] | None = None) -> None:
     """Reject ERROR/MISSING recovery in each derived full source program."""
     originals = set(cases["valid"] + cases["invalid"])
-    derived = expanded or expanded_cases(plan, cases, deadline, telemetry)
+    derived = expanded or expanded_cases(plan, cases, deadline, telemetry, False)
     for source in derived["valid"] + derived["invalid"]:
         if source in originals:
             continue
@@ -705,7 +706,6 @@ def _run_mutant_batch(items: list[tuple[str, str]], cases: dict[str, list[str]],
             return run_engine(
                 [str(ENGINE), "test", "--include-off", "-c", str(root / "sgconfig.yml"),
                  "--skip-snapshot-tests"], timeout=remaining)
-
         result, errors = BATCHES.execute(id_to_path, malformed, invoke)
         if errors is not None:
             return errors
