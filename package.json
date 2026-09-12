@@ -6,6 +6,10 @@
   "description": "Curated ast-grep security and correctness rules",
   "scripts": {
     "test": "python3 -m unittest discover -s tests -p 'test_*.py' && ast-grep test --include-off -c sgconfig.yml --filter '(^((js|go|java|sh|c|nginx|zstd|lua|wp|php|py)-)|-(c|cpp|csharp|go|html|java|javascript|kotlin|php|python|ruby|rust|scala|swift|typescript)$)'",
+    "test:fast": "python3 tools/test-changed.py",
+    "test:mechanics": "python3 tools/rule-mechanics.py check-plans && python3 tools/rule-mechanics.py validate-fixes",
+    "generate": "python3 tools/rule-mechanics.py regenerate-all",
+    "generate:check": "python3 tools/rule-mechanics.py check-plans",
     "test:powershell": "ast-grep test -c sgconfig.powershell.yml && python3 -m unittest tests.test_powershell_parser -v"
   },
   "devDependencies": {

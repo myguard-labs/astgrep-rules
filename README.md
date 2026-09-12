@@ -20,6 +20,8 @@ platform.
   C parser and `nginx-*` IDs; generic C rules use `c-*` IDs. Disabled aliases
   may retain a former ID for compatibility.
 - `tests/<language>/<category>/`: matching `valid` and `invalid` fixtures.
+- `plans/<language>/<category>/`: canonical generation inputs for migrated
+  rules and fixtures.
 - `docs/`: authoring guidance, detection limits, per-rule source evidence, and
   excluded candidates with rejection evidence.
 
@@ -51,6 +53,13 @@ npm test
 Tests check rule/test coverage, positive detections, negative controls, and
 snapshots. To review changed snapshots, run `npx ast-grep test -i` and inspect
 the resulting diff. CI never accepts snapshots automatically.
+
+For plan-owned rules, `npm run generate:check` validates schema, contrasts,
+mutation kills, exact oracles, and generated-file drift. `npm run generate`
+atomically regenerates only files carrying the matching ownership marker.
+`npm run test:mechanics` also validates every rule fixer. See
+[authoring](docs/authoring.md#generate-from-a-canonical-plan) for the plan
+contract and differential engine checks.
 
 ## Use
 

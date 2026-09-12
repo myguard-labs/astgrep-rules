@@ -1,0 +1,41 @@
+version: 1
+id: py-tempfile-mktemp
+language: python
+category: security
+severity: warning
+message: >-
+  tempfile.mktemp returns a name without creating the file, leaving a race in
+  which another process can create the path or replace it with a symlink. Use
+  NamedTemporaryFile, TemporaryFile, mkstemp, or TemporaryDirectory so creation
+  is atomic.
+note: >-
+  Matches the qualified tempfile.mktemp spelling. Import aliases and
+  `from tempfile import mktemp` are not resolved. The finding is about the gap
+  between choosing and opening the name; merely checking that the path does not
+  exist does not close that race.
+rule:
+  pattern: tempfile.mktemp($$$ARGS)
+cases:
+  valid:
+    - 'path = tempfile.mkstemp()'
+    - 'with tempfile.NamedTemporaryFile() as handle: pass'
+    - 'path = helper.mktemp()'
+    - 'path = tf.mktemp()'
+    - 'path = consume(tempfile.mktemp)'
+    - 'path = mytempfile.mktemp()'
+    - 'path = tempfile.mktemp_extra()'
+    - 'result = wrapper(tempfile, mktemp)'
+    - 'text = "tempfile.mktemp()"'
+    - '# tempfile.mktemp()'
+  invalid:
+    - 'path = tempfile.mktemp()'
+    - 'path = tempfile.mktemp(prefix="cache-")'
+    - |
+      def choose_name():
+          return tempfile.mktemp(dir="/var/tmp")
+oracles:
+  'path = tempfile.mktemp()':
+    count: 1
+    texts: ['tempfile.mktemp()']
+    ranges: [[7, 24]]
+    severity: warning

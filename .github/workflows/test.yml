@@ -10,9 +10,19 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
         with:
           persist-credentials: false
+          fetch-depth: 0
       - run: npm ci
       - run: python3 -m pip install -r requirements-dev.txt
-      - run: npm test
+      - name: Changed-rule gate
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: npm run test:fast
+      - name: Full native suite
+        if: github.event_name != 'pull_request'
+        run: npm test
+      - name: Generated artifacts and fixers
+        run: npm run test:mechanics
 
   # The PowerShell pack runs as its own job on purpose.
   #
