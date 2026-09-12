@@ -207,6 +207,29 @@ class RulePlanPreflightTests(unittest.TestCase):
             PLAN.validate_derived_syntax(
                 plan, cases, float("inf"), PLAN.PhaseTelemetry())
 
+    def test_compound_callees_and_optional_members_derive_parseable_syntax(self):
+        rows = (
+            ("cpp", "void f(){ obj->danger(); }", "callee-parenthesized",
+             "int value = 1;"),
+            ("cpp", "void f(){ ns::danger(); }", "callee-parenthesized",
+             "int value = 1;"),
+            ("javascript", "obj.danger()", "callee-parenthesized", "safe();"),
+            ("javascript", "obj?.field", "member-access-spacing", "safe();"),
+            ("php", "$obj?->field;", "member-access-spacing", "$safe->field;"),
+        )
+        for language, source, transform, valid in rows:
+            with self.subTest(language=language, source=source):
+                plan = minimal_plan(
+                    language=language, cases={"invalid": [source], "valid": [valid]},
+                    metamorphic=[{
+                        "source": source, "transform": transform,
+                        "outcome": "equivalent",
+                    }],
+                )
+                _matcher, cases = PLAN.validate_plan(plan)
+                PLAN.validate_derived_syntax(
+                    plan, cases, float("inf"), PLAN.PhaseTelemetry())
+
     def test_literal_concatenation_is_limited_to_adjacent_literal_grammars(self):
         for language in ("javascript", "typescript", "java"):
             with self.subTest(language=language), \

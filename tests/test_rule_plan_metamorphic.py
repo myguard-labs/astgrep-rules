@@ -104,6 +104,16 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                 '# $fake->field\n$obj -> field;',
             ('void f() { danger(); }', "callee-parenthesized", "cpp"):
                 'void f() { (danger)(); }',
+            ('obj->danger()', "callee-parenthesized", "cpp"):
+                '(obj->danger)()',
+            ('ns::danger()', "callee-parenthesized", "cpp"):
+                '(ns::danger)()',
+            ('obj.danger()', "callee-parenthesized", "javascript"):
+                '(obj.danger)()',
+            ('obj?.field', "member-access-spacing", "javascript"):
+                'obj ?. field',
+            ('$obj?->field', "member-access-spacing", "php"):
+                '$obj ?-> field',
         }
         for (source, transform, language), expected in cases.items():
             with self.subTest(transform=transform):

@@ -101,11 +101,14 @@ def metamorphic_source(source: str, transform: str, language: str,
         return f"({source})"
     if transform == "callee-parenthesized":
         changed, count = _replace_first(
-            source, re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()"),
+            source, re.compile(
+                r"\b([A-Za-z_][A-Za-z0-9_]*"
+                r"(?:\s*(?:\?->|\?\.|->|::|\.)\s*[A-Za-z_][A-Za-z0-9_]*)*)"
+                r"\s*(?=\()"),
             r"(\1)", language, ({"code"}, syntax_spans))
     elif transform in {"qualified-name-spacing", "member-access-spacing"}:
         changed, count = _replace_first(
-            source, re.compile(r"\s*(->|\.)\s*"), r" \1 ", language,
+            source, re.compile(r"\s*(\?->|\?\.|->|\.)\s*"), r" \1 ", language,
             ({"code"}, syntax_spans))
     elif transform == "qualified-name":
         changed, count = _replace_first(
@@ -174,7 +177,7 @@ def regex_alternatives(pattern: str, *, verbose: bool = False) -> list[str]:
     return parts if len(parts) > 1 and all(parts) else []
 
 
-INLINE_FLAGS = re.compile(r"\(\?([aiLmsux]*)(?:-([imsx]*))?([:)])")
+INLINE_FLAGS = re.compile(r"\(\?([aiLmsuxUR]*)(?:-([aiLmsuxUR]*))?([:)])")
 
 
 @dataclass
