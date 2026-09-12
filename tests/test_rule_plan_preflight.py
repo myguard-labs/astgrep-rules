@@ -175,16 +175,15 @@ class RulePlanPreflightTests(unittest.TestCase):
         finding = SimpleNamespace(returncode=0, stderr="", stdout=json.dumps([{
             "range": {"byteOffset": {"start": 0, "end": 8}},
         }]))
-        with patch.object(PLAN, "run_engine", side_effect=[finding, malformed, malformed]), \
+        with patch.object(PLAN, "run_engine", side_effect=[finding, malformed]), \
                 patch.object(PLAN, "run_preflight") as contrast, \
                 self.assertRaisesRegex(RuntimeError, "METAMORPHIC_PARSE_ERROR"):
             PLAN.preflight(plan, matcher, cases)
         contrast.assert_not_called()
 
-        error_scan = SimpleNamespace(returncode=0, stdout="[]", stderr="")
         failed_cst = SimpleNamespace(returncode=2, stdout="query failed", stderr="")
         with patch.object(PLAN, "run_engine",
-                          side_effect=[finding, error_scan, failed_cst]), \
+                          side_effect=[finding, failed_cst]), \
                 patch.object(PLAN, "run_preflight") as contrast, \
                 self.assertRaisesRegex(RuntimeError, "METAMORPHIC_PARSE_ERROR"):
             PLAN.preflight(plan, matcher, cases)
@@ -225,6 +224,18 @@ class RulePlanPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "METAMORPHIC_PARSE_ERROR"):
             PLAN.validate_derived_syntax(
                 plan, cases, float("inf"), PLAN.PhaseTelemetry())
+
+    def test_full_source_parser_rejects_missing_only_recovery(self):
+        rows = (
+            ("c", "void f(){ if () {} }", "c"),
+            ("java", "class X { void f(){ if () {} } }", "java"),
+            ("html", "<div", "html"),
+        )
+        for language, source, extension in rows:
+            with self.subTest(language=language), self.assertRaisesRegex(
+                    RuntimeError, "METAMORPHIC_PARSE_ERROR"):
+                PLAN.SYNTAX.validate_full_source(
+                    source, language, extension, float("inf"), PLAN._syntax_run)
 
     def test_compound_callees_and_optional_members_derive_parseable_syntax(self):
         rows = (
@@ -289,7 +300,7 @@ class RulePlanPreflightTests(unittest.TestCase):
         with patch.object(PLAN, "run_engine", wraps=PLAN.run_engine) as processes:
             PLAN.preflight(plan, matcher, cases, telemetry)
         self.assertEqual(processes.call_count, telemetry.engine_processes)
-        self.assertEqual(processes.call_count, 18)
+        self.assertEqual(processes.call_count, 14)
 
     def test_expired_deadline_stops_before_target_discovery_process(self):
         plan = minimal_plan(metamorphic=[{

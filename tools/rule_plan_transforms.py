@@ -3,6 +3,18 @@
 import re
 from dataclasses import dataclass, field
 
+METAMORPHIC_LANGUAGES = {
+    "parenthesized": {"c", "cpp", "csharp", "go", "java", "javascript", "kotlin", "lua",
+                      "php", "python", "ruby", "rust", "scala", "swift", "typescript"},
+    "callee-parenthesized": {"c", "cpp", "javascript", "typescript", "python"},
+    "qualified-name-spacing": {"python", "javascript", "typescript", "java", "php"},
+    "member-access-spacing": {"c", "cpp", "javascript", "typescript", "java", "go", "php"},
+    "literal-spacing": {"c", "cpp", "python"},
+    "format-width": {"c", "cpp", "go"}, "format-precision": {"c", "cpp", "go"},
+    "qualified-name": {"c", "cpp"}, "member-access-swap": {"c", "cpp"},
+    "literal-concatenation": {"c", "cpp", "python"},
+}
+
 FORMAT_CONVERSION = re.compile(
     r"%(?!%)(?P<flags>[-+ #0]*)(?P<width>\d+|\*)?"
     r"(?P<precision>\.(?:\d+|\*))?(?P<length>hh|ll|[hljztL])?"
@@ -116,7 +128,7 @@ def metamorphic_source(source: str, transform: str, language: str,
     elif transform == "qualified-name":
         changed, count = _replace_first(
             source, re.compile(r"(?<!:)\b([A-Za-z_]\w*::)"), r"::\1", language,
-            ({"code"}, None))
+            ({"code"}, syntax_spans))
     elif transform == "member-access-swap":
         changed, count = _replace_first(
             source, re.compile(r"->|\."),

@@ -3,6 +3,7 @@ from tests.mechanics_test_support import (
     ROOT,
     Path,
     minimal_plan,
+    patch,
     tempfile,
     unittest,
     yaml,
@@ -223,6 +224,47 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                 # White-box assertion covers transform rejection behavior.
                 # pylint: disable-next=protected-access
                 PLAN._metamorphic_source(source, transform, "c")
+
+    def test_targeted_transforms_stay_within_structural_and_finding_spans(self):
+        rows = (
+            ("c", "void f(){ int x='%s'; log(\"%s\", x); }", "format-width",
+             "void f(){ int x='%s'; log(\"%20s\", x); }"),
+            ("go", "package p\nfunc f(){ _ = '%s'; log(`%s`, x) }", "format-width",
+             "package p\nfunc f(){ _ = '%s'; log(`%20s`, x) }"),
+            ("php", "<?php $x=1.2; $obj->name();", "member-access-spacing",
+             "<?php $x=1.2; $obj -> name();"),
+        )
+        for language, source, transform, expected in rows:
+            with self.subTest(language=language, transform=transform):
+                # White-box assertion covers CST-restricted transform selection.
+                # pylint: disable-next=protected-access
+                self.assertEqual(PLAN._metamorphic_source(source, transform, language), expected)
+
+        plan = minimal_plan(
+            language="cpp", rule={"pattern": "ns::call()"},
+            cases={"invalid": ["safe::call(); ns::call();"], "valid": ["safe();"]},
+            metamorphic=[{
+                "source": "safe::call(); ns::call();", "transform": "qualified-name",
+                "outcome": "equivalent",
+            }],
+        )
+        _matcher, cases = PLAN.validate_plan(plan)
+        self.assertIn("safe::call(); ::ns::call();",
+                      PLAN.expanded_cases(plan, cases)["invalid"])
+
+        no_target = minimal_plan(
+            language="php", rule={"pattern": "$X"},
+            cases={"invalid": ["<?php $x=1.2;"], "valid": ["<?php safe();"]},
+            metamorphic=[{
+                "source": "<?php $x=1.2;", "transform": "member-access-spacing",
+                "outcome": "equivalent",
+            }],
+        )
+        _matcher, cases = PLAN.validate_plan(no_target)
+        with patch.object(PLAN.SYNTAX, "rule_spans", return_value=[(0, 13)]), \
+                patch.object(PLAN.SYNTAX, "syntax_spans", return_value=[]), \
+                self.assertRaisesRegex(ValueError, "not applicable"):
+            PLAN.expanded_cases(no_target, cases)
 
     def test_compiled_plan_ir_matches_compatibility_artifacts(self):
         path = ROOT / "plans/python/security/py-tempfile-mktemp.yml"

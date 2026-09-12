@@ -5,8 +5,6 @@ import tempfile
 from itertools import pairwise
 from pathlib import Path
 
-import yaml
-
 ROOT_KINDS = {
     "bash": "program", "c": "translation_unit", "cpp": "translation_unit",
     "csharp": "compilation_unit", "go": "source_file", "html": "fragment",
@@ -21,7 +19,16 @@ CST_TARGET_KINDS: dict[str, dict[str, str | tuple[str, ...]]] = {
         "c": "field_expression", "cpp": "field_expression",
         "javascript": "member_expression", "typescript": "member_expression",
         "java": "field_access", "go": "selector_expression",
-        "php": ("member_access_expression", "nullsafe_member_access_expression"),
+        "php": ("member_call_expression", "member_access_expression",
+                "nullsafe_member_call_expression", "nullsafe_member_access_expression"),
+    },
+    "format-width": {
+        "c": "string_literal", "cpp": "string_literal",
+        "go": ("interpreted_string_literal", "raw_string_literal"),
+    },
+    "format-precision": {
+        "c": "string_literal", "cpp": "string_literal",
+        "go": ("interpreted_string_literal", "raw_string_literal"),
     },
     "qualified-name-spacing": {
         "javascript": "member_expression", "typescript": "member_expression",
@@ -110,20 +117,11 @@ def callee_spans(source: str, language: str, extension: str,
 def validate_full_source(source: str, language: str, extension: str,
                          deadline: float, invoke) -> None:
     """Parse a program file and reject tree-sitter ERROR or MISSING recovery."""
-    with tempfile.TemporaryDirectory(prefix="rule-plan-source-") as directory:
-        path = Path(directory) / f"derived.{extension}"
-        path.write_text(source, encoding="utf-8")
-        result = invoke(
-            ["run", "-l", language, "-k", "ERROR", "--json=compact", str(path)],
-            deadline=deadline)
-        full_rule = yaml.safe_dump({
-            "id": "full-source", "language": language,
-            "rule": {"pattern": {"context": source, "selector": ROOT_KINDS[language]}},
-        })
-        cst = invoke(["scan", "--inline-rules", full_rule, "--json=compact", str(path)],
-                     deadline=deadline)
-    errors = json.loads(result.stdout or "[]")
-    if (result.returncode not in (0, 1) or cst.returncode != 0
-            or not isinstance(errors, list) or errors
-            or not json.loads(cst.stdout or "[]")):
+    del extension
+    result = invoke(
+        ["run", "-l", language, "-p", source, "--selector", ROOT_KINDS[language],
+         "--debug-query=sexp", "--stdin"],
+        deadline=deadline, input_text="")
+    tree = result.stdout + result.stderr
+    if result.returncode not in (0, 1) or "(ERROR" in tree or "(MISSING" in tree:
         raise RuntimeError("METAMORPHIC_PARSE_ERROR: derived source is malformed")

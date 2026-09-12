@@ -29,8 +29,8 @@ ENGINE = ROOT / "node_modules" / ".bin" / "ast-grep"
 LANGUAGE_EXTENSIONS = {
     "bash": "sh", "c": "c", "cpp": "cpp", "csharp": "cs", "go": "go",
     "html": "html", "java": "java", "javascript": "js", "kotlin": "kt",
-    "lua": "lua", "php": "php", "python": "py", "ruby": "rb", "rust": "rs",
-    "scala": "scala", "swift": "swift", "typescript": "ts",
+    "lua": "lua", "php": "php", "python": "py", "ruby": "rb", "rust": "rs", "scala": "scala",
+    "swift": "swift", "typescript": "ts",
 }
 LANGUAGES = tuple(LANGUAGE_EXTENSIONS)
 CATEGORIES = ("security", "correctness")
@@ -43,32 +43,12 @@ PLAN_KEYS = {
     "version", "id", "language", "category", "severity", "message", "note",
     "match", "rule", "utils", "constraints", "labels", "fix",
     "transform", "rewriters", "files", "ignores", "url", "metadata", "cases",
-    "mutation_limit", "mutation_exclusions", "oracles", "comments", "extensions",
-    "claims", "metamorphic",
+    "mutation_limit", "mutation_exclusions", "oracles", "comments", "extensions", "claims",
+    "metamorphic",
 }
 
-CLAIM_DIMENSIONS = {
-    "api", "callee", "operator", "argument-position", "literal-form", "syntax",
-}
-METAMORPHIC_TRANSFORMS = {
-    "parenthesized", "callee-parenthesized", "qualified-name-spacing",
-    "member-access-spacing", "literal-spacing", "format-width", "format-precision",
-    "qualified-name", "member-access-swap", "literal-concatenation",
-}
-METAMORPHIC_LANGUAGES = {
-    "parenthesized": set(LANGUAGES) - {"bash", "html"},
-    "callee-parenthesized": {"c", "cpp", "javascript", "typescript", "python"},
-    "qualified-name-spacing": {"python", "javascript", "typescript", "java", "php"},
-    "member-access-spacing": {
-        "c", "cpp", "javascript", "typescript", "java", "go", "php",
-    },
-    "literal-spacing": {"c", "cpp", "python"},
-    "format-width": {"c", "cpp", "go"},
-    "format-precision": {"c", "cpp", "go"},
-    "qualified-name": {"c", "cpp"},
-    "member-access-swap": {"c", "cpp"},
-    "literal-concatenation": {"c", "cpp", "python"},
-}
+CLAIM_DIMENSIONS = {"api", "callee", "operator", "argument-position", "literal-form", "syntax"}
+
 
 @dataclass(frozen=True)
 class CompiledPlan:
@@ -78,6 +58,7 @@ class CompiledPlan:
     cases: Mapping[str, object]
     rule_text: str
     fixture_text: str
+
 
 def _deep_freeze(value):
     if isinstance(value, dict):
@@ -99,10 +80,12 @@ def thaw(value):
         return {thaw(child) for child in value}
     return copy.deepcopy(value)
 
+
 RULE_CONFIG_KEYS = (
     "constraints", "utils", "transform", "fix", "rewriters", "labels", "files",
     "ignores", "url", "metadata",
 )
+
 
 class LiteralStr(str):
     """Render multiline fixture sources as readable YAML blocks."""
@@ -110,6 +93,7 @@ class LiteralStr(str):
 
 class FoldedStr(str):
     """Render diagnostic prose as readable folded YAML."""
+
 
 def _literal(dumper, data):
     return dumper.represent_scalar(
@@ -122,6 +106,7 @@ yaml.SafeDumper.add_representer(
     FoldedStr,
     lambda dumper, data: dumper.represent_scalar("tag:yaml.org,2002:str", data, style=">"),
 )
+
 
 def load_plan(path: Path) -> dict:
     """Load a closed v1 plan schema."""
@@ -457,16 +442,17 @@ def validate_metamorphic(plan: dict, cases: dict[str, list[str]]) -> None:
             raise ValueError("metamorphic source, transform and outcome must be strings")
         identity = (entry["source"], entry["transform"])
         if (entry["source"] not in known
-                or entry["transform"] not in METAMORPHIC_TRANSFORMS
+                or entry["transform"] not in TRANSFORMS.METAMORPHIC_LANGUAGES
                 or entry["outcome"] not in {"equivalent", "different"}):
             raise ValueError("invalid metamorphic entry")
-        if plan["language"] not in METAMORPHIC_LANGUAGES[entry["transform"]]:
+        if plan["language"] not in TRANSFORMS.METAMORPHIC_LANGUAGES[entry["transform"]]:
             raise ValueError(
                 f"metamorphic transform {entry['transform']} does not support "
                 f"{plan['language']}")
         if identity in seen:
             raise ValueError("duplicate metamorphic entry")
         seen.add(identity)
+
 
 def _metamorphic_source(
         source: str, transform: str, language: str, context=None) -> str:
@@ -481,17 +467,19 @@ def _metamorphic_source(
         kind = SYNTAX.target_kind(transform, language)
         spans = SYNTAX.syntax_spans(source, language, kind, ext, invoke) if kind else None
     if findings is not None:
-        spans = [span for span in (spans or findings) if any(
+        spans = [span for span in (findings if spans is None else spans) if any(
             span[0] < end and start < span[1] for start, end in findings)]
         if transform == "parenthesized" and not findings:
             raise ValueError(f"metamorphic transform {transform} is not applicable")
     return TRANSFORMS.metamorphic_source(source, transform, language, spans)
+
 
 def _syntax_run(arguments: list[str], deadline: float | None = None, telemetry=None, **kwargs):
     timeout = _remaining(deadline) if deadline is not None else MAX_ENGINE_SECONDS
     if telemetry is not None:
         telemetry.engine_processes += 1
     return run_engine([str(ENGINE), *arguments], timeout=timeout, **kwargs)
+
 
 def expanded_cases(plan: dict, cases: dict[str, list[str]], deadline: float | None = None,
                    telemetry: PhaseTelemetry | None = None,
