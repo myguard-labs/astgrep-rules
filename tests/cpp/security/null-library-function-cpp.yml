@@ -1,36 +1,80 @@
+# Generated from: plans/cpp/security/null-library-function-cpp.yml
 id: null-library-function-cpp
 valid:
-  - |
-    void coderabbit_control() { const char *text = "CodeRabbit"; }
-  - |
-     errno = 0;
-     fwrite(data, len, 1, f);
-     if (errno) {
-        ERRS("unable to write output file");
-        goto out_flush;
-     }
-  - |
-     void safe() {
-       char buf[128];
-       strcpy(buf, mygetenv("FOO"));
-     }
-
+- |
+  void coderabbit_control() { const char *text = "CodeRabbit"; }
+- |
+  errno = 0;
+  fwrite(data, len, 1, f);
+  if (errno) {
+     ERRS("unable to write output file");
+     goto out_flush;
+  }
+- |
+  void safe() {
+    char buf[128];
+    strcpy(buf, mygetenv("FOO"));
+  }
+- |
+  void checked() {
+    const char *value = getenv("FOO");
+    if (value != nullptr) strlen(value);
+  }
+- |
+  void namespace_controls() {
+    strcpy(buf, project::getenv("FOO"));
+    object.strcpy(buf, getenv("FOO"));
+  }
+- |
+  void nested_control() {
+    consume(wrapper(getenv("FOO")));
+  }
+- |
+  void dereference_shape_controls(Node *node, char *buffer, int index) {
+    consume(buffer[index]);
+    consume(buffer[getenv("INDEX")]);
+    consume(node->field);
+    consume(wrapper(getenv("FIELD"))->field);
+    consume(*buffer);
+    consume(*wrapper(getenv("POINTER")));
+  }
+- |
+  void consumer_shape_controls() {
+    project::consume(getenv("FOO"));
+    strlen(known_nonnull);
+    fwrite(data, 1, 1, stream = known_file);
+  }
+- |
+  void lexical_controls() {
+    // strcpy(buf, getenv("COMMENT"));
+    const char *example = "fwrite(data, 1, 1, fopen(path, mode))";
+  }
 invalid:
-  - |
-     void f() {
-        char buf[128];
-        strcpy(buf, getenv("FOO"));
-     }
-  - |
-     {
-      fwrite("foo", 3, 1, fopen("foo.txt", "w"));
-     }
-  - |
-     {
-      FILE *fptr;
-      fwrite("foo", 3, 1, fptr = fopen("foo.txt", "w"));
-     }
-  - |
-     void test_getc() {
-      int c = getc(fptr = fopen(file_name, "r"));
-     }
+- |
+  void f() {
+     char buf[128];
+     strcpy(buf, getenv("FOO"));
+  }
+- |
+  {
+   fwrite("foo", 3, 1, fopen("foo.txt", "w"));
+  }
+- |
+  {
+   FILE *fptr;
+   fwrite("foo", 3, 1, fptr = fopen("foo.txt", "w"));
+  }
+- |
+  void test_getc() {
+   int c = getc(fptr = fopen(file_name, "r"));
+  }
+- |
+  char subscript_number() { return getenv("NAME")[0]; }
+- |
+  char subscript_identifier(int index) { return std::getenv("NAME")[index]; }
+- |
+  char member_access() { return ::fopen("file", "r")->flags; }
+- |
+  char direct_dereference() { return *getenv("NAME"); }
+- |
+  long qualified_sink() { return std::strlen(::getenv("NAME")); }

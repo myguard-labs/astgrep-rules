@@ -18,6 +18,15 @@ the caller must first establish what `.len` means.
 
 ## Other rule boundaries
 
+- `null-library-function-cpp` syntactically reports a direct call to its listed
+  NULL-returning C library functions when that call is subscripted, accessed
+  through `->`, dereferenced with unary `*`, or passed directly (optionally as
+  an assignment RHS) to a listed pointer-consuming library function. The
+  routine dismissal is a call whose surrounding program proves the result
+  cannot be NULL. It does not model types, overload resolution, wrappers,
+  aliases, macros, prior checks, control flow, or platform-specific return
+  contracts; unqualified, global-qualified, and `std::` spellings are the only
+  supported function forms.
 - `nginx-cpp-line-comment` and `nginx-plain-inline` enforce nginx source style
   purely by syntax. They cannot identify whether a C file belongs to nginx, so
   consumers must scope these informational rules to nginx core and module

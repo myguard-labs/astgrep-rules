@@ -1,6 +1,89 @@
 id: null-library-function-cpp
 snapshots:
   ? |
+    char direct_dereference() { return *getenv("NAME"); }
+  : labels:
+    - source: '*getenv("NAME")'
+      style: primary
+      start: 35
+      end: 50
+    - source: getenv
+      style: secondary
+      start: 36
+      end: 42
+    - source: getenv("NAME")
+      style: secondary
+      start: 36
+      end: 50
+  ? |
+    char member_access() { return ::fopen("file", "r")->flags; }
+  : labels:
+    - source: ::fopen("file", "r")->flags
+      style: primary
+      start: 30
+      end: 57
+    - source: ::fopen
+      style: secondary
+      start: 30
+      end: 37
+    - source: ::fopen("file", "r")
+      style: secondary
+      start: 30
+      end: 50
+  ? |
+    char subscript_identifier(int index) { return std::getenv("NAME")[index]; }
+  : labels:
+    - source: std::getenv("NAME")[index]
+      style: primary
+      start: 46
+      end: 72
+    - source: std::getenv
+      style: secondary
+      start: 46
+      end: 57
+    - source: std::getenv("NAME")
+      style: secondary
+      start: 46
+      end: 65
+  ? |
+    char subscript_number() { return getenv("NAME")[0]; }
+  : labels:
+    - source: getenv("NAME")[0]
+      style: primary
+      start: 33
+      end: 50
+    - source: getenv
+      style: secondary
+      start: 33
+      end: 39
+    - source: getenv("NAME")
+      style: secondary
+      start: 33
+      end: 47
+  ? |
+    long qualified_sink() { return std::strlen(::getenv("NAME")); }
+  : labels:
+    - source: std::strlen(::getenv("NAME"))
+      style: primary
+      start: 31
+      end: 60
+    - source: std::strlen
+      style: secondary
+      start: 31
+      end: 42
+    - source: ::getenv
+      style: secondary
+      start: 43
+      end: 51
+    - source: ::getenv("NAME")
+      style: secondary
+      start: 43
+      end: 59
+    - source: (::getenv("NAME"))
+      style: secondary
+      start: 42
+      end: 60
+  ? |
     void f() {
        char buf[128];
        strcpy(buf, getenv("FOO"));
@@ -18,10 +101,6 @@ snapshots:
       style: secondary
       start: 44
       end: 50
-    - source: ("FOO")
-      style: secondary
-      start: 50
-      end: 57
     - source: getenv("FOO")
       style: secondary
       start: 44
@@ -43,10 +122,6 @@ snapshots:
       style: secondary
       start: 28
       end: 32
-    - source: fptr
-      style: secondary
-      start: 33
-      end: 37
     - source: fopen
       style: secondary
       start: 40
@@ -81,13 +156,13 @@ snapshots:
       style: secondary
       start: 43
       end: 48
-    - source: ("foo.txt", "w")
-      style: secondary
-      start: 48
-      end: 64
     - source: fopen("foo.txt", "w")
       style: secondary
       start: 43
+      end: 64
+    - source: fptr = fopen("foo.txt", "w")
+      style: secondary
+      start: 36
       end: 64
     - source: ("foo", 3, 1, fptr = fopen("foo.txt", "w"))
       style: secondary
@@ -110,10 +185,6 @@ snapshots:
       style: secondary
       start: 23
       end: 28
-    - source: ("foo.txt", "w")
-      style: secondary
-      start: 28
-      end: 44
     - source: fopen("foo.txt", "w")
       style: secondary
       start: 23

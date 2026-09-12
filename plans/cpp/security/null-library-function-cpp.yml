@@ -1,0 +1,160 @@
+version: 1
+id: null-library-function-cpp
+language: cpp
+category: security
+severity: warning
+comments:
+  - 'MyGuard rule: https://github.com/myguard-labs/ast-grep-essentials | https://deb.myguard.nl'
+  - 'CodeRabbit source repository: https://github.com/coderabbitai/ast-grep-essentials'
+  - 'CodeRabbit source file: https://github.com/coderabbitai/ast-grep-essentials/blob/73120109bf45c284d0cd8a37bdd7082e80e92e87/rules/cpp/security/null-library-function-cpp.yml'
+  - 'Original author (Git): ESS-ENN'
+  - 'License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)'
+  - 'Modified by MyGuard: provenance metadata preserved; Refine outcome records field-aware function matching, literal diagnostics, and defended matcher paths.'
+extensions:
+  ast-grep-essentials: true
+mutation_exclusions:
+  rule.any[0].has.field: >-
+    The C++ grammar exposes the source call as the only direct named call child
+    in the defended subscript fixture, so removing the field selector does not
+    change that contrast; the selector remains to state the operand boundary.
+  rule.any[1].has.field: >-
+    The member-access contrast has one direct call child; the field selector is
+    retained to document that only the object operand is inspected.
+  rule.any[2].has.field: >-
+    The unary-dereference contrast has one direct call child; the field
+    selector is retained to document that only its operand is inspected.
+  rule.any[3].all[0].has.field: >-
+    A call expression has one direct function child, making this selector
+    mechanically redundant while it documents the callee boundary.
+  rule.any[3].all[1].has.field: >-
+    A call expression has one direct argument-list child, making this selector
+    mechanically redundant while it prevents accidental traversal changes.
+  rule.any[3].all[1].has.any[1].has.has.field: >-
+    Assignment fixtures expose a single direct RHS call; the selector records
+    that a source call on the assignment LHS is outside the claim.
+  utils.null-return-call.has.field: >-
+    A call expression has one direct function child, making this selector
+    mechanically redundant while it documents that arguments are not names.
+message: >-
+  A library function that may return NULL is dereferenced or passed directly
+  to a library function that requires a valid pointer, without a NULL check.
+note: >-
+  [CWE-476] NULL Pointer Dereference.
+  [REFERENCES]
+      - https://wiki.sei.cmu.edu/confluence/display/c/EXP34-C.+Do+not+dereference+null+pointers
+rule:
+  any:
+    - kind: subscript_expression
+      has:
+        field: argument
+        matches: null-return-call
+    - kind: field_expression
+      has:
+        field: argument
+        matches: null-return-call
+    - kind: pointer_expression
+      has:
+        field: argument
+        matches: null-return-call
+    - kind: call_expression
+      all:
+        - has:
+            field: function
+            matches: pointer-consuming-function
+        - has:
+            field: arguments
+            any:
+              - has:
+                  matches: null-return-call
+              - has:
+                  kind: assignment_expression
+                  has:
+                    field: right
+                    matches: null-return-call
+utils:
+  null-return-call:
+    kind: call_expression
+    has:
+      field: function
+      regex: '^(?:(?:::|std::)?(?:fgets|fopen|getenv|getgrent|getgrgid|getgrnam|getlogin|getpwent|getpwnam|getpwuid|getpwuuid|gets|inet_ntop|realpath|tempnam|tmpfile|tmpnam|memchr|strcasestr_l|strcasestr|strchr|strnstr|strpbrk|strrchr|strstr|strtok_r|strtok))$'
+  pointer-consuming-function:
+    regex: '^(?:(?:::|std::)?(?:atof|atoi|atol_l|atol|atoll_l|atoll|getc|fprintf|fgetpos|fseek|fseeko|fsetpos|ftell|ftello|rewind|strlen|strtoimax|strtod|strtol|strtoul|strtoll|strtoq|bcopy|memccpy|memcpy|memmove|stpncpy|strcat|strcpy|strlcat|strlcpy|strncat|strpcpy|wcpcpy|wcpncpy|fwrite))$'
+cases:
+  valid:
+    - |
+      void coderabbit_control() { const char *text = "CodeRabbit"; }
+    - |
+       errno = 0;
+       fwrite(data, len, 1, f);
+       if (errno) {
+          ERRS("unable to write output file");
+          goto out_flush;
+       }
+    - |
+       void safe() {
+         char buf[128];
+         strcpy(buf, mygetenv("FOO"));
+       }
+    - |
+      void checked() {
+        const char *value = getenv("FOO");
+        if (value != nullptr) strlen(value);
+      }
+    - |
+      void namespace_controls() {
+        strcpy(buf, project::getenv("FOO"));
+        object.strcpy(buf, getenv("FOO"));
+      }
+    - |
+      void nested_control() {
+        consume(wrapper(getenv("FOO")));
+      }
+    - |
+      void dereference_shape_controls(Node *node, char *buffer, int index) {
+        consume(buffer[index]);
+        consume(buffer[getenv("INDEX")]);
+        consume(node->field);
+        consume(wrapper(getenv("FIELD"))->field);
+        consume(*buffer);
+        consume(*wrapper(getenv("POINTER")));
+      }
+    - |
+      void consumer_shape_controls() {
+        project::consume(getenv("FOO"));
+        strlen(known_nonnull);
+        fwrite(data, 1, 1, stream = known_file);
+      }
+    - |
+      void lexical_controls() {
+        // strcpy(buf, getenv("COMMENT"));
+        const char *example = "fwrite(data, 1, 1, fopen(path, mode))";
+      }
+  invalid:
+    - |
+       void f() {
+          char buf[128];
+          strcpy(buf, getenv("FOO"));
+       }
+    - |
+       {
+        fwrite("foo", 3, 1, fopen("foo.txt", "w"));
+       }
+    - |
+       {
+        FILE *fptr;
+        fwrite("foo", 3, 1, fptr = fopen("foo.txt", "w"));
+       }
+    - |
+       void test_getc() {
+        int c = getc(fptr = fopen(file_name, "r"));
+       }
+    - |
+      char subscript_number() { return getenv("NAME")[0]; }
+    - |
+      char subscript_identifier(int index) { return std::getenv("NAME")[index]; }
+    - |
+      char member_access() { return ::fopen("file", "r")->flags; }
+    - |
+      char direct_dereference() { return *getenv("NAME"); }
+    - |
+      long qualified_sink() { return std::strlen(::getenv("NAME")); }
