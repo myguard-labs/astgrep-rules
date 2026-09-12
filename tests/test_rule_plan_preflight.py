@@ -234,7 +234,12 @@ class RulePlanPreflightTests(unittest.TestCase):
                     plan, cases, float("inf"), PLAN.PhaseTelemetry())
 
     def test_c_callee_plan_is_schema_valid_and_passes_full_preflight(self):
-        source = "void f(){ danger(); }"
+        sources = [
+            "void f(){ danger(); }",
+            "int f(){ return danger(); }",
+            "int f(){ int x = danger(); return x; }",
+            "void f(){ if (danger()) {} }",
+        ]
         plan = minimal_plan(
             language="c",
             rule={"any": [
@@ -242,12 +247,13 @@ class RulePlanPreflightTests(unittest.TestCase):
                 {"pattern": {"context": "(danger)();", "selector": "call_expression"}},
             ]},
             cases={
-                "invalid": [source], "valid": ["void f(){ safe(); }"],
+                "invalid": sources, "valid": ["void f(){ safe(); }"],
             },
-            metamorphic=[{
-                "source": source, "transform": "callee-parenthesized",
-                "outcome": "equivalent",
-            }],
+            metamorphic=[
+                {"source": source, "transform": "callee-parenthesized",
+                 "outcome": "equivalent"}
+                for source in sources
+            ],
         )
         matcher, cases = PLAN.validate_plan(plan)
         PLAN.preflight(plan, matcher, cases)

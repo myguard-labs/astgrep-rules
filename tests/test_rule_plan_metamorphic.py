@@ -122,6 +122,12 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                 '((handler))()',
             ('void f(){ danger(); }', "callee-parenthesized", "c"):
                 'void f(){ (danger)(); }',
+            ('int f(){ return danger(); }', "callee-parenthesized", "c"):
+                'int f(){ return (danger)(); }',
+            ('int f(){ int x = danger(); return x; }', "callee-parenthesized", "c"):
+                'int f(){ int x = (danger)(); return x; }',
+            ('void f(){ if (danger()) {} }', "callee-parenthesized", "c"):
+                'void f(){ if ((danger)()) {} }',
         }
         for (source, transform, language), expected in cases.items():
             with self.subTest(transform=transform):
