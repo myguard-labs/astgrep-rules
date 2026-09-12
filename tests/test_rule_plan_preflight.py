@@ -89,21 +89,6 @@ class RulePlanPreflightTests(unittest.TestCase):
                 }):
             PLAN.preflight(plan, matcher, cases)
 
-        plan["mutation_exclusions"] = {
-            "excluded": "the deliberately broad mutant survives its contrasts",
-        }
-        batch_error = {
-            "excluded": ("error", "engine-error=preflight budget exhausted"),
-            "required": ("error", "engine-error=preflight budget exhausted"),
-        }
-        with patch.object(PLAN, "run_preflight", return_value=(True, "ok")), \
-                patch.object(PLAN, "compiled_mutations", return_value=[
-                    ("excluded", "rule"), ("required", "rule")]), \
-                patch.object(PLAN, "_run_mutant_batch", return_value=batch_error), \
-                self.assertRaisesRegex(
-                    RuntimeError, "MUTATION_PREFLIGHT_ERROR: excluded:.*budget exhausted"):
-            PLAN.preflight(plan, matcher, cases)
-
     def test_mutants_share_one_engine_process_with_per_mutant_outcomes(self):
         output = "PASS sample-mutant-0  ..\nFAIL sample-mutant-1  NM\nError: test failed."
         result = SimpleNamespace(returncode=4, stdout=output, stderr="")
@@ -230,6 +215,7 @@ class RulePlanPreflightTests(unittest.TestCase):
 
     def test_compound_callees_and_optional_members_derive_parseable_syntax(self):
         rows = (
+            ("python", 'value = "a" "b"', "literal-spacing", "safe()"),
             ("cpp", "void f(){ obj->danger(); }", "callee-parenthesized",
              "int value = 1;"),
             ("cpp", "void f(){ ns::danger(); }", "callee-parenthesized",
@@ -404,3 +390,25 @@ class RulePlanPreflightTests(unittest.TestCase):
                                        (False, "test-failure")]) as preflight:
             PLAN.preflight(plan, matcher, cases)
         self.assertEqual(preflight.call_count, 3)
+
+
+class RulePlanBatchPrecedenceTests(unittest.TestCase):
+    def test_batch_errors_precede_exclusion_semantics(self):
+        plan = minimal_plan(
+            rule={"all": [{"kind": "call"}, {"pattern": "danger()"}]},
+            mutation_exclusions={
+                "excluded": "the deliberately broad mutant survives its contrasts",
+            },
+        )
+        matcher, cases = PLAN.validate_plan(plan)
+        outcomes = {
+            "excluded": ("killed", "test-failure"),
+            "required": ("error", "engine-error=preflight budget exhausted"),
+        }
+        with patch.object(PLAN, "run_preflight", return_value=(True, "ok")), \
+                patch.object(PLAN, "compiled_mutations", return_value=[
+                    ("excluded", "rule"), ("required", "rule")]), \
+                patch.object(PLAN, "_run_mutant_batch", return_value=outcomes), \
+                self.assertRaisesRegex(
+                    RuntimeError, "MUTATION_PREFLIGHT_ERROR: required:.*budget exhausted"):
+            PLAN.preflight(plan, matcher, cases)

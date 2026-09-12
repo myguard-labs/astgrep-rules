@@ -24,7 +24,6 @@ import yaml
 from rule_plan_telemetry import PhaseTelemetry
 
 _regex_alternatives = TRANSFORMS.regex_alternatives
-
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE = ROOT / "node_modules" / ".bin" / "ast-grep"
 LANGUAGE_EXTENSIONS = {
@@ -484,6 +483,8 @@ def _metamorphic_source(source: str, transform: str, language: str, deadline: fl
     invoke = partial(_syntax_run, deadline=deadline, telemetry=telemetry)
     if transform == "callee-parenthesized":
         spans: list[tuple[int, int]] | None = SYNTAX.callee_spans(source, language, ext, invoke)
+    elif transform == "literal-spacing":
+        spans = SYNTAX.literal_gap_spans(source, language, ext, invoke)
     else:
         kind = SYNTAX.target_kind(transform, language)
         spans = SYNTAX.syntax_spans(source, language, kind, ext, invoke) if kind else None

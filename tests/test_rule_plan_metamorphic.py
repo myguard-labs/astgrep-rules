@@ -73,11 +73,12 @@ class RulePlanMetamorphicTests(unittest.TestCase):
             ('log("value")', "literal-concatenation"): 'log("value" "")',
             ('log("%s", value)', "format-width"): 'log("%20s", value)',
             ('log("%s", value)', "format-precision"): 'log("%.3s", value)',
+            ('value = "a" "b"', "literal-spacing"): 'value = "a"   "b"',
             ("danger()", "parenthesized"): "(danger())",
         }
         for (source, transform), expected in cases.items():
             with self.subTest(transform=transform):
-                language = "python" if transform == "parenthesized" else "c"
+                language = "python" if transform in {"parenthesized", "literal-spacing"} else "c"
                 # White-box assertion covers the transform dispatcher boundary.
                 self.assertEqual(
                     PLAN._metamorphic_source(  # pylint: disable=protected-access
@@ -152,6 +153,12 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                         source, transform, language), expected)
 
     def test_format_transforms_skip_escaped_percent_and_existing_fields(self):
+        for source, language in (('danger(" ")', "python"),
+                                 ('const re = /" "/;', "javascript")):
+            with self.subTest(source=source), self.assertRaisesRegex(
+                    ValueError, "not applicable"):
+                PLAN._metamorphic_source(  # pylint: disable=protected-access
+                    source, "literal-spacing", language)
         transformed = [
             ('log("%% literal: %s", value)', "format-width",
              'log("%% literal: %20s", value)'),

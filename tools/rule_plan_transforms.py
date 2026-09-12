@@ -127,9 +127,7 @@ def metamorphic_source(source: str, transform: str, language: str,
             source, re.compile(r'"([^"\\]+)"'),
             lambda match: f'"{match[1]}" ""', language, ({"string"}, None))
     elif transform == "literal-spacing":
-        changed, count = _replace_first(
-            source, re.compile(r"(['\"])\s+(['\"])"), r"\1   \2", language,
-            ({"code", "string"}, None))
+        changed, count = _space_literal_gap(source, syntax_spans)
     elif transform == "format-width":
         changed, count = _transform_format_conversion(source, language, precision=False)
     elif transform == "format-precision":
@@ -139,6 +137,14 @@ def metamorphic_source(source: str, transform: str, language: str,
     if count != 1 or changed == source:
         raise ValueError(f"metamorphic transform {transform} is not applicable")
     return changed
+
+
+def _space_literal_gap(source: str,
+                       syntax_spans: list[tuple[int, int]] | None) -> tuple[str, int]:
+    if not syntax_spans:
+        return source, 0
+    start, end = syntax_spans[0]
+    return source[:start] + "   " + source[end:], 1
 
 
 def _transform_format_conversion(source: str, language: str,
