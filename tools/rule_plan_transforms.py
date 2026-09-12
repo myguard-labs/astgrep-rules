@@ -135,9 +135,7 @@ def metamorphic_source(source: str, transform: str, language: str,
             lambda match: "." if match[0] == "->" else "->", language,
             ({"code"}, syntax_spans))
     elif transform == "literal-concatenation":
-        changed, count = _replace_first(
-            source, re.compile(r'"([^"\\]+)"'),
-            lambda match: f'"{match[1]}" ""', language, ({"string"}, syntax_spans))
+        changed, count = _concatenate_literal(source, language, syntax_spans)
     elif transform == "literal-spacing":
         changed, count = _space_literal_gap(source, syntax_spans)
     elif transform == "format-width":
@@ -159,6 +157,23 @@ def _space_literal_gap(source: str,
         return source, 0
     start, end = syntax_spans[0]
     return source[:start] + "   " + source[end:], 1
+
+
+def _concatenate_literal(source: str, language: str,
+                         syntax_spans: list[tuple[int, int]] | None) -> tuple[str, int]:
+    if not syntax_spans:
+        return source, 0
+    _start, end = syntax_spans[0]
+    literal = source[syntax_spans[0][0]:end]
+    if language == "python":
+        opening = re.match(r"(?i)([rubf]*)(\"\"\"|'''|\"|')", literal)
+        if not opening:
+            return source, 0
+        prefix, delimiter = opening.groups()
+        empty = prefix + delimiter * 2
+    else:
+        empty = '""'
+    return source[:end] + " " + empty + source[end:], 1
 
 
 def _transform_format_conversion(source: str, language: str,
@@ -217,7 +232,6 @@ def inline_verbose(fragment: str, inherited: bool = False) -> bool:
 class _RegexState:
     modes: list[bool]
     escaped: bool = False
-    in_class: bool = False
     in_comment: bool = False
     bars: list[int] = field(default_factory=list)
 
@@ -229,10 +243,8 @@ class _RegexState:
             self.escaped = False
         elif character == "\\":
             self.escaped = True
-        elif self.in_class:
-            self.in_class = character != "]"
         elif character == "[":
-            self.in_class = True
+            return _class_end(pattern, index)
         elif self.modes[-1] and character == "#":
             self.in_comment = True
         elif character == "(":
@@ -255,6 +267,28 @@ class _RegexState:
         else:
             self.modes[-1] = mode
         return flags.end() - 1
+
+
+def _class_end(pattern: str, index: int) -> int:
+    """Skip one bracket class, including leading `]` and POSIX bracket syntax."""
+    cursor = index + 1
+    if cursor < len(pattern) and pattern[cursor] == "^":
+        cursor += 1
+    if cursor < len(pattern) and pattern[cursor] == "]":
+        cursor += 1
+    while cursor < len(pattern):
+        if pattern[cursor] == "\\":
+            cursor += 2
+            continue
+        if pattern.startswith(("[:", "[.", "[="), cursor):
+            marker = pattern[cursor + 1]
+            close = pattern.find(marker + "]", cursor + 2)
+            cursor = len(pattern) if close < 0 else close + 2
+            continue
+        if pattern[cursor] == "]":
+            return cursor + 1
+        cursor += 1
+    return cursor
 
 
 def _top_level_bars(pattern: str, verbose: bool) -> list[int]:

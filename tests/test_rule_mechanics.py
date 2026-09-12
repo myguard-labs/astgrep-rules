@@ -199,6 +199,16 @@ class RuleMechanicsTests(unittest.TestCase):
                                         "FIX_PARSE_FAILED: cpp-missing-fix"):
                 MECHANICS.validate_fix(rule, "danger()")
 
+    def test_fixer_accepts_valid_multi_statement_rewrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            rule = Path(directory) / "fix.yml"
+            rule.write_text(yaml.safe_dump({
+                "id": "cpp-multi-fix", "language": "cpp", "fix": "safe(); other()",
+                "rule": {"pattern": "danger()"},
+            }))
+            MECHANICS.validate_fix(
+                rule, "danger();", "safe(); other();")
+
     def test_fixer_command_checks_every_invalid_fixture(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

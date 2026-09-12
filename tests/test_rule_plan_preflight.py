@@ -166,6 +166,8 @@ class RulePlanPreflightTests(unittest.TestCase):
         })
         self.assertEqual(report["wall_clock_ms_informational"]["batched_engine"], 37)
 
+
+class RulePlanSyntaxPreflightTests(unittest.TestCase):
     def test_metamorphic_parser_errors_fail_before_contrast_preflight(self):
         plan = minimal_plan(metamorphic=[
             {"source": "danger()", "transform": "parenthesized", "outcome": "equivalent"},
@@ -226,6 +228,9 @@ class RulePlanPreflightTests(unittest.TestCase):
                 plan, cases, float("inf"), PLAN.PhaseTelemetry())
 
     def test_full_source_parser_rejects_missing_only_recovery(self):
+        # White-box call isolates the full-CST parser boundary from preflight.
+        # pylint: disable-next=protected-access
+        invoke = PLAN._syntax_run
         rows = (
             ("c", "void f(){ if () {} }", "c"),
             ("java", "class X { void f(){ if () {} } }", "java"),
@@ -235,7 +240,9 @@ class RulePlanPreflightTests(unittest.TestCase):
             with self.subTest(language=language), self.assertRaisesRegex(
                     RuntimeError, "METAMORPHIC_PARSE_ERROR"):
                 PLAN.SYNTAX.validate_full_source(
-                    source, language, extension, float("inf"), PLAN._syntax_run)
+                    source, language, extension, float("inf"), invoke)
+        PLAN.SYNTAX.validate_full_source(
+            "<div>ok</div>", "html", "html", float("inf"), invoke)
 
     def test_compound_callees_and_optional_members_derive_parseable_syntax(self):
         rows = (
@@ -356,6 +363,7 @@ class RulePlanPreflightTests(unittest.TestCase):
                     "source": "danger()", "transform": "literal-concatenation",
                     "outcome": "equivalent",
                 }]))
+
     def test_engine_timeout_terminates_descendant_process_group(self):
         with tempfile.TemporaryDirectory() as directory:
             child_pid = Path(directory) / "child.pid"

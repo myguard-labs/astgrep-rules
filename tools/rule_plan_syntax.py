@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT_KINDS = {
     "bash": "program", "c": "translation_unit", "cpp": "translation_unit",
-    "csharp": "compilation_unit", "go": "source_file", "html": "fragment",
+    "csharp": "compilation_unit", "go": "source_file", "html": "document",
     "java": "program", "javascript": "program", "kotlin": "source_file",
     "lua": "chunk", "php": "program", "python": "module", "ruby": "program",
     "rust": "source_file", "scala": "compilation_unit", "swift": "source_file",
@@ -23,12 +23,16 @@ CST_TARGET_KINDS: dict[str, dict[str, str | tuple[str, ...]]] = {
                 "nullsafe_member_call_expression", "nullsafe_member_access_expression"),
     },
     "format-width": {
-        "c": "string_literal", "cpp": "string_literal",
+        "c": "string_literal", "cpp": ("string_literal", "raw_string_literal"),
         "go": ("interpreted_string_literal", "raw_string_literal"),
     },
     "format-precision": {
-        "c": "string_literal", "cpp": "string_literal",
+        "c": "string_literal", "cpp": ("string_literal", "raw_string_literal"),
         "go": ("interpreted_string_literal", "raw_string_literal"),
+    },
+    "literal-concatenation": {
+        "c": "string_literal", "cpp": ("string_literal", "raw_string_literal"),
+        "python": "string",
     },
     "qualified-name-spacing": {
         "javascript": "member_expression", "typescript": "member_expression",
@@ -83,7 +87,9 @@ def syntax_spans(source: str, language: str, kind: str | tuple[str, ...], extens
 def literal_gap_spans(source: str, language: str, extension: str,
                       invoke) -> list[tuple[int, int]]:
     """Return whitespace gaps bounded by two distinct string-literal CST nodes."""
-    kind = "string" if language == "python" else "string_literal"
+    kind = ("string" if language == "python" else
+            ("string_literal", "raw_string_literal") if language == "cpp"
+            else "string_literal")
     literals = sorted(syntax_spans(source, language, kind, extension, invoke))
     return [(left[1], right[0]) for left, right in pairwise(literals)
             if source[left[1]:right[0]].isspace()

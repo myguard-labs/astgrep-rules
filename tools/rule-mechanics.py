@@ -377,13 +377,14 @@ def validate_fix(rule_path: Path, source: str, expected: str | None = None,
              "--update-all", str(target)], timeout=20)
         if second.returncode not in (0, 1) or target.read_text(encoding="utf-8") != after:
             raise RuntimeError(f"FIX_NOT_IDEMPOTENT: {rule['id']}")
-        parse = PLAN.run_engine(
-            [str(ENGINE), "run", "-l", rule["language"], "-p", after,
-             "--debug-query=sexp", "--stdin"], input_text="", timeout=20,
-        )
-        tree = parse.stdout + parse.stderr
-        if parse.returncode not in (0, 1) or re.search(r"\((?:ERROR|MISSING)\b", tree):
-            raise RuntimeError(f"FIX_PARSE_FAILED: {rule['id']}")
+        def invoke(arguments, **kwargs):
+            kwargs.pop("deadline", None)
+            return PLAN.run_engine([str(ENGINE), *arguments], timeout=20, **kwargs)
+        try:
+            PLAN.SYNTAX.validate_full_source(
+                after, rule["language"], extension, float("inf"), invoke)
+        except RuntimeError as error:
+            raise RuntimeError(f"FIX_PARSE_FAILED: {rule['id']}") from error
 
 
 def fixes_command(rule_id: str | None, skip_planned: bool = False) -> int:

@@ -156,6 +156,19 @@ class RuleRegexMutationTests(unittest.TestCase):
         self.assertEqual(PLAN._regex_alternatives(r"^(a|b)[|]c\|d$|^e$"),
                          [r"^(a|b)[|]c\|d$", "^e$"])
 
+    def test_regex_split_ignores_advanced_bracket_class_bars(self):
+        cases = {
+            r"[]|]value|outer": [r"[]|]value", "outer"],
+            r"[[:alpha:]|]+|outer": [r"[[:alpha:]|]+", "outer"],
+            r"[[.ch.]|]+|outer": [r"[[.ch.]|]+", "outer"],
+            r"[[=a=]|]+|outer": [r"[[=a=]|]+", "outer"],
+        }
+        for pattern, expected in cases.items():
+            with self.subTest(pattern=pattern):
+                # White-box assertion covers bracket-class state transitions.
+                # pylint: disable-next=protected-access
+                self.assertEqual(PLAN._regex_alternatives(pattern), expected)
+
     def test_grouped_regex_alternatives_preserve_anchors_and_wrapper(self):
         cases = {
             "^(?:open|read|write)$": ("^(?:read|write)$", 3),

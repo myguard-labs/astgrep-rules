@@ -14,7 +14,7 @@ Invoke: TypeAlias = Callable[[], EngineResult]
 
 def batch_error(paths: Iterable[MutationPath], malformed: Outcomes,
                 detail: str) -> Outcomes:
-    outcomes = {path: ("error", detail) for path in paths}
+    outcomes = dict.fromkeys(paths, ("error", detail))
     outcomes.update(malformed)
     return outcomes
 

@@ -266,6 +266,39 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                 self.assertRaisesRegex(ValueError, "not applicable"):
             PLAN.expanded_cases(no_target, cases)
 
+    def test_literal_concatenation_preserves_legal_literal_forms(self):
+        rows = (
+            ("python", "'value'", "'value' ''"),
+            ("python", "''", "'' ''"),
+            ("python", r"'a\'b'", r"'a\'b' ''"),
+            ("python", "'''value'''", "'''value''' ''''''"),
+            ("python", "b'value'", "b'value' b''"),
+            ("cpp", 'R"tag(value)tag"', 'R"tag(value)tag" ""'),
+        )
+        for language, source, expected in rows:
+            with self.subTest(language=language, source=source):
+                # White-box assertion covers delimiter-preserving literal expansion.
+                # pylint: disable-next=protected-access
+                actual = PLAN._metamorphic_source(
+                    source, "literal-concatenation", language)
+                self.assertEqual(actual, expected)
+
+        for source, expected in (("value = 'a' 'b'", "value = 'a'   'b'"),
+                                 ('value = b"a" b"b"', 'value = b"a"   b"b"'),
+                                 ('R"(a)" R"(b)"', 'R"(a)"   R"(b)"')):
+            with self.subTest(source=source):
+                language = "cpp" if source.startswith("R") else "python"
+                # White-box assertion covers legal Python adjacency gaps.
+                # pylint: disable-next=protected-access
+                actual = PLAN._metamorphic_source(source, "literal-spacing", language)
+                self.assertEqual(actual, expected)
+
+        # White-box assertion covers C++ raw-string format conversion.
+        # pylint: disable-next=protected-access
+        self.assertEqual(PLAN._metamorphic_source(
+            'log(R"tag(%s)tag", value)', "format-width", "cpp"),
+            'log(R"tag(%20s)tag", value)')
+
     def test_compiled_plan_ir_matches_compatibility_artifacts(self):
         path = ROOT / "plans/python/security/py-tempfile-mktemp.yml"
         ir = PLAN.compile_plan_ir(path, run_checks=False)
