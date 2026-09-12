@@ -2,15 +2,24 @@
 
 import re
 import subprocess
+from collections.abc import Callable, Iterable
+from typing import TypeAlias
+
+MutationPath: TypeAlias = str
+Outcome: TypeAlias = tuple[str, str]
+Outcomes: TypeAlias = dict[MutationPath, Outcome]
+EngineResult: TypeAlias = subprocess.CompletedProcess[str]
+Invoke: TypeAlias = Callable[[], EngineResult]
 
 
-def batch_error(paths, malformed, detail: str):
+def batch_error(paths: Iterable[MutationPath], malformed: Outcomes,
+                detail: str) -> Outcomes:
     outcomes = {path: ("error", detail) for path in paths}
     outcomes.update(malformed)
     return outcomes
 
 
-def raise_batch_error(outcomes):
+def raise_batch_error(outcomes: Outcomes) -> None:
     """Fail on attributed engine errors before interpreting mutant semantics."""
     for path in sorted(outcomes):
         outcome, detail = outcomes[path]
@@ -18,7 +27,8 @@ def raise_batch_error(outcomes):
             raise RuntimeError(f"MUTATION_PREFLIGHT_ERROR: {path}: {detail}")
 
 
-def classify(result, id_to_path, malformed):
+def classify(result: EngineResult, id_to_path: dict[str, MutationPath],
+             malformed: Outcomes) -> Outcomes | None:
     output = result.stdout + result.stderr
     if result.returncode != 0 and "Error: test failed." not in output:
         return None
@@ -32,7 +42,8 @@ def classify(result, id_to_path, malformed):
     return outcomes
 
 
-def execute(id_to_path, malformed, invoke):
+def execute(id_to_path: dict[str, MutationPath], malformed: Outcomes,
+            invoke: Invoke) -> tuple[EngineResult | None, Outcomes | None]:
     """Execute one materialized batch and return its result or attributed errors."""
     try:
         result = invoke()
@@ -42,7 +53,8 @@ def execute(id_to_path, malformed, invoke):
     return result, None
 
 
-def unloadable_outcome(result, item, malformed):
+def unloadable_outcome(result: EngineResult, item: tuple[MutationPath, str],
+                       malformed: Outcomes) -> Outcomes:
     output = result.stdout + result.stderr
     detail = " | ".join(output.splitlines()[-6:])[:600]
     kind = "invalid" if "file is not a valid ast-grep rule" in output else "error"

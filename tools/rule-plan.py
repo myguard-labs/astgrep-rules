@@ -699,7 +699,6 @@ def _run_mutant_batch(items: list[tuple[str, str]], cases: dict[str, list[str]],
         id_to_path, malformed = _materialize_mutants(root, items, cases, rule_id)
         if not id_to_path:
             return malformed
-
         def invoke():
             remaining = _remaining(deadline)
             telemetry.engine_processes += 1
@@ -710,6 +709,7 @@ def _run_mutant_batch(items: list[tuple[str, str]], cases: dict[str, list[str]],
         result, errors = BATCHES.execute(id_to_path, malformed, invoke)
         if errors is not None:
             return errors
+        assert result is not None
     telemetry.wall_ms += int((perf_counter() - started) * 1000)
     outcomes = BATCHES.classify(result, id_to_path, malformed)
     if outcomes is not None:
