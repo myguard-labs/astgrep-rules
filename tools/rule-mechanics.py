@@ -194,22 +194,29 @@ def _write_plan_artifacts(updates: list[tuple[Path, str, str]]) -> None:
         write_atomic(target, content)
 
 
-def validate_plan_fixes(paths: list[Path]) -> int:
+def validate_plan_fixes(paths: list[Path], rendered_rules: dict[Path, str] | None = None) -> int:
     """Validate every exact fixed-output oracle owned by canonical plans."""
     checked = 0
-    for plan_path in paths:
-        plan = PLAN.load_plan(plan_path)
-        if "fix" not in plan:
-            continue
-        rule_path = ROOT / "rules" / plan["language"] / plan["category"] / f"{plan['id']}.yml"
-        valid_sources = set(plan["cases"]["valid"])
-        for source, oracle in plan.get("oracles", {}).items():
-            if "fixed" in oracle:
-                validate_fix(
-                    rule_path, source, oracle["fixed"],
-                    allow_no_change=source in valid_sources,
-                )
-                checked += 1
+    with tempfile.TemporaryDirectory(prefix="rule-plan-fixes-") as directory:
+        for plan_path in paths:
+            plan = PLAN.load_plan(plan_path)
+            if "fix" not in plan:
+                continue
+            rule_path = (ROOT / "rules" / plan["language"] / plan["category"]
+                         / f"{plan['id']}.yml")
+            candidate = (rendered_rules or {}).get(rule_path.resolve())
+            if candidate is not None:
+                temporary = Path(directory) / f"{plan['id']}.yml"
+                temporary.write_text(candidate, encoding="utf-8")
+                rule_path = temporary
+            valid_sources = set(plan["cases"]["valid"])
+            for source, oracle in plan.get("oracles", {}).items():
+                if "fixed" in oracle:
+                    validate_fix(
+                        rule_path, source, oracle["fixed"],
+                        allow_no_change=source in valid_sources,
+                    )
+                    checked += 1
     return checked
 
 
@@ -221,18 +228,20 @@ def plans_command(write: bool) -> int:
         print("stale generated artifacts: " + ", ".join(stale), file=sys.stderr)
         return 1
     drift, updates = _changed_plan_artifacts(paths, write)
+    if not write:
+        count_changed = sync_diagnostic_count(False, {path.stem for path in paths})
+        if count_changed:
+            drift.append("tests/test_diagnostics.py")
+    if not write and drift:
+        print("generated drift: " + ", ".join(drift), file=sys.stderr)
+        return 1
+    rendered_rules = {target.resolve(): content for target, content, _owner in updates}
+    fixed = validate_plan_fixes(paths, rendered_rules if write else None)
     if write:
         with SCAFFOLD.cli_scaffold_lock():
             _write_plan_artifacts(updates)
-            count_changed = sync_diagnostic_count(True, {path.stem for path in paths})
-    else:
-        count_changed = sync_diagnostic_count(False, {path.stem for path in paths})
-    if count_changed:
-        drift.append("tests/test_diagnostics.py")
-    if drift and not write:
-        print("generated drift: " + ", ".join(drift), file=sys.stderr)
-        return 1
-    fixed = validate_plan_fixes(paths)
+            if sync_diagnostic_count(True, {path.stem for path in paths}):
+                drift.append("tests/test_diagnostics.py")
     print(f"{'regenerated' if write else 'verified'} {len(paths)} canonical plan(s)"
           + (f"; {len(drift)} artifact(s) updated" if write else "")
           + f"; {fixed} exact fix oracle(s)")

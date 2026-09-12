@@ -338,6 +338,22 @@ class RuleMechanicsTests(unittest.TestCase):
                                  return_value=(rule_path, fixture_path, generated, generated)):
                 MECHANICS.plans_command(True)
 
+    def test_regeneration_validates_candidate_fixes_before_writing(self):
+        target = ROOT / "rules/python/security/py-sample.yml"
+        updates = [(target, "id: py-sample\n", "owner")]
+        with patch.object(MECHANICS, "plan_paths", return_value=[Path("plan.yml")]), \
+                patch.object(MECHANICS, "validate_plan_id_ownership"), \
+                patch.object(MECHANICS, "stale_generated_artifacts", return_value=[]), \
+                patch.object(MECHANICS, "_changed_plan_artifacts",
+                             return_value=(["rule"], updates)), \
+                patch.object(MECHANICS, "validate_plan_fixes",
+                             side_effect=RuntimeError("FIX_PARSE_FAILED")) as validate, \
+                patch.object(MECHANICS, "_write_plan_artifacts") as write, \
+                self.assertRaisesRegex(RuntimeError, "FIX_PARSE_FAILED"):
+            MECHANICS.plans_command(True)
+        self.assertEqual(validate.call_args.args[1], {target.resolve(): "id: py-sample\n"})
+        write.assert_not_called()
+
     def test_embedded_generation_marker_does_not_claim_ownership(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "rule.yml"
