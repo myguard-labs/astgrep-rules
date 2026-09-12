@@ -332,24 +332,6 @@ class RulePlanPreflightTests(unittest.TestCase):
                     "source": "danger()", "transform": "literal-concatenation",
                     "outcome": "equivalent",
                 }]))
-        for language in ("javascript", "typescript"):
-            with self.subTest(transform="literal-spacing", language=language), \
-                    self.assertRaisesRegex(ValueError, f"does not support {language}"):
-                PLAN.validate_plan(minimal_plan(language=language, metamorphic=[{
-                    "source": '"a"\n"b"', "transform": "literal-spacing",
-                    "outcome": "equivalent",
-                }], cases={"invalid": ['"a"\n"b"'], "valid": ["safe();"]}))
-        for separator in ("\n", "\r", "\r\n"):
-            source = f'"a"{separator}"b"'
-            plan = minimal_plan(metamorphic=[{
-                "source": source, "transform": "literal-spacing",
-                "outcome": "equivalent",
-            }], cases={"invalid": [source], "valid": ["safe()"]})
-            _matcher, cases = PLAN.validate_plan(plan)
-            with self.subTest(separator=repr(separator)), \
-                    self.assertRaisesRegex(ValueError, "not applicable"):
-                PLAN.expanded_cases(plan, cases)
-
     def test_engine_timeout_terminates_descendant_process_group(self):
         with tempfile.TemporaryDirectory() as directory:
             child_pid = Path(directory) / "child.pid"
@@ -429,3 +411,24 @@ class RulePlanBatchPrecedenceTests(unittest.TestCase):
                 self.assertRaisesRegex(
                     RuntimeError, "MUTATION_PREFLIGHT_ERROR: required:.*budget exhausted"):
             PLAN.preflight(plan, matcher, cases)
+
+
+class RulePlanLiteralContractTests(unittest.TestCase):
+    def test_literal_spacing_requires_supported_grammar_and_same_line(self):
+        for language in ("javascript", "typescript"):
+            with self.subTest(language=language), self.assertRaisesRegex(
+                    ValueError, f"does not support {language}"):
+                PLAN.validate_plan(minimal_plan(language=language, metamorphic=[{
+                    "source": '"a"\n"b"', "transform": "literal-spacing",
+                    "outcome": "equivalent",
+                }], cases={"invalid": ['"a"\n"b"'], "valid": ["safe();"]}))
+        for separator in ("\n", "\r", "\r\n"):
+            source = f'"a"{separator}"b"'
+            plan = minimal_plan(metamorphic=[{
+                "source": source, "transform": "literal-spacing",
+                "outcome": "equivalent",
+            }], cases={"invalid": [source], "valid": ["safe()"]})
+            _matcher, cases = PLAN.validate_plan(plan)
+            with self.subTest(separator=repr(separator)), self.assertRaisesRegex(
+                    ValueError, "not applicable"):
+                PLAN.expanded_cases(plan, cases)
