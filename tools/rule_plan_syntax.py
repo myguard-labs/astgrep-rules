@@ -79,10 +79,10 @@ def validate_full_source(source: str, language: str, extension: str,
         path.write_text(source, encoding="utf-8")
         result = invoke(
             ["run", "-l", language, "-k", "ERROR", "--json=compact", str(path)],
-            deadline)
+            deadline=deadline)
         cst = invoke(
             ["run", "-l", language, "-p", source, "--debug-query=sexp", "--stdin"],
-            deadline, input_text="")
+            deadline=deadline, input_text="")
     errors = json.loads(result.stdout or "[]")
     recovery = cst.stdout + cst.stderr
     if (result.returncode not in (0, 1) or not isinstance(errors, list) or errors

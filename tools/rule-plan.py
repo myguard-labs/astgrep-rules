@@ -12,6 +12,7 @@ import sys
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from time import perf_counter
 from types import MappingProxyType
@@ -477,30 +478,33 @@ def validate_metamorphic(plan: dict, cases: dict[str, list[str]]) -> None:
         seen.add(identity)
 
 
-def _metamorphic_source(source: str, transform: str, language: str) -> str:
-    extension = LANGUAGE_EXTENSIONS[language]
-    spans: list[tuple[int, int]] | None
+def _metamorphic_source(source: str, transform: str, language: str, deadline: float | None = None,
+                        telemetry: PhaseTelemetry | None = None) -> str:
+    ext = LANGUAGE_EXTENSIONS[language]
+    invoke = partial(_syntax_run, deadline=deadline, telemetry=telemetry)
     if transform == "callee-parenthesized":
-        spans = SYNTAX.callee_spans(source, language, extension, _syntax_run)
+        spans: list[tuple[int, int]] | None = SYNTAX.callee_spans(source, language, ext, invoke)
     else:
         kind = SYNTAX.target_kind(transform, language)
-        spans = SYNTAX.syntax_spans(source, language, kind, extension, _syntax_run) \
-            if kind else None
+        spans = SYNTAX.syntax_spans(source, language, kind, ext, invoke) if kind else None
     return TRANSFORMS.metamorphic_source(source, transform, language, spans)
 
 
-def _syntax_run(arguments: list[str], deadline: float | None = None, **kwargs):
+def _syntax_run(arguments: list[str], deadline: float | None = None, telemetry=None, **kwargs):
     timeout = _remaining(deadline) if deadline is not None else MAX_ENGINE_SECONDS
+    if telemetry is not None:
+        telemetry.engine_processes += 1
     return run_engine([str(ENGINE), *arguments], timeout=timeout, **kwargs)
 
 
-def expanded_cases(plan: dict, cases: dict[str, list[str]]) -> dict[str, list[str]]:
+def expanded_cases(plan: dict, cases: dict[str, list[str]], deadline: float | None = None,
+                   telemetry: PhaseTelemetry | None = None) -> dict[str, list[str]]:
     """Add declared equivalent and outcome-changing derived syntax cases."""
     result = {key: list(values) for key, values in cases.items()}
     source_class = {source: key for key, values in cases.items() for source in values}
     for entry in plan.get("metamorphic", []):
         transformed = _metamorphic_source(
-            entry["source"], entry["transform"], plan["language"])
+            entry["source"], entry["transform"], plan["language"], deadline, telemetry)
         category = source_class[entry["source"]]
         if entry["outcome"] == "different":
             category = "valid" if category == "invalid" else "invalid"
@@ -513,20 +517,20 @@ def expanded_cases(plan: dict, cases: dict[str, list[str]]) -> dict[str, list[st
 
 
 def validate_derived_syntax(plan: dict, cases: dict[str, list[str]], deadline: float,
-                            telemetry: PhaseTelemetry) -> None:
+                            telemetry: PhaseTelemetry,
+                            expanded: dict[str, list[str]] | None = None) -> None:
     """Reject ERROR/MISSING recovery in each derived full source program."""
     originals = set(cases["valid"] + cases["invalid"])
-    derived = expanded_cases(plan, cases)
+    derived = expanded or expanded_cases(plan, cases, deadline, telemetry)
     for source in derived["valid"] + derived["invalid"]:
         if source in originals:
             continue
-        telemetry.engine_processes += 2
         try:
+            invoke = partial(_syntax_run, telemetry=telemetry)
             SYNTAX.validate_full_source(
                 source, plan["language"], LANGUAGE_EXTENSIONS[plan["language"]],
-                deadline, _syntax_run)
-        except (OSError, subprocess.TimeoutExpired, RuntimeError,
-                json.JSONDecodeError) as error:
+                deadline, invoke)
+        except (OSError, subprocess.TimeoutExpired, RuntimeError, json.JSONDecodeError) as error:
             raise RuntimeError(f"METAMORPHIC_PARSE_ERROR: {error}") from error
 
 
@@ -927,8 +931,9 @@ def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]],
     """Require contrasts and every selected mutant to fail closed."""
     telemetry = telemetry or PhaseTelemetry()
     deadline = deadline or perf_counter() + MAX_PREFLIGHT_SECONDS
-    validate_derived_syntax(plan, cases, deadline, telemetry)
-    cases = expanded_cases(plan, cases)
+    expanded = expanded_cases(plan, cases, deadline, telemetry)
+    validate_derived_syntax(plan, cases, deadline, telemetry, expanded)
+    cases = expanded
     telemetry.engine_processes += 1
     passed, detail = run_preflight(
         render_rule(plan, matcher), cases, plan["id"], deadline=deadline)

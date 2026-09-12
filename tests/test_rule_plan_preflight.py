@@ -256,7 +256,25 @@ class RulePlanPreflightTests(unittest.TestCase):
             ],
         )
         matcher, cases = PLAN.validate_plan(plan)
-        PLAN.preflight(plan, matcher, cases)
+        telemetry = PLAN.PhaseTelemetry()
+        with patch.object(PLAN, "run_engine", wraps=PLAN.run_engine) as processes:
+            PLAN.preflight(plan, matcher, cases, telemetry)
+        self.assertEqual(processes.call_count, telemetry.engine_processes)
+        self.assertEqual(processes.call_count, 14)
+
+    def test_expired_deadline_stops_before_target_discovery_process(self):
+        plan = minimal_plan(metamorphic=[{
+            "source": "danger()", "transform": "callee-parenthesized",
+            "outcome": "equivalent",
+        }])
+        matcher, cases = PLAN.validate_plan(plan)
+        telemetry = PLAN.PhaseTelemetry()
+        with patch.object(PLAN, "run_engine") as process, \
+                self.assertRaisesRegex(RuntimeError, "budget exhausted"):
+            PLAN.preflight(
+                plan, matcher, cases, telemetry, deadline=PLAN.perf_counter() - 1)
+        process.assert_not_called()
+        self.assertEqual(telemetry.engine_processes, 0)
 
     def test_literal_concatenation_is_limited_to_adjacent_literal_grammars(self):
         for language in ("javascript", "typescript", "java"):

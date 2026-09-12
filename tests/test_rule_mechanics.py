@@ -23,6 +23,8 @@ class RuleMechanicsTests(unittest.TestCase):
         compiled = PLAN.compile_plan_ir(path, run_checks=False)
         with patch.object(MECHANICS.PLAN, "thaw", wraps=MECHANICS.PLAN.thaw) as thaw, \
                 patch.object(MECHANICS.PLAN, "preflight"):
+            # White-box assertion: this test owns the internal artifact boundary.
+            # pylint: disable-next=protected-access
             MECHANICS._compiled_plan_artifacts(path, compiled=compiled)
         self.assertEqual(
             sum(call.args[0] is compiled.plan for call in thaw.call_args_list), 1)
@@ -37,6 +39,8 @@ class RuleMechanicsTests(unittest.TestCase):
                 patch.object(MECHANICS, "_changed_plan_artifacts", return_value=([], [])), \
                 patch.object(MECHANICS, "validate_plan_fixes", return_value=0), \
                 contextlib.redirect_stdout(io.StringIO()):
+            # White-box assertion: this test owns the plan transaction boundary.
+            # pylint: disable-next=protected-access
             self.assertEqual(MECHANICS._plans_command(False), 0)
         self.assertEqual(compile_ir.call_count, 1)
 
@@ -55,6 +59,8 @@ class RuleMechanicsTests(unittest.TestCase):
             events.append("transaction")
             return 0
 
+        # White-box patch: the test verifies lock ordering at this boundary.
+        # pylint: disable-next=protected-access
         with patch.object(MECHANICS.SCAFFOLD, "cli_scaffold_lock", return_value=lock()), \
                 patch.object(MECHANICS, "_plans_command", side_effect=transaction):
             self.assertEqual(MECHANICS.plans_command(True), 0)
