@@ -77,24 +77,31 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         }
         for (source, transform), expected in cases.items():
             with self.subTest(transform=transform):
-                self.assertEqual(PLAN._metamorphic_source(source, transform), expected)
+                language = "python" if transform == "parenthesized" else "c"
+                self.assertEqual(
+                    PLAN._metamorphic_source(source, transform, language), expected)
 
     def test_metamorphic_transforms_skip_lexical_lookalikes(self):
         cases = {
-            ('["fake()", danger()]', "callee-parenthesized"):
+            ('["fake()", danger()]', "callee-parenthesized", "python"):
                 '["fake()", (danger)()]',
-            ('"obj.field"; obj.field', "member-access-spacing"):
+            ('"obj.field"; obj.field', "member-access-spacing", "javascript"):
                 '"obj.field"; obj . field',
-            ('# fake()\ndanger()', "callee-parenthesized"):
+            ('# fake()\ndanger()', "callee-parenthesized", "python"):
                 '# fake()\n(danger)()',
-            ('// "fake"\nlog("real")', "literal-concatenation"):
+            ('// "fake"\nlog("real")', "literal-concatenation", "c"):
                 '// "fake"\nlog("real" "")',
-            ('// %s\nlog("%s", value)', "format-width"):
+            ('// %s\nlog("%s", value)', "format-width", "c"):
                 '// %s\nlog("%20s", value)',
+            ('[/obj.field/, obj.field]', "member-access-spacing", "javascript"):
+                '[/obj.field/, obj . field]',
+            ('x // y; danger()', "callee-parenthesized", "python"):
+                'x // y; (danger)()',
         }
-        for (source, transform), expected in cases.items():
+        for (source, transform, language), expected in cases.items():
             with self.subTest(transform=transform):
-                self.assertEqual(PLAN._metamorphic_source(source, transform), expected)
+                self.assertEqual(
+                    PLAN._metamorphic_source(source, transform, language), expected)
 
     def test_format_transforms_skip_escaped_percent_and_existing_fields(self):
         transformed = [
@@ -104,14 +111,14 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         ]
         for source, transform, expected in transformed:
             with self.subTest(source=source, transform=transform):
-                self.assertEqual(PLAN._metamorphic_source(source, transform), expected)
+                self.assertEqual(PLAN._metamorphic_source(source, transform, "c"), expected)
         unchanged = [("%20s", "format-width"), ("%*s", "format-width"),
                      ("%.2s", "format-precision"), ("%.*s", "format-precision"),
                      ("%%", "format-width")]
         for source, transform in unchanged:
             with self.subTest(source=source, transform=transform), \
                     self.assertRaisesRegex(ValueError, "not applicable"):
-                PLAN._metamorphic_source(source, transform)
+                PLAN._metamorphic_source(source, transform, "c")
 
     def test_compiled_plan_ir_matches_compatibility_artifacts(self):
         path = ROOT / "plans/python/security/py-tempfile-mktemp.yml"

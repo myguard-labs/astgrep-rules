@@ -180,6 +180,24 @@ class RulePlanTests(unittest.TestCase):
             "^foo#bar$",
         )
 
+    def test_scoped_verbose_comment_keeps_group_structure(self):
+        pattern = "^foo$|(?x:a # ) | fake\n|b)$"
+        mutations = dict(PLAN.mutation_candidates({"regex": pattern}))
+        expected = ("(?x:a # ) | fake\n|b)$", "^foo$")
+        keys = [key for key in mutations if "regex-alternative" in key]
+        self.assertEqual(len(keys), 2)
+        for index, regex in enumerate(expected):
+            self.assertEqual(
+                mutations[f"rule.regex-alternative[{index}]-deleted"]["regex"], regex)
+            rule = yaml.safe_dump({
+                "id": f"scoped-{index}", "language": "python", "message": "x",
+                "severity": "warning", "rule": {"kind": "identifier", "regex": regex},
+            })
+            passed, detail = PLAN.run_preflight(
+                rule, {"invalid": ["b" if index == 0 else "foo"], "valid": ["closed"]},
+                f"scoped-{index}")
+            self.assertTrue(passed, detail)
+
     def test_grouped_regex_mutants_are_engine_valid_with_exact_text(self):
         mutations = dict(PLAN.mutation_candidates({"regex": "^(?:open|read|write)$"}))
         rows = (("^(?:read|write)$", "read"), ("^(?:open|write)$", "open"),

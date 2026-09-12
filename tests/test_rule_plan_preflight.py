@@ -173,16 +173,17 @@ class RulePlanPreflightTests(unittest.TestCase):
 
     def test_metamorphic_parser_checks_actual_derived_cst(self):
         good = minimal_plan(metamorphic=[
-            {"source": "danger()", "transform": "parenthesized", "outcome": "equivalent"},
-        ])
+            {"source": "first = 1\ndanger()", "transform": "callee-parenthesized",
+             "outcome": "equivalent"},
+        ], cases={"invalid": ["first = 1\ndanger()"], "valid": ["safe()"]})
         _matcher, good_cases = PLAN.validate_plan(good)
         PLAN.validate_derived_syntax(
             good, good_cases, float("inf"), PLAN.PhaseTelemetry())
 
         bad = minimal_plan(
-            cases={"invalid": ["danger("], "valid": ["safe()"]},
+            cases={"invalid": ["first = 1\ndanger("], "valid": ["safe()"]},
             metamorphic=[
-                {"source": "danger(", "transform": "parenthesized",
+                {"source": "first = 1\ndanger(", "transform": "callee-parenthesized",
                  "outcome": "equivalent"},
             ],
         )

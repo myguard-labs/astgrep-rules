@@ -16,6 +16,7 @@ from pathlib import Path
 from time import perf_counter
 from types import MappingProxyType
 
+import rule_plan_batches as BATCHES
 import yaml
 from rule_plan_telemetry import PhaseTelemetry
 from rule_plan_transforms import metamorphic_source as _metamorphic_source
@@ -477,7 +478,8 @@ def expanded_cases(plan: dict, cases: dict[str, list[str]]) -> dict[str, list[st
     result = {key: list(values) for key, values in cases.items()}
     source_class = {source: key for key, values in cases.items() for source in values}
     for entry in plan.get("metamorphic", []):
-        transformed = _metamorphic_source(entry["source"], entry["transform"])
+        transformed = _metamorphic_source(
+            entry["source"], entry["transform"], plan["language"])
         category = source_class[entry["source"]]
         if entry["outcome"] == "different":
             category = "valid" if category == "invalid" else "invalid"
@@ -491,23 +493,32 @@ def expanded_cases(plan: dict, cases: dict[str, list[str]]) -> dict[str, list[st
 
 def validate_derived_syntax(plan: dict, cases: dict[str, list[str]], deadline: float,
                             telemetry: PhaseTelemetry) -> None:
-    """Reject derived cases containing parser error or missing nodes."""
+    """Reject ERROR/MISSING recovery in each derived full source program."""
     originals = set(cases["valid"] + cases["invalid"])
     derived = expanded_cases(plan, cases)
     for source in derived["valid"] + derived["invalid"]:
         if source in originals:
             continue
         telemetry.engine_processes += 1
-        try:
+        _validate_full_source(plan["language"], source, deadline)
+
+
+def _validate_full_source(language: str, source: str, deadline: float) -> None:
+    """Parse a program file and reject tree-sitter recovery nodes."""
+    extension = LANGUAGE_EXTENSIONS[language]
+    try:
+        with tempfile.TemporaryDirectory(prefix="rule-plan-source-") as directory:
+            path = Path(directory) / f"derived.{extension}"
+            path.write_text(source, encoding="utf-8")
             result = run_engine(
-                [str(ENGINE), "run", "-l", plan["language"], "-p", source,
-                 "--debug-query=sexp", "--stdin"],
-                input_text="", timeout=_remaining(deadline))
-        except (OSError, subprocess.TimeoutExpired, RuntimeError) as error:
-            raise RuntimeError(f"METAMORPHIC_PARSE_ERROR: {error}") from error
-        tree = result.stdout + result.stderr
-        if result.returncode not in (0, 1) or re.search(r"\((?:ERROR|MISSING)\b", tree):
-            raise RuntimeError("METAMORPHIC_PARSE_ERROR: derived source is malformed")
+                [str(ENGINE), "run", "-l", language, "-k", "ERROR",
+                 "--json=compact", str(path)], timeout=_remaining(deadline))
+        errors = json.loads(result.stdout or "[]")
+    except (OSError, subprocess.TimeoutExpired, RuntimeError,
+            json.JSONDecodeError) as error:
+        raise RuntimeError(f"METAMORPHIC_PARSE_ERROR: {error}") from error
+    if result.returncode not in (0, 1) or not isinstance(errors, list) or errors:
+        raise RuntimeError("METAMORPHIC_PARSE_ERROR: derived source is malformed")
 
 
 def named_branches(plan: dict) -> list[dict]:
@@ -660,26 +671,6 @@ def _materialize_mutants(root: Path, items: list[tuple[str, str]],
     return id_to_path, malformed
 
 
-def _batch_error(paths, malformed, detail: str):
-    outcomes = {path: ("error", detail) for path in paths}
-    outcomes.update(malformed)
-    return outcomes
-
-
-def _classify_mutant_batch(result, id_to_path, malformed):
-    output = result.stdout + result.stderr
-    if result.returncode != 0 and "Error: test failed." not in output:
-        return None
-    failed_ids = set(re.findall(r"^FAIL\s+(\S+)", output, flags=re.MULTILINE))
-    outcomes = {
-        path: (("killed", "test-failure") if mutant_id in failed_ids
-               else ("survived", "ok"))
-        for mutant_id, path in id_to_path.items()
-    }
-    outcomes.update(malformed)
-    return outcomes
-
-
 def _run_mutant_batch(items: list[tuple[str, str]], cases: dict[str, list[str]],
                       rule_id: str, deadline: float,
                       telemetry: PhaseTelemetry) -> dict[str, tuple[str, str]]:
@@ -692,20 +683,13 @@ def _run_mutant_batch(items: list[tuple[str, str]], cases: dict[str, list[str]],
         id_to_path, malformed = _materialize_mutants(root, items, cases, rule_id)
         if not id_to_path:
             return malformed
-        try:
-            remaining = _remaining(deadline)
-        except RuntimeError:
-            return _batch_error(id_to_path.values(), malformed,
-                                "engine-error=preflight budget exhausted")
-        telemetry.engine_processes += 1
-        try:
-            result = run_engine(
-                [str(ENGINE), "test", "--include-off", "-c", str(root / "sgconfig.yml"),
-                 "--skip-snapshot-tests"], timeout=remaining)
-        except (OSError, subprocess.TimeoutExpired) as error:
-            return _batch_error(id_to_path.values(), malformed, f"engine-error={error}")
+        result, errors = BATCHES.execute(
+            root, id_to_path, malformed, deadline, telemetry,
+            ENGINE, _remaining, run_engine)
+        if errors is not None:
+            return errors
     telemetry.wall_ms += int((perf_counter() - started) * 1000)
-    outcomes = _classify_mutant_batch(result, id_to_path, malformed)
+    outcomes = BATCHES.classify(result, id_to_path, malformed)
     if outcomes is not None:
         return outcomes
     if len(items) > 1:
@@ -714,10 +698,7 @@ def _run_mutant_batch(items: list[tuple[str, str]], cases: dict[str, list[str]],
             **_run_mutant_batch(items[:middle], cases, rule_id, deadline, telemetry),
             **_run_mutant_batch(items[middle:], cases, rule_id, deadline, telemetry),
         }
-    output = result.stdout + result.stderr
-    detail = " | ".join(output.splitlines()[-6:])[:600]
-    kind = "invalid" if "file is not a valid ast-grep rule" in output else "error"
-    return {**malformed, items[0][0]: (kind, detail)}
+    return BATCHES.unloadable_outcome(result, items[0], malformed)
 
 
 def _qualified_pattern_mutations(pattern: str):
@@ -752,28 +733,39 @@ def _regex_alternative_mutations(pattern: str):
         yield index, prefix + remaining + suffix
 
 
-def _direct_mapping_mutations(value: dict, path: str):
+def _pattern_mutations(value: dict, path: str, key: str, child):
+    if key == "pattern" and isinstance(child, str):
+        for identity, pattern in _qualified_pattern_mutations(child):
+            yield f"{path}.pattern-{identity}", {**value, key: pattern}
+
+
+def _mapping_deletion(value: dict, path: str, key: str, _child):
     removable = {"field", "stopBy", "kind", "nthChild", "ofRule", "inside", "has",
                  "follows", "precedes", "not"}
     anchors = {"kind", "pattern", "regex", "all", "any", "matches"}
+    if key in removable and len(value) > 1:
+        mutant = {candidate: item for candidate, item in value.items() if candidate != key}
+        if set(mutant) & anchors:
+            yield f"{path}.{key}", mutant
+
+
+def _regex_mutations(value: dict, path: str, key: str, child):
+    if key != "regex" or not isinstance(child, str):
+        return
+    if child.startswith("^") or child.endswith("$"):
+        yield f"{path}.regex-anchor", {
+            **value, key: child.removeprefix("^").removesuffix("$"),
+        }
+    for index, mutation in _regex_alternative_mutations(child):
+        yield f"{path}.regex-alternative[{index}]-deleted", {**value, key: mutation}
+
+
+def _direct_mapping_mutations(value: dict, path: str):
+    """Dispatch each mapping entry to its independent mutation producers."""
+    producers = (_pattern_mutations, _mapping_deletion, _regex_mutations)
     for key, child in value.items():
-        if key == "pattern" and isinstance(child, str):
-            for identity, pattern in _qualified_pattern_mutations(child):
-                yield f"{path}.pattern-{identity}", {**value, key: pattern}
-        if key in removable and len(value) > 1:
-            mutant = {candidate: item for candidate, item in value.items() if candidate != key}
-            if set(mutant) & anchors:
-                yield f"{path}.{key}", mutant
-        if key == "regex" and isinstance(child, str) \
-                and (child.startswith("^") or child.endswith("$")):
-            yield f"{path}.regex-anchor", {
-                **value, key: child.removeprefix("^").removesuffix("$"),
-            }
-        if key == "regex" and isinstance(child, str):
-            for index, mutation in _regex_alternative_mutations(child):
-                yield f"{path}.regex-alternative[{index}]-deleted", {
-                    **value, key: mutation,
-                }
+        for producer in producers:
+            yield from producer(value, path, key, child)
 
 
 def mutation_candidates(value, path="rule"):
