@@ -2,14 +2,18 @@
 """Compile and preflight one canonical ast-grep rule plan."""
 
 import argparse
+import copy
 import json
+import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
+from types import MappingProxyType
 
 import yaml
 
@@ -44,6 +48,18 @@ METAMORPHIC_TRANSFORMS = {
     "member-access-spacing", "literal-spacing", "format-width", "format-precision",
     "qualified-name", "member-access-swap", "literal-concatenation",
 }
+METAMORPHIC_LANGUAGES = {
+    "parenthesized": set(LANGUAGES) - {"bash", "html"},
+    "callee-parenthesized": {"c", "cpp", "javascript", "typescript", "python"},
+    "qualified-name-spacing": {"python", "javascript", "typescript", "java", "php"},
+    "member-access-spacing": {"c", "cpp", "javascript", "typescript", "java", "go"},
+    "literal-spacing": {"c", "cpp", "javascript", "typescript", "python"},
+    "format-width": {"c", "cpp", "go"},
+    "format-precision": {"c", "cpp", "go"},
+    "qualified-name": {"c", "cpp"},
+    "member-access-swap": {"c", "cpp"},
+    "literal-concatenation": {"c", "cpp", "java", "javascript", "python", "typescript"},
+}
 
 
 @dataclass(frozen=True)
@@ -55,6 +71,23 @@ class CompiledPlan:
     cases: dict[str, list[str]]
     rule_text: str
     fixture_text: str
+
+
+def _deep_freeze(value):
+    if isinstance(value, dict):
+        return MappingProxyType({key: _deep_freeze(child) for key, child in value.items()})
+    if isinstance(value, list):
+        return tuple(_deep_freeze(child) for child in value)
+    return value
+
+
+def thaw(value):
+    """Return a mutable copy of a recursively frozen plan value."""
+    if isinstance(value, MappingProxyType):
+        return {key: thaw(child) for key, child in value.items()}
+    if isinstance(value, tuple):
+        return [thaw(child) for child in value]
+    return copy.deepcopy(value)
 
 
 @dataclass
@@ -449,6 +482,10 @@ def validate_metamorphic(plan: dict, cases: dict[str, list[str]]) -> None:
                 or entry["transform"] not in METAMORPHIC_TRANSFORMS
                 or entry["outcome"] not in {"equivalent", "different"}):
             raise ValueError("invalid metamorphic entry")
+        if plan["language"] not in METAMORPHIC_LANGUAGES[entry["transform"]]:
+            raise ValueError(
+                f"metamorphic transform {entry['transform']} does not support "
+                f"{plan['language']}")
         if identity in seen:
             raise ValueError("duplicate metamorphic entry")
         seen.add(identity)
@@ -473,14 +510,46 @@ def _metamorphic_source(source: str, transform: str) -> str:
     elif transform == "literal-spacing":
         changed, count = re.subn(r"(['\"])\s+(['\"])", r"\1   \2", source, count=1)
     elif transform == "format-width":
-        changed, count = re.subn(r"%(?![%0-9.*])", "%20", source, count=1)
+        changed, count = _transform_format_conversion(source, precision=False)
     elif transform == "format-precision":
-        changed, count = re.subn(r"%(?![%0-9.*])", "%.3", source, count=1)
+        changed, count = _transform_format_conversion(source, precision=True)
     else:  # validate_metamorphic owns the closed transform set.
         raise ValueError(f"unsupported metamorphic transform: {transform}")
     if count != 1 or changed == source:
         raise ValueError(f"metamorphic transform {transform} is not applicable")
     return changed
+
+
+FORMAT_CONVERSION = re.compile(
+    r"%(?!%)(?P<flags>[-+ #0]*)(?P<width>\d+|\*)?"
+    r"(?P<precision>\.(?:\d+|\*))?(?P<length>hh|ll|[hljztL])?"
+    r"(?P<conversion>[diuoxXfFeEgGaAcspn])")
+
+
+def _transform_format_conversion(source: str, *, precision: bool) -> tuple[str, int]:
+    match = next((candidate for candidate in FORMAT_CONVERSION.finditer(source)
+                  if _preceding_percent_count(source, candidate.start()) % 2 == 0), None)
+    if match is None:
+        return source, 0
+    parts = match.groupdict(default="")
+    if precision:
+        if parts["precision"]:
+            return source, 0
+        parts["precision"] = ".3"
+    else:
+        if parts["width"]:
+            return source, 0
+        parts["width"] = "20"
+    replacement = (f"%{parts['flags']}{parts['width']}{parts['precision']}"
+                   f"{parts['length']}{parts['conversion']}")
+    return source[:match.start()] + replacement + source[match.end():], 1
+
+
+def _preceding_percent_count(source: str, offset: int) -> int:
+    count = 0
+    while offset > count and source[offset - count - 1] == "%":
+        count += 1
+    return count
 
 
 def expanded_cases(plan: dict, cases: dict[str, list[str]]) -> dict[str, list[str]]:
@@ -498,6 +567,26 @@ def expanded_cases(plan: dict, cases: dict[str, list[str]]) -> dict[str, list[st
         if transformed not in result[category]:
             result[category].append(transformed)
     return result
+
+
+def validate_derived_syntax(plan: dict, cases: dict[str, list[str]], deadline: float,
+                            telemetry: PhaseTelemetry) -> None:
+    """Reject derived cases containing parser error or missing nodes."""
+    originals = set(cases["valid"] + cases["invalid"])
+    for source in expanded_cases(plan, cases)["valid"] + expanded_cases(plan, cases)["invalid"]:
+        if source in originals:
+            continue
+        telemetry.engine_processes += 1
+        try:
+            result = _engine_run(
+                [str(ENGINE), "run", "-l", plan["language"], "-p", "$_",
+                 "--debug-query=sexp", "--stdin"],
+                input_text=source, timeout=_remaining(deadline))
+        except (OSError, subprocess.TimeoutExpired, RuntimeError) as error:
+            raise RuntimeError(f"METAMORPHIC_PARSE_ERROR: {error}") from error
+        tree = result.stdout + result.stderr
+        if result.returncode not in (0, 1) or re.search(r"\((?:ERROR|MISSING)\b", tree):
+            raise RuntimeError("METAMORPHIC_PARSE_ERROR: derived source is malformed")
 
 
 def named_branches(plan: dict) -> list[dict]:
@@ -548,6 +637,34 @@ def render_fixture(plan: dict, cases: dict[str, list[str]]) -> str:
     return yaml.dump(fixture, sort_keys=False, width=1000, allow_unicode=True)
 
 
+def _engine_run(command: list[str], *, timeout: float,
+                input_text: str | None = None) -> subprocess.CompletedProcess:
+    """Run one engine process and terminate its complete group on timeout."""
+    with subprocess.Popen(
+            command, stdin=subprocess.PIPE if input_text is not None else None,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            start_new_session=True) as process:
+        try:
+            stdout, stderr = process.communicate(input=input_text, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _signal_process_group(process.pid, signal.SIGTERM)
+            try:
+                stdout, stderr = process.communicate(timeout=1)
+            except subprocess.TimeoutExpired:
+                _signal_process_group(process.pid, signal.SIGKILL)
+                stdout, stderr = process.communicate()
+            raise
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def _signal_process_group(pid: int, requested_signal: signal.Signals) -> bool:
+    try:
+        os.killpg(pid, requested_signal)
+    except ProcessLookupError:
+        return False
+    return True
+
+
 def run_preflight(rule_text: str, cases: dict[str, list[str]], rule_id: str,
                   *, deadline: float | None = None) -> tuple[bool, str]:
     """Run a bounded isolated upstream fixture suite."""
@@ -567,10 +684,9 @@ def run_preflight(rule_text: str, cases: dict[str, list[str]], rule_id: str,
             if remaining <= 0:
                 return False, "engine-error=preflight budget exhausted"
         try:
-            result = subprocess.run(
+            result = _engine_run(
                 [str(ENGINE), "test", "--include-off", "-c", str(root / "sgconfig.yml"),
-                 "--skip-snapshot-tests"], text=True, capture_output=True,
-                timeout=remaining, check=False,
+                 "--skip-snapshot-tests"], timeout=remaining,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
             return False, f"engine-error={error}"
@@ -639,10 +755,9 @@ def _run_mutant_batch(items: list[tuple[str, str]], cases: dict[str, list[str]],
             return exhausted
         telemetry.engine_processes += 1
         try:
-            result = subprocess.run(
+            result = _engine_run(
                 [str(ENGINE), "test", "--include-off", "-c", str(root / "sgconfig.yml"),
-                 "--skip-snapshot-tests"], text=True, capture_output=True,
-                timeout=remaining, check=False)
+                 "--skip-snapshot-tests"], timeout=remaining)
         except (OSError, subprocess.TimeoutExpired) as error:
             detail = f"engine-error={error}"
             errors = {path: ("error", detail) for path in id_to_path.values()}
@@ -718,8 +833,10 @@ def _regex_alternative_mutations(pattern: str):
     alternatives = _regex_alternatives(pattern)
     prefix = suffix = ""
     if not alternatives:
-        grouped = re.fullmatch(r"(\^?(?:\(\?:|\())(.+)(\)\$?)", pattern,
-                               flags=re.DOTALL)
+        grouped = re.fullmatch(
+            r"(\^?(?:\(\?:|\(\?[A-Za-z-]+:|\())(.+)"
+            r"(\)(?:[?+*]|\{\d+(?:,\d*)?\})?\$?)",
+            pattern, flags=re.DOTALL)
         if grouped:
             prefix, body, suffix = grouped.groups()
             alternatives = _regex_alternatives(body)
@@ -859,8 +976,9 @@ def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]],
               deadline: float | None = None) -> PhaseTelemetry:
     """Require contrasts and every selected mutant to fail closed."""
     telemetry = telemetry or PhaseTelemetry()
-    cases = expanded_cases(plan, cases)
     deadline = deadline or perf_counter() + MAX_PREFLIGHT_SECONDS
+    validate_derived_syntax(plan, cases, deadline, telemetry)
+    cases = expanded_cases(plan, cases)
     telemetry.engine_processes += 1
     passed, detail = run_preflight(
         render_rule(plan, matcher), cases, plan["id"], deadline=deadline)
@@ -874,9 +992,10 @@ def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]],
     if unknown:
         raise RuntimeError(f"UNKNOWN_MUTATION_EXCLUSION: {', '.join(unknown)}")
     selected = candidates
-    if len(candidates) > plan.get("mutation_limit", MAX_MUTATIONS):
+    required = [(path, rule) for path, rule in candidates if path not in exclusions]
+    if len(required) > plan.get("mutation_limit", MAX_MUTATIONS):
         raise RuntimeError(
-            f"MUTATION_BUDGET_EXCEEDED: {len(candidates)} exceeds "
+            f"MUTATION_BUDGET_EXCEEDED: {len(required)} exceeds "
             f"{plan.get('mutation_limit', MAX_MUTATIONS)}")
     outcomes = _run_mutant_batch(selected, cases, plan["id"], deadline, telemetry)
     telemetry.mutants = len(selected)
@@ -890,8 +1009,7 @@ def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]],
         outcome, mutation_detail = outcomes[path]
         if outcome != "survived":
             raise RuntimeError(f"INVALID_MUTATION_EXCLUSION: {path}: {mutation_detail}")
-    candidates = [(path, rule) for path, rule in candidates if path not in exclusions]
-    for path, _rule_text in candidates[:plan.get("mutation_limit", MAX_MUTATIONS)]:
+    for path, _rule_text in required:
         outcome, mutation_detail = outcomes[path]
         if outcome == "survived":
             raise RuntimeError(f"MUTATION_SURVIVED: {path}")
@@ -920,13 +1038,15 @@ def compile_plan_ir(path: Path, *, run_checks=True,
         started = perf_counter()
         preflight(plan, matcher, cases, telemetry, deadline)
         telemetry.preflight_ms += int((perf_counter() - started) * 1000)
-    return CompiledPlan(plan, matcher, cases, rule_text, fixture_text)
+    return CompiledPlan(_deep_freeze(plan), _deep_freeze(matcher), _deep_freeze(cases),
+                        rule_text, fixture_text)
 
 
 def compile_plan(path: Path, *, run_checks=True) -> tuple[dict, dict, str, str]:
     """Compatibility tuple for callers; compilation itself has one owner."""
     compiled = compile_plan_ir(path, run_checks=run_checks)
-    return compiled.plan, compiled.matcher, compiled.rule_text, compiled.fixture_text
+    return (thaw(compiled.plan), thaw(compiled.matcher), compiled.rule_text,
+            compiled.fixture_text)
 
 
 def main(argv: list[str] | None = None) -> int:

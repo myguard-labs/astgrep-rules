@@ -51,8 +51,9 @@ def _compiled_plan_artifacts(path: Path, *, preflight: bool = True, compiled=Non
     if preflight:
         if not PLAN.ENGINE.is_file():
             raise RuntimeError(f"pinned engine missing: {PLAN.ENGINE}; run npm ci")
-        PLAN.preflight(compiled.plan, compiled.matcher, compiled.cases)
-    plan = compiled.plan
+        PLAN.preflight(PLAN.thaw(compiled.plan), PLAN.thaw(compiled.matcher),
+                       PLAN.thaw(compiled.cases))
+    plan = PLAN.thaw(compiled.plan)
     rule_text, fixture_text = compiled.rule_text, compiled.fixture_text
     expected_plan = ROOT / "plans" / plan["language"] / plan["category"] / f"{plan['id']}.yml"
     if path.resolve() != expected_plan.resolve():

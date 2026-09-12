@@ -94,13 +94,16 @@ such as runtime type, data flow, reachability, ownership, or trust are rejected
 as plan claims because a syntax fixture cannot establish them. Declare reviewed
 derived cases in `metamorphic`; each supported transformation must state whether
 the detection outcome stays equivalent or changes. These cases join the normal
-contrast and mutation suite.
+contrast and mutation suite only after a language-specific parser check rejects
+ERROR or MISSING nodes.
 
 Plan mutation checks use one pinned-engine batch in the normal case and bisect
 only engine-load failures for exact attribution. Use
 `python3 tools/rule-plan.py PLAN --telemetry /tmp/plan.json` when measuring the
 mechanics: `counts.engine_processes` is the deterministic throughput evidence;
-the phase durations are labeled wall-clock informational data.
+the phase durations are labeled wall-clock informational data. Mutation limits
+apply to required mutations; documented exclusions are still executed in the
+same batch. A timeout kills the engine's complete process group.
 
 ## Define the claim
 

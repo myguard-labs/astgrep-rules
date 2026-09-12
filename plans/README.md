@@ -26,8 +26,10 @@ names a fixture `source`, one supported `transform`, and whether its detection
 outcome is `equivalent` or `different`. Supported transforms cover
 parenthesization, qualified-name variants, pointer/member-access swaps and
 spacing, literal concatenation/spacing, and printf-style width or precision.
-Inapplicable or contradictory transforms fail
-before the engine runs; generated candidates never invent their own oracle.
+Inapplicable or contradictory transforms fail before contrast tests; each
+transform is restricted to grammars where the spelling is meaningful, and
+every derived source must parse without ERROR or MISSING nodes. Generated
+candidates never invent their own oracle.
 
 Mutation preflight batches all loadable candidates into one pinned-engine test
 process. An engine-load failure is bisected only far enough to attribute the
@@ -35,5 +37,8 @@ invalid or erroneous candidate; ordinary killed and surviving mutants retain
 their stable mutation paths. All batches share the plan's cumulative deadline.
 `rule-plan.py PLAN --telemetry FILE.json` records deterministic engine-process
 and mutant counts alongside explicitly informational wall-clock phase timings.
-The compiler validates and renders one immutable plan representation, which is
-then shared by generation, preflight, and compatibility callers.
+The mutation limit counts required mutants, while documented exclusions remain
+batch-validated outside that budget. Timed-out engine invocations terminate
+their complete process groups. The compiler validates and renders one
+recursively immutable plan representation, which is then shared by generation,
+preflight, and compatibility callers.

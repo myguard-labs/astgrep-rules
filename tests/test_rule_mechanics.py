@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -121,6 +122,25 @@ class RulePlanTests(unittest.TestCase):
                 self.assertRaisesRegex(RuntimeError, "INVALID_MUTATION_EXCLUSION"):
             PLAN.preflight(killed, matcher, cases)
 
+    def test_mutation_limit_counts_required_mutants_not_exclusions(self):
+        plan = minimal_plan(
+            mutation_limit=1,
+            mutation_exclusions={"excluded-one": "redundant", "excluded-two": "redundant"},
+        )
+        matcher, cases = PLAN.validate_plan(plan)
+        candidates = [("required", "rule"), ("excluded-one", "rule"),
+                      ("excluded-two", "rule")]
+        outcomes = {
+            "required": ("killed", "test-failure"),
+            "excluded-one": ("survived", "ok"),
+            "excluded-two": ("survived", "ok"),
+        }
+        with patch.object(PLAN, "compiled_mutations", return_value=candidates), \
+                patch.object(PLAN, "run_preflight", return_value=(True, "ok")), \
+                patch.object(PLAN, "_run_mutant_batch", return_value=outcomes) as batch:
+            PLAN.preflight(plan, matcher, cases)
+        self.assertEqual(batch.call_args.args[0], candidates)
+
     def test_utility_graph_rejects_undefined_cycle_and_unreachable(self):
         cases = [
             ({"rule": {"matches": "missing"}}, "undefined local utilities"),
@@ -170,11 +190,16 @@ class RulePlanTests(unittest.TestCase):
                          [r"^(a|b)[|]c\|d$", "^e$"])
 
     def test_grouped_regex_alternatives_preserve_anchors_and_wrapper(self):
-        mutations = dict(PLAN.mutation_candidates({"regex": "^(?:open|read|write)$"}))
-        self.assertEqual(
-            mutations["rule.regex-alternative[0]-deleted"]["regex"],
-            "^(?:read|write)$",
-        )
+        cases = {
+            "^(?:open|read|write)$": "^(?:read|write)$",
+            "^(?i:open|read)+$": "^(?i:read)+$",
+            "(open|read){2}": "(read){2}",
+        }
+        for pattern, expected in cases.items():
+            with self.subTest(pattern=pattern):
+                mutations = dict(PLAN.mutation_candidates({"regex": pattern}))
+                self.assertEqual(
+                    mutations["rule.regex-alternative[0]-deleted"]["regex"], expected)
 
     def test_claim_matrix_requires_each_pairwise_combination(self):
         plan = minimal_plan(
@@ -213,12 +238,23 @@ class RulePlanTests(unittest.TestCase):
                 {"source": "danger()", "transform": "rename-symbol",
                  "outcome": "equivalent"},
             ]))
-        plan = minimal_plan(metamorphic=[
+        plan = minimal_plan(language="c", metamorphic=[
             {"source": "danger()", "transform": "format-width", "outcome": "equivalent"},
         ])
         _matcher, cases = PLAN.validate_plan(plan)
         with self.assertRaisesRegex(ValueError, "not applicable"):
             PLAN.expanded_cases(plan, cases)
+        with self.assertRaisesRegex(ValueError, "does not support bash"):
+            PLAN.validate_plan(minimal_plan(
+                language="bash", metamorphic=[{
+                    "source": "danger()", "transform": "member-access-swap",
+                    "outcome": "equivalent",
+                }]))
+        with self.assertRaisesRegex(ValueError, "does not support bash"):
+            PLAN.validate_plan(minimal_plan(language="bash", metamorphic=[
+                {"source": "danger()", "transform": "member-access-swap",
+                 "outcome": "equivalent"},
+            ]))
 
     def test_metamorphic_derives_required_syntax_families(self):
         cases = {
@@ -233,11 +269,41 @@ class RulePlanTests(unittest.TestCase):
             with self.subTest(transform=transform):
                 self.assertEqual(PLAN._metamorphic_source(source, transform), expected)
 
+    def test_format_transforms_skip_escaped_percent_and_existing_fields(self):
+        self.assertEqual(
+            PLAN._metamorphic_source('log("%% %s", value)', "format-width"),
+            'log("%% %20s", value)',
+        )
+        for source, transform in (("%20s", "format-width"), ("%.2s", "format-precision")):
+            with self.subTest(transform=transform), \
+                    self.assertRaisesRegex(ValueError, "not applicable"):
+                PLAN._metamorphic_source(source, transform)
+
+    def test_format_transform_skips_escaped_percent_and_existing_fields(self):
+        source = 'log("%% literal: %s", value)'
+        self.assertEqual(
+            PLAN._metamorphic_source(source, "format-width"),
+            'log("%% literal: %20s", value)',
+        )
+        with self.assertRaisesRegex(ValueError, "not applicable"):
+            PLAN._metamorphic_source('log("%8s", value)', "format-width")
+        with self.assertRaisesRegex(ValueError, "not applicable"):
+            PLAN._metamorphic_source('log("%.4s", value)', "format-precision")
+
     def test_compiled_plan_ir_matches_compatibility_artifacts(self):
         path = ROOT / "plans/python/security/py-tempfile-mktemp.yml"
         ir = PLAN.compile_plan_ir(path, run_checks=False)
         legacy = PLAN.compile_plan(path, run_checks=False)
-        self.assertEqual(legacy, (ir.plan, ir.matcher, ir.rule_text, ir.fixture_text))
+        self.assertEqual(legacy, (PLAN.thaw(ir.plan), PLAN.thaw(ir.matcher),
+                                  ir.rule_text, ir.fixture_text))
+
+    def test_compiled_plan_ir_is_recursively_immutable(self):
+        path = ROOT / "plans/python/security/py-tempfile-mktemp.yml"
+        ir = PLAN.compile_plan_ir(path, run_checks=False)
+        with self.assertRaises(TypeError):
+            ir.plan["cases"]["invalid"][0] = "changed()"
+        with self.assertRaises(TypeError):
+            ir.matcher["kind"] = "identifier"
 
     def test_relation_only_mutants_are_not_counted_as_kills(self):
         matcher = {"all": [{"kind": "call"}, {"not": {"has": {"kind": "string"}}}]}
@@ -295,7 +361,7 @@ class RulePlanTests(unittest.TestCase):
 
     def test_exhausted_preflight_budget_fails_before_engine_run(self):
         with patch.object(PLAN, "perf_counter", side_effect=[5.0, 6.0]), \
-                patch.object(PLAN.subprocess, "run") as run:
+                patch.object(PLAN, "_engine_run") as run:
             passed, detail = PLAN.run_preflight(
                 "id: sample\n", {"invalid": ["x"], "valid": ["y"]}, "sample",
                 deadline=5.5,
@@ -326,7 +392,7 @@ class RulePlanTests(unittest.TestCase):
                                        "message": "x", "severity": "warning",
                                        "rule": {"pattern": "danger()"}})),
         ]
-        with patch.object(PLAN.subprocess, "run", return_value=result) as run:
+        with patch.object(PLAN, "_engine_run", return_value=result) as run:
             outcomes = PLAN._run_mutant_batch(
                 rules, {"invalid": ["danger()"], "valid": ["safe()"]},
                 "sample", float("inf"), telemetry)
@@ -341,7 +407,7 @@ class RulePlanTests(unittest.TestCase):
             "id": "sample", "language": "python", "message": "x", "severity": "warning",
             "rule": {"pattern": "danger()"},
         })
-        with patch.object(PLAN.subprocess, "run", return_value=result) as run:
+        with patch.object(PLAN, "_engine_run", return_value=result) as run:
             PLAN._run_mutant_batch(
                 [("one", rule), ("two", rule)],
                 {"invalid": ["danger()"], "valid": ["safe()"]},
@@ -357,7 +423,7 @@ class RulePlanTests(unittest.TestCase):
             "id": "sample", "language": "python", "message": "x", "severity": "warning",
             "rule": {"pattern": "danger()"},
         })
-        with patch.object(PLAN.subprocess, "run",
+        with patch.object(PLAN, "_engine_run",
                           side_effect=[load_error, passed, load_error]):
             outcomes = PLAN._run_mutant_batch(
                 [("valid", valid_rule), ("invalid", yaml.safe_dump({
@@ -376,6 +442,40 @@ class RulePlanTests(unittest.TestCase):
         self.assertEqual(report["counts"]["engine_processes"], 2)
         self.assertEqual(report["counts"]["mutants"], 9)
         self.assertEqual(report["wall_clock_ms_informational"]["batched_engine"], 37)
+
+    def test_metamorphic_parser_errors_fail_before_contrast_preflight(self):
+        plan = minimal_plan(metamorphic=[
+            {"source": "danger()", "transform": "parenthesized", "outcome": "equivalent"},
+        ])
+        matcher, cases = PLAN.validate_plan(plan)
+        malformed = SimpleNamespace(returncode=0, stdout="(ERROR)", stderr="")
+        with patch.object(PLAN, "_engine_run", return_value=malformed), \
+                patch.object(PLAN, "run_preflight") as contrast, \
+                self.assertRaisesRegex(RuntimeError, "METAMORPHIC_PARSE_ERROR"):
+            PLAN.preflight(plan, matcher, cases)
+        contrast.assert_not_called()
+
+    def test_engine_timeout_terminates_descendant_process_group(self):
+        with tempfile.TemporaryDirectory() as directory:
+            child_pid = Path(directory) / "child.pid"
+            program = (
+                "import pathlib,subprocess,sys,time; "
+                "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); "
+                f"pathlib.Path({str(child_pid)!r}).write_text(str(child.pid)); "
+                "time.sleep(60)"
+            )
+            with self.assertRaises(subprocess.TimeoutExpired):
+                PLAN._engine_run([sys.executable, "-c", program], timeout=0.2)
+            pid = int(child_pid.read_text())
+            status = Path(f"/proc/{pid}/status")
+            for _attempt in range(100):
+                if (not status.exists()
+                        or "\nState:\tZ" in status.read_text(encoding="utf-8")):
+                    break
+                time.sleep(0.01)
+            self.assertTrue(
+                not status.exists()
+                or "\nState:\tZ" in status.read_text(encoding="utf-8"))
 
     def test_two_named_branches_reach_both_witness_preflights(self):
         plan = minimal_plan(
@@ -436,6 +536,22 @@ class RulePlanFixTests(unittest.TestCase):
 
 
 class RulePlanCliTests(unittest.TestCase):
+    def test_cli_writes_end_to_end_phase_telemetry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            telemetry = Path(directory) / "telemetry.json"
+            result = subprocess.run(
+                [sys.executable, ROOT / "tools/rule-plan.py",
+                 ROOT / "plans/python/security/py-tempfile-mktemp.yml",
+                 "--telemetry", telemetry],
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(telemetry.read_text())
+        self.assertEqual(report["version"], 1)
+        self.assertEqual(report["plan"], "py-tempfile-mktemp")
+        self.assertGreaterEqual(report["counts"]["engine_processes"], 2)
+        self.assertIn("preflight", report["wall_clock_ms_informational"])
+
     def test_rule_plan_help_is_clean(self):
         result = subprocess.run(
             [sys.executable, ROOT / "tools/rule-plan.py", "--help"],
