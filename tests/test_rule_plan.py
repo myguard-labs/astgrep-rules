@@ -151,6 +151,8 @@ class RuleRegexMutationTests(unittest.TestCase):
         )
 
     def test_regex_split_ignores_escaped_group_and_class_bars(self):
+        # White-box assertion covers the regex alternative parser boundary.
+        # pylint: disable-next=protected-access
         self.assertEqual(PLAN._regex_alternatives(r"^(a|b)[|]c\|d$|^e$"),
                          [r"^(a|b)[|]c\|d$", "^e$"])
 

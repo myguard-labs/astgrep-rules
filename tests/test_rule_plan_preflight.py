@@ -102,6 +102,8 @@ class RulePlanPreflightTests(unittest.TestCase):
                                        "rule": {"pattern": "danger()"}})),
         ]
         with patch.object(PLAN, "run_engine", return_value=result) as run:
+            # White-box assertion covers batch outcome classification.
+            # pylint: disable-next=protected-access
             outcomes = PLAN._run_mutant_batch(
                 rules, {"invalid": ["danger()"], "valid": ["safe()"]},
                 "sample", float("inf"), telemetry)
@@ -117,6 +119,8 @@ class RulePlanPreflightTests(unittest.TestCase):
             "rule": {"pattern": "danger()"},
         })
         with patch.object(PLAN, "run_engine", return_value=result) as run:
+            # White-box assertion covers one-process batch execution.
+            # pylint: disable-next=protected-access
             PLAN._run_mutant_batch(
                 [("one", rule), ("two", rule)],
                 {"invalid": ["danger()"], "valid": ["safe()"]},
@@ -134,6 +138,8 @@ class RulePlanPreflightTests(unittest.TestCase):
         })
         with patch.object(PLAN, "run_engine",
                           side_effect=[load_error, passed, load_error]):
+            # White-box assertion covers unloadable-mutant bisection.
+            # pylint: disable-next=protected-access
             outcomes = PLAN._run_mutant_batch(
                 [("valid", valid_rule), ("invalid", yaml.safe_dump({
                     "id": "sample", "language": "python", "message": "x",

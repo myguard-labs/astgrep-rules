@@ -78,8 +78,10 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         for (source, transform), expected in cases.items():
             with self.subTest(transform=transform):
                 language = "python" if transform == "parenthesized" else "c"
+                # White-box assertion covers the transform dispatcher boundary.
                 self.assertEqual(
-                    PLAN._metamorphic_source(source, transform, language), expected)
+                    PLAN._metamorphic_source(  # pylint: disable=protected-access
+                        source, transform, language), expected)
 
     def test_metamorphic_transforms_skip_lexical_lookalikes(self):
         cases = {
@@ -144,8 +146,10 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         }
         for (source, transform, language), expected in cases.items():
             with self.subTest(transform=transform):
+                # White-box assertion covers syntax-aware transform selection.
                 self.assertEqual(
-                    PLAN._metamorphic_source(source, transform, language), expected)
+                    PLAN._metamorphic_source(  # pylint: disable=protected-access
+                        source, transform, language), expected)
 
     def test_format_transforms_skip_escaped_percent_and_existing_fields(self):
         transformed = [
@@ -155,6 +159,8 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         ]
         for source, transform, expected in transformed:
             with self.subTest(source=source, transform=transform):
+                # White-box assertion covers format-transform dispatch.
+                # pylint: disable-next=protected-access
                 self.assertEqual(PLAN._metamorphic_source(source, transform, "c"), expected)
         unchanged = [("%20s", "format-width"), ("%*s", "format-width"),
                      ("%.2s", "format-precision"), ("%.*s", "format-precision"),
@@ -162,6 +168,8 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         for source, transform in unchanged:
             with self.subTest(source=source, transform=transform), \
                     self.assertRaisesRegex(ValueError, "not applicable"):
+                # White-box assertion covers transform rejection behavior.
+                # pylint: disable-next=protected-access
                 PLAN._metamorphic_source(source, transform, "c")
 
     def test_compiled_plan_ir_matches_compatibility_artifacts(self):
