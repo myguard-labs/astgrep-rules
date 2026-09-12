@@ -913,6 +913,7 @@ def _record_mutation_outcomes(telemetry: PhaseTelemetry, outcomes: dict,
 
 
 def _validate_mutation_outcomes(required, exclusions, outcomes) -> None:
+    BATCHES.raise_batch_error(outcomes)
     for path in sorted(exclusions):
         outcome, detail = outcomes[path]
         if outcome != "survived":
@@ -921,8 +922,6 @@ def _validate_mutation_outcomes(required, exclusions, outcomes) -> None:
         outcome, detail = outcomes[path]
         if outcome == "survived":
             raise RuntimeError(f"MUTATION_SURVIVED: {path}")
-        if outcome == "error":
-            raise RuntimeError(f"MUTATION_PREFLIGHT_ERROR: {path}: {detail}")
 
 
 def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]],

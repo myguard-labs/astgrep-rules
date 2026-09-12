@@ -10,6 +10,14 @@ def batch_error(paths, malformed, detail: str):
     return outcomes
 
 
+def raise_batch_error(outcomes):
+    """Fail on attributed engine errors before interpreting mutant semantics."""
+    for path in sorted(outcomes):
+        outcome, detail = outcomes[path]
+        if outcome == "error":
+            raise RuntimeError(f"MUTATION_PREFLIGHT_ERROR: {path}: {detail}")
+
+
 def classify(result, id_to_path, malformed):
     output = result.stdout + result.stderr
     if result.returncode != 0 and "Error: test failed." not in output:
