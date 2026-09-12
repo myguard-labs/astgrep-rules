@@ -151,6 +151,51 @@ class RulePlanTests(unittest.TestCase):
         paths = [path for path, _rule in PLAN.compiled_mutations(plan, matcher)]
         self.assertNotIn("rule.all[0]-deleted", paths)
 
+    def test_affirmative_relational_matcher_keeps_mutation_candidate(self):
+        matcher = {"all": [{"kind": "call"}, {"has": {"kind": "identifier"}}]}
+        plan = minimal_plan(rule=matcher)
+        paths = [path for path, _rule in PLAN.compiled_mutations(plan, matcher)]
+        self.assertIn("rule.all[0]-deleted", paths)
+
+    def test_constraint_any_arm_deletions_are_mutation_candidates(self):
+        matcher = {"pattern": "danger($ARG)"}
+        plan = minimal_plan(
+            rule=matcher,
+            constraints={"ARG": {"not": {"any": [
+                {"kind": "string_literal"}, {"kind": "concatenated_string"},
+            ]}}},
+        )
+        paths = [path for path, _rule in PLAN.compiled_mutations(plan, matcher)]
+        self.assertEqual(paths, [
+            "constraints.ARG.not.any[0]-deleted",
+            "constraints.ARG.not.any[1]-deleted",
+        ])
+
+    def test_preflight_calls_share_one_cumulative_deadline(self):
+        plan = minimal_plan(rule={"all": [{"kind": "call"}, {"pattern": "danger()"}]})
+        matcher, cases = PLAN.validate_plan(plan)
+        with patch.object(PLAN, "compiled_mutations", return_value=[("one", "rule")]), \
+                patch.object(PLAN, "perf_counter", return_value=10.0), \
+                patch.object(PLAN, "run_preflight",
+                             side_effect=[(True, "ok"), (False, "test-failure")]) as run:
+            PLAN.preflight(plan, matcher, cases)
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(
+            {call.kwargs["deadline"] for call in run.call_args_list},
+            {10.0 + PLAN.MAX_PREFLIGHT_SECONDS},
+        )
+
+    def test_exhausted_preflight_budget_fails_before_engine_run(self):
+        with patch.object(PLAN, "perf_counter", side_effect=[5.0, 6.0]), \
+                patch.object(PLAN.subprocess, "run") as run:
+            passed, detail = PLAN.run_preflight(
+                "id: sample\n", {"invalid": ["x"], "valid": ["y"]}, "sample",
+                deadline=5.5,
+            )
+        self.assertFalse(passed)
+        self.assertEqual(detail, "engine-error=preflight budget exhausted")
+        run.assert_not_called()
+
     def test_invalid_mutant_is_skipped(self):
         plan = minimal_plan(rule={"all": [{"kind": "call"}, {"pattern": "danger()"}]})
         matcher, cases = PLAN.validate_plan(plan)
@@ -355,10 +400,11 @@ class RuleMechanicsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             (Path(directory) / "a.py").write_text("x")
             with patch.object(MECHANICS, "MAX_FILES", 0), \
-                    patch.object(MECHANICS.subprocess, "run") as run:
+                    patch.object(MECHANICS, "bounded_scan_output",
+                                 return_value=b"[]") as engine_run:
                 with self.assertRaisesRegex(RuntimeError, "corpus exceeds 0 files"):
                     MECHANICS.normalized_findings(Path("engine"), Path("config"), Path(directory))
-                run.assert_not_called()
+                engine_run.assert_not_called()
 
     def test_scan_output_bound_terminates_oversized_output(self):
         with patch.object(MECHANICS, "MAX_SCAN_OUTPUT_BYTES", 10), \

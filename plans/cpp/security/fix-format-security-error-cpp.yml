@@ -35,6 +35,10 @@ cases:
     - |
       fprintf(stderr, "%s", out);
     - |
+      fprintf(stderr, "literal format");
+    - |
+      fprintf(stderr, "concatenated " "format");
+    - |
       sprintf(&buffer[2], "%s", obj->Text, a);
     - |
       sprintf(buf1, "%s", Text_String(TXT_WAITING_FOR_CONNECTIONS));

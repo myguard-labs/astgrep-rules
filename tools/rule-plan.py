@@ -21,6 +21,8 @@ LANGUAGE_EXTENSIONS = {
 LANGUAGES = tuple(LANGUAGE_EXTENSIONS)
 CATEGORIES = ("security", "correctness")
 MAX_MUTATIONS = 256
+MAX_PREFLIGHT_SECONDS = 300
+MAX_ENGINE_SECONDS = 20
 UTILITY_ID = re.compile(r"^[a-z][a-z0-9-]*$")
 PLAN_KEYS = {
     "version", "id", "language", "category", "severity", "message", "note",
@@ -374,7 +376,8 @@ def render_fixture(plan: dict, cases: dict[str, list[str]]) -> str:
     return yaml.dump(fixture, sort_keys=False, width=1000, allow_unicode=True)
 
 
-def run_preflight(rule_text: str, cases: dict[str, list[str]], rule_id: str) -> tuple[bool, str]:
+def run_preflight(rule_text: str, cases: dict[str, list[str]], rule_id: str,
+                  *, deadline: float | None = None) -> tuple[bool, str]:
     """Run a bounded isolated upstream fixture suite."""
     started = perf_counter()
     with tempfile.TemporaryDirectory(prefix="rule-plan-") as directory:
@@ -386,11 +389,16 @@ def run_preflight(rule_text: str, cases: dict[str, list[str]], rule_id: str) -> 
             yaml.safe_dump({"id": rule_id, **cases}, sort_keys=False), encoding="utf-8")
         (root / "sgconfig.yml").write_text(
             "ruleDirs: [rules]\ntestConfigs: [{testDir: tests}]\n", encoding="utf-8")
+        remaining: float = MAX_ENGINE_SECONDS
+        if deadline is not None:
+            remaining = min(remaining, deadline - perf_counter())
+            if remaining <= 0:
+                return False, "engine-error=preflight budget exhausted"
         try:
             result = subprocess.run(
                 [str(ENGINE), "test", "--include-off", "-c", str(root / "sgconfig.yml"),
                  "--skip-snapshot-tests"], text=True, capture_output=True,
-                timeout=20, check=False,
+                timeout=remaining, check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
             return False, f"engine-error={error}"
@@ -445,7 +453,7 @@ def mutation_candidates(value, path="rule"):
         yield from _direct_mapping_mutations(value, path)
         children = value.items()
     elif isinstance(value, list):
-        if len(value) > 1 and path.endswith(".all"):
+        if len(value) > 1 and path.endswith((".all", ".any")):
             for index in range(len(value)):
                 yield f"{path}[{index}]-deleted", value[:index] + value[index + 1:]
         children = enumerate(value)
@@ -475,7 +483,8 @@ def _has_positive_anchor(value, negated: bool = False) -> bool:
                 return True
             if key == "not":
                 continue
-            if key in {"all", "any"} and _has_positive_anchor(child, negated):
+            if key in {"all", "any", "has", "inside", "follows", "precedes"} \
+                    and _has_positive_anchor(child, negated):
                 return True
     elif isinstance(value, list):
         return any(_has_positive_anchor(child, negated) for child in value)
@@ -493,12 +502,14 @@ def _branch_mutant(plan: dict, branches: list[dict], deleted: int) -> dict:
     return compile_match(spec)
 
 
-def _preflight_named_branches(plan: dict, cases: dict[str, list[str]]) -> None:
+def _preflight_named_branches(plan: dict, cases: dict[str, list[str]],
+                              deadline: float) -> None:
     branches = named_branches(plan)
     for index, branch in enumerate(branches):
         mutant = _branch_mutant(plan, branches, index)
         witness = {"invalid": [branch["witness"]], "valid": cases["valid"][:1]}
-        survived, detail = run_preflight(render_rule(plan, mutant), witness, plan["id"])
+        survived, detail = run_preflight(
+            render_rule(plan, mutant), witness, plan["id"], deadline=deadline)
         if survived:
             raise RuntimeError(f"ANY_ARM_SURVIVED: {branch['name']}")
         if "engine-error=" in detail:
@@ -514,17 +525,19 @@ def compiled_mutations(plan: dict, matcher: dict) -> list[tuple[str, str]]:
             (path, _rule_with(plan, matcher, key, identity, mutant))
             for identity, value in plan.get(key, {}).items()
             for path, mutant in mutation_candidates(value, f"{key}.{identity}")
-            if _has_positive_anchor(mutant)
+            if key == "constraints" or _has_positive_anchor(mutant)
         )
     return candidates
 
 
 def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]]) -> None:
     """Require contrasts and every selected mutant to fail closed."""
-    passed, detail = run_preflight(render_rule(plan, matcher), cases, plan["id"])
+    deadline = perf_counter() + MAX_PREFLIGHT_SECONDS
+    passed, detail = run_preflight(
+        render_rule(plan, matcher), cases, plan["id"], deadline=deadline)
     if not passed:
         raise RuntimeError(f"CONTRAST_PREFLIGHT_FAILED: {detail}")
-    _preflight_named_branches(plan, cases)
+    _preflight_named_branches(plan, cases, deadline)
     candidates = compiled_mutations(plan, matcher)
     exclusions = set(plan.get("mutation_exclusions", {}))
     indexed = dict(candidates)
@@ -532,16 +545,19 @@ def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]]) -> None:
     if unknown:
         raise RuntimeError(f"UNKNOWN_MUTATION_EXCLUSION: {', '.join(unknown)}")
     for path in sorted(exclusions):
-        survived, exclusion_detail = run_preflight(indexed[path], cases, plan["id"])
-        invalid = "engine-error=" in exclusion_detail or "invalid-mutant=" in exclusion_detail
-        if not survived or invalid:
+        survived, exclusion_detail = run_preflight(
+            indexed[path], cases, plan["id"], deadline=deadline)
+        if (not survived or "engine-error=" in exclusion_detail
+                or "invalid-mutant=" in exclusion_detail):
             raise RuntimeError(f"INVALID_MUTATION_EXCLUSION: {path}: {exclusion_detail}")
     candidates = [(path, rule) for path, rule in candidates if path not in exclusions]
-    limit = plan.get("mutation_limit", MAX_MUTATIONS)
-    if len(candidates) > limit:
-        raise RuntimeError(f"MUTATION_BUDGET_EXCEEDED: {len(candidates)} exceeds {limit}")
-    for path, rule_text in candidates[:limit]:
-        survived, mutation_detail = run_preflight(rule_text, cases, plan["id"])
+    if len(candidates) > plan.get("mutation_limit", MAX_MUTATIONS):
+        raise RuntimeError(
+            f"MUTATION_BUDGET_EXCEEDED: {len(candidates)} exceeds "
+            f"{plan.get('mutation_limit', MAX_MUTATIONS)}")
+    for path, rule_text in candidates[:plan.get("mutation_limit", MAX_MUTATIONS)]:
+        survived, mutation_detail = run_preflight(
+            rule_text, cases, plan["id"], deadline=deadline)
         if survived:
             raise RuntimeError(f"MUTATION_SURVIVED: {path}")
         if "invalid-mutant=" in mutation_detail:
