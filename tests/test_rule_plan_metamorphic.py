@@ -114,6 +114,12 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                 'obj ?. field',
             ('$obj?->field', "member-access-spacing", "php"):
                 '$obj ?-> field',
+            ('handlers[key]()', "callee-parenthesized", "javascript"):
+                '(handlers[key])()',
+            ('handlers[0]()', "callee-parenthesized", "python"):
+                '(handlers[0])()',
+            ('(handler)()', "callee-parenthesized", "python"):
+                '((handler))()',
         }
         for (source, transform, language), expected in cases.items():
             with self.subTest(transform=transform):

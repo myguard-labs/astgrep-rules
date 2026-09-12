@@ -94,18 +94,21 @@ def _replace_first(source: str, expression: re.Pattern, replacement,
     return source, 0
 
 
+def _parenthesize_callee(source: str,
+                         syntax_spans: list[tuple[int, int]] | None) -> tuple[str, int]:
+    if not syntax_spans:
+        return source, 0
+    start, end = syntax_spans[0]
+    return source[:start] + f"({source[start:end]})" + source[end:], 1
+
+
 def metamorphic_source(source: str, transform: str, language: str,
                        syntax_spans: list[tuple[int, int]] | None = None) -> str:
     """Apply one transform only to a token of the intended lexical class."""
     if transform == "parenthesized":
         return f"({source})"
     if transform == "callee-parenthesized":
-        changed, count = _replace_first(
-            source, re.compile(
-                r"\b([A-Za-z_][A-Za-z0-9_]*"
-                r"(?:\s*(?:\?->|\?\.|->|::|\.)\s*[A-Za-z_][A-Za-z0-9_]*)*)"
-                r"\s*(?=\()"),
-            r"(\1)", language, ({"code"}, syntax_spans))
+        changed, count = _parenthesize_callee(source, syntax_spans)
     elif transform in {"qualified-name-spacing", "member-access-spacing"}:
         changed, count = _replace_first(
             source, re.compile(r"\s*(\?->|\?\.|->|\.)\s*"), r" \1 ", language,
@@ -180,6 +183,15 @@ def regex_alternatives(pattern: str, *, verbose: bool = False) -> list[str]:
 INLINE_FLAGS = re.compile(r"\(\?([aiLmsuxUR]*)(?:-([aiLmsuxUR]*))?([:)])")
 
 
+def inline_verbose(fragment: str, inherited: bool = False) -> bool:
+    """Apply supported inline enable/disable flags to inherited verbose mode."""
+    flags = INLINE_FLAGS.match(fragment)
+    if not flags:
+        return inherited
+    enabled, disabled, _terminator = flags.groups()
+    return (inherited or "x" in enabled) and "x" not in (disabled or "")
+
+
 @dataclass
 class _RegexState:
     modes: list[bool]
@@ -215,8 +227,8 @@ class _RegexState:
         if not flags:
             self.modes.append(self.modes[-1])
             return index
-        enabled, disabled, terminator = flags.groups()
-        mode = (self.modes[-1] or "x" in enabled) and "x" not in (disabled or "")
+        _enabled, _disabled, terminator = flags.groups()
+        mode = inline_verbose(pattern[index:], self.modes[-1])
         if terminator == ":":
             self.modes.append(mode)
         else:

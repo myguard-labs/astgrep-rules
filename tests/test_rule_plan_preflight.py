@@ -216,6 +216,9 @@ class RulePlanPreflightTests(unittest.TestCase):
             ("javascript", "obj.danger()", "callee-parenthesized", "safe();"),
             ("javascript", "obj?.field", "member-access-spacing", "safe();"),
             ("php", "$obj?->field;", "member-access-spacing", "$safe->field;"),
+            ("javascript", "handlers[key]();", "callee-parenthesized", "safe();"),
+            ("python", "handlers[0]()", "callee-parenthesized", "safe()"),
+            ("python", "(handler)()", "callee-parenthesized", "safe()"),
         )
         for language, source, transform, valid in rows:
             with self.subTest(language=language, source=source):

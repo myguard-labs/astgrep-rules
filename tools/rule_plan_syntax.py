@@ -47,6 +47,29 @@ def syntax_spans(source: str, language: str, kind: str | tuple[str, ...], extens
     ]
 
 
+def callee_spans(source: str, language: str, extension: str,
+                 invoke) -> list[tuple[int, int]]:
+    """Return exact `$CALLEE` child spans from CST call-expression matches."""
+    with tempfile.TemporaryDirectory(prefix="rule-plan-callee-") as directory:
+        path = Path(directory) / f"source.{extension}"
+        path.write_text(source, encoding="utf-8")
+        result = invoke([
+            "run", "-l", language, "-p", "$CALLEE($$$ARGS)",
+            "--json=compact", str(path),
+        ])
+    if result.returncode not in (0, 1):
+        raise RuntimeError(f"METAMORPHIC_TARGET_ERROR: {result.stderr[-500:]}")
+    encoded = source.encode("utf-8")
+    findings = json.loads(result.stdout or "[]")
+    return [
+        (len(encoded[:row["metaVariables"]["single"]["CALLEE"]["range"]
+                     ["byteOffset"]["start"]].decode("utf-8")),
+         len(encoded[:row["metaVariables"]["single"]["CALLEE"]["range"]
+                     ["byteOffset"]["end"]].decode("utf-8")))
+        for row in findings
+    ]
+
+
 def validate_full_source(source: str, language: str, extension: str,
                          deadline: float, invoke) -> None:
     """Parse a program file and reject tree-sitter ERROR or MISSING recovery."""

@@ -478,10 +478,14 @@ def validate_metamorphic(plan: dict, cases: dict[str, list[str]]) -> None:
 
 
 def _metamorphic_source(source: str, transform: str, language: str) -> str:
-    kind = SYNTAX.target_kind(transform, language)
-    spans = SYNTAX.syntax_spans(
-        source, language, kind, LANGUAGE_EXTENSIONS[language], _syntax_run) \
-        if kind else None
+    extension = LANGUAGE_EXTENSIONS[language]
+    spans: list[tuple[int, int]] | None
+    if transform == "callee-parenthesized":
+        spans = SYNTAX.callee_spans(source, language, extension, _syntax_run)
+    else:
+        kind = SYNTAX.target_kind(transform, language)
+        spans = SYNTAX.syntax_spans(source, language, kind, extension, _syntax_run) \
+            if kind else None
     return TRANSFORMS.metamorphic_source(source, transform, language, spans)
 
 
@@ -736,7 +740,7 @@ def _regex_alternative_mutations(pattern: str):
         if grouped:
             prefix, body, suffix = grouped.groups()
             group_prefix = prefix.removeprefix("^")
-            verbose = group_prefix.startswith("(?") and "x" in group_prefix.partition(":")[0]
+            verbose = TRANSFORMS.inline_verbose(group_prefix)
             alternatives = _regex_alternatives(body, verbose=verbose)
     for index in range(len(alternatives)):
         remaining = "|".join(

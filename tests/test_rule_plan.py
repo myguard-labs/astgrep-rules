@@ -141,6 +141,8 @@ class RulePlanTests(unittest.TestCase):
         self.assertEqual(mutations["rule.pattern-receiver"]["pattern"],
                          "$_.mktemp($$$ARGS)")
 
+
+class RuleRegexMutationTests(unittest.TestCase):
     def test_regex_alternatives_are_independently_mutated(self):
         mutations = dict(PLAN.mutation_candidates({"regex": "^open$|^read$|^write$"}))
         self.assertEqual(
@@ -233,6 +235,29 @@ class RulePlanTests(unittest.TestCase):
                 rule, {"invalid": ["b" if index == 0 else "foo"], "valid": ["closed"]},
                 f"uppercase-{index}")
             self.assertTrue(passed, detail)
+
+    def test_grouped_disabled_verbose_flags_keep_hash_literal(self):
+        for prefix in ("?-x", "?i-x"):
+            pattern = f"^({prefix}:a#literal|b)$"
+            with self.subTest(pattern=pattern):
+                mutations = dict(PLAN.mutation_candidates({"regex": pattern}))
+                expected = (f"^({prefix}:b)$", f"^({prefix}:a#literal)$")
+                keys = [key for key in mutations if "regex-alternative" in key]
+                self.assertEqual(len(keys), 2)
+                for index, regex in enumerate(expected):
+                    self.assertEqual(
+                        mutations[f"rule.regex-alternative[{index}]-deleted"]["regex"],
+                        regex)
+                    rule = yaml.safe_dump({
+                        "id": f"disabled-{index}", "language": "python",
+                        "message": "x", "severity": "warning",
+                        "rule": {"kind": "string_content", "regex": regex},
+                    })
+                    witness = '"b"' if index == 0 else '"a#literal"'
+                    passed, detail = PLAN.run_preflight(
+                        rule, {"invalid": [witness], "valid": ['"closed"']},
+                        f"disabled-{index}")
+                    self.assertTrue(passed, detail)
 
     def test_grouped_regex_mutants_are_engine_valid_with_exact_text(self):
         mutations = dict(PLAN.mutation_candidates({"regex": "^(?:open|read|write)$"}))
