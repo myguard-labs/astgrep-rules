@@ -69,6 +69,14 @@ class RulePlanTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unknown keys: surprise"):
                 PLAN.load_plan(path)
 
+    def test_plan_id_is_safe_for_preflight_paths(self):
+        for rule_id in ("../outside", "/outside", "py/sample", "UPPER"):
+            with self.subTest(rule_id=rule_id), \
+                    self.assertRaisesRegex(ValueError, "plan id must use"):
+                PLAN.validate_plan(minimal_plan(id=rule_id))
+        matcher, _cases = PLAN.validate_plan(minimal_plan(id="py-safe-2"))
+        self.assertEqual(matcher, {"pattern": "danger()"})
+
     def test_provenance_comments_and_extensions_render_without_overrides(self):
         plan = minimal_plan(
             comments=["License: Example", "Source: https://example.test/rule"],
@@ -168,9 +176,19 @@ class RulePlanTests(unittest.TestCase):
         )
         paths = [path for path, _rule in PLAN.compiled_mutations(plan, matcher)]
         self.assertEqual(paths, [
+            "constraints.ARG-deleted",
             "constraints.ARG.not.any[0]-deleted",
             "constraints.ARG.not.any[1]-deleted",
         ])
+
+    def test_referenced_utilities_are_not_whole_deletion_candidates(self):
+        matcher = {"matches": "danger-call"}
+        plan = minimal_plan(
+            rule=matcher,
+            utils={"danger-call": {"pattern": "danger()"}},
+        )
+        paths = [path for path, _rule in PLAN.compiled_mutations(plan, matcher)]
+        self.assertNotIn("utils.danger-call-deleted", paths)
 
     def test_preflight_calls_share_one_cumulative_deadline(self):
         plan = minimal_plan(rule={"all": [{"kind": "call"}, {"pattern": "danger()"}]})
@@ -485,6 +503,7 @@ class ChangedGateTests(unittest.TestCase):
         with patch.object(CHANGED.subprocess, "run", return_value=result) as run:
             self.assertEqual(CHANGED.changed_paths("origin/main"), ["tests/test_removed.py"])
         self.assertIn("--diff-filter=ACMRD", run.call_args.args[0])
+        self.assertIn("--no-renames", run.call_args.args[0])
 
 
 if __name__ == "__main__":

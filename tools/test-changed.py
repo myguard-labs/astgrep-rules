@@ -11,7 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def changed_paths(base: str) -> list[str]:
-    result = subprocess.run(["git", "diff", "--name-only", "--diff-filter=ACMRD", base, "--"],
+    result = subprocess.run(["git", "diff", "--name-only", "--no-renames",
+                             "--diff-filter=ACMRD", base, "--"],
                             cwd=ROOT, text=True, capture_output=True, timeout=30, check=False)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or f"git diff exited {result.returncode}")

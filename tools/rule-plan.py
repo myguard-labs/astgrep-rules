@@ -111,6 +111,8 @@ def validate_header(plan: dict) -> None:
     for key in ("id", "message", "note"):
         if not isinstance(plan[key], str) or not plan[key].strip():
             raise ValueError(f"plan {key} must be a non-empty string")
+    if not UTILITY_ID.fullmatch(plan["id"]):
+        raise ValueError("plan id must use lowercase letters, digits and hyphens")
     if plan["language"] not in LANGUAGES:
         raise ValueError(f"unsupported plan language: {plan['language']}")
     if plan["category"] not in CATEGORIES:
@@ -475,6 +477,15 @@ def _rule_with(plan: dict, matcher: dict, key=None, identity=None, mutant=None) 
     return render_rule(changed, matcher)
 
 
+def _rule_without(plan: dict, matcher: dict, key: str, identity: str) -> str:
+    changed = dict(plan)
+    changed[key] = dict(plan[key])
+    del changed[key][identity]
+    if not changed[key]:
+        del changed[key]
+    return render_rule(changed, matcher)
+
+
 def _has_positive_anchor(value) -> bool:
     """Return whether a rule tree still supplies an affirmative AST matcher."""
     if isinstance(value, dict):
@@ -520,6 +531,12 @@ def compiled_mutations(plan: dict, matcher: dict) -> list[tuple[str, str]]:
                   for path, mutant in mutation_candidates(matcher)
                   if _has_positive_anchor(mutant)]
     for key in ("utils", "constraints"):
+        if key == "constraints":
+            candidates.extend(
+                (f"constraints.{identity}-deleted",
+                 _rule_without(plan, matcher, key, identity))
+                for identity in plan.get(key, {})
+            )
         candidates.extend(
             (path, _rule_with(plan, matcher, key, identity, mutant))
             for identity, value in plan.get(key, {}).items()
