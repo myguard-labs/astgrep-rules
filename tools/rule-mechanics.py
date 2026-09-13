@@ -419,36 +419,39 @@ def bounded_scan_output(command: list[str], timeout: float = 300) -> bytes:
     with tempfile.TemporaryFile() as errors:
         with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors,
                               start_new_session=True) as process:
-            output = bytearray()
-            assert process.stdout is not None
-            deadline = time.monotonic() + timeout
-            with selectors.DefaultSelector() as selector:
-                selector.register(process.stdout, selectors.EVENT_READ)
-                while True:
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0 or not selector.select(remaining):
-                        PLAN.signal_process_group(process.pid, signal.SIGKILL)
-                        process.wait(timeout=10)
-                        raise RuntimeError(f"scan exceeded {timeout:g} seconds")
-                    chunk = os.read(process.stdout.fileno(), 64 * 1024)
-                    if not chunk:
-                        break
-                    output.extend(chunk)
-                    if len(output) > MAX_SCAN_OUTPUT_BYTES:
-                        PLAN.signal_process_group(process.pid, signal.SIGKILL)
-                        process.wait(timeout=10)
-                        raise RuntimeError(f"scan output exceeds {MAX_SCAN_OUTPUT_BYTES} bytes")
             try:
-                returncode = process.wait(timeout=max(0.1, deadline - time.monotonic()))
-            except subprocess.TimeoutExpired as error:
+                output, returncode = _read_bounded_process(process, timeout)
+            except BaseException:
                 PLAN.signal_process_group(process.pid, signal.SIGKILL)
                 process.wait(timeout=10)
-                raise RuntimeError(f"scan exceeded {timeout:g} seconds") from error
+                raise
         errors.seek(0)
         error_text = errors.read().decode("utf-8", errors="replace")
     if returncode not in (0, 1):
         raise RuntimeError(error_text[-500:])
     return bytes(output)
+
+
+def _read_bounded_process(process, timeout: float) -> tuple[bytearray, int]:
+    output = bytearray()
+    assert process.stdout is not None
+    deadline = time.monotonic() + timeout
+    with selectors.DefaultSelector() as selector:
+        selector.register(process.stdout, selectors.EVENT_READ)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not selector.select(remaining):
+                raise RuntimeError(f"scan exceeded {timeout:g} seconds")
+            chunk = os.read(process.stdout.fileno(), 64 * 1024)
+            if not chunk:
+                break
+            output.extend(chunk)
+            if len(output) > MAX_SCAN_OUTPUT_BYTES:
+                raise RuntimeError(f"scan output exceeds {MAX_SCAN_OUTPUT_BYTES} bytes")
+    try:
+        return output, process.wait(timeout=max(0.1, deadline - time.monotonic()))
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(f"scan exceeded {timeout:g} seconds") from error
 
 
 def _normalize_finding(finding, root: Path) -> tuple:

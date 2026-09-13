@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import yaml
 
@@ -18,6 +18,19 @@ MECHANICS = load_tool("rule-mechanics")
 
 
 class RuleMechanicsTests(unittest.TestCase):
+    def test_bounded_scan_interrupt_kills_reaps_and_reraises(self):
+        for failure in (KeyboardInterrupt(), RuntimeError("interrupted")):
+            process = MagicMock(pid=4242)
+            process.__enter__.return_value = process
+            with self.subTest(failure=type(failure).__name__), \
+                    patch.object(MECHANICS.subprocess, "Popen", return_value=process), \
+                    patch.object(MECHANICS, "_read_bounded_process", side_effect=failure), \
+                    patch.object(MECHANICS.PLAN, "signal_process_group") as signal_group, \
+                    self.assertRaises(type(failure)):
+                MECHANICS.bounded_scan_output(["engine"])
+            signal_group.assert_called_once_with(4242, MECHANICS.signal.SIGKILL)
+            process.wait.assert_called_once_with(timeout=10)
+
     def test_rendered_artifacts_thaw_compiled_plan_once(self):
         path = ROOT / "plans/python/security/py-tempfile-mktemp.yml"
         compiled = PLAN.compile_plan_ir(path, run_checks=False)

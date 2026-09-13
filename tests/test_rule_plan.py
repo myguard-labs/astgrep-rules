@@ -186,6 +186,15 @@ class RuleRegexMutationTests(unittest.TestCase):
                 alternative_keys = [key for key in mutations if "regex-alternative" in key]
                 self.assertEqual(len(alternative_keys), expected_count)
 
+    def test_top_level_and_concatenated_groups_all_produce_stable_mutants(self):
+        mutations = dict(PLAN.mutation_candidates({"regex": "pre(a|b)post|outer(c|d)"}))
+        regexes = {key: value["regex"] for key, value in mutations.items()
+                  if "regex-alternative" in key}
+        self.assertIn("pre(a|b)post", regexes.values())
+        self.assertIn("outer(c|d)", regexes.values())
+        self.assertIn("pre(b)post|outer(c|d)", regexes.values())
+        self.assertIn("pre(a|b)post|outer(d)", regexes.values())
+
     def test_scoped_verbose_group_does_not_mask_outer_alternative(self):
         pattern = "^foo#bar$|^(?x:a|b)$"
         mutations = dict(PLAN.mutation_candidates({"regex": pattern}))

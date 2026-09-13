@@ -338,6 +338,18 @@ class RulePlanMetamorphicTests(unittest.TestCase):
             PLAN.render_rule(different, _matcher), expanded, different["id"])
         self.assertTrue(passed)
 
+        multiple = minimal_plan(
+            language="c", rule={"pattern": 'log("%s %s", a, b)'},
+            cases={"invalid": ['log("%s %s", a, b)'], "valid": ["safe();"]},
+            metamorphic=[{
+                "source": 'log("%s %s", a, b)', "transform": "format-width",
+                "outcome": "equivalent",
+            }],
+        )
+        _matcher, cases = PLAN.validate_plan(multiple)
+        with self.assertRaisesRegex(ValueError, "not applicable"):
+            PLAN.expanded_cases(multiple, cases)
+
     def test_compiled_plan_ir_matches_compatibility_artifacts(self):
         path = ROOT / "plans/python/security/py-tempfile-mktemp.yml"
         ir = PLAN.compile_plan_ir(path, run_checks=False)

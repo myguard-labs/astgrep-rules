@@ -108,15 +108,19 @@ def _javascript_regex_end(source: str, index: int) -> int | None:
 def _replace_first(source: str, expression: re.Pattern, replacement,
                    language: str, target) -> tuple[str, int]:
     allowed, syntax_spans = target
-    kinds = _lexical_kinds(source, language)
+    kinds = _lexical_kinds(source, language) if syntax_spans is None else None
+    eligible = []
     for match in expression.finditer(source):
         in_syntax = syntax_spans is None or any(
             start <= match.start() and match.end() <= end for start, end in syntax_spans)
-        lexical_match = set(kinds[match.start():match.end()]) <= allowed
+        lexical_match = kinds is None or set(kinds[match.start():match.end()]) <= allowed
         if in_syntax and (syntax_spans is not None or lexical_match):
-            value = replacement(match) if callable(replacement) else match.expand(replacement)
-            return source[:match.start()] + value + source[match.end():], 1
-    return source, 0
+            eligible.append(match)
+    if len(eligible) != 1:
+        return source, len(eligible)
+    match = eligible[0]
+    value = replacement(match) if callable(replacement) else match.expand(replacement)
+    return source[:match.start()] + value + source[match.end():], 1
 
 
 def _parenthesize_callee(source: str,
@@ -190,16 +194,17 @@ def _concatenate_literal(source: str, language: str,
 def _transform_format_conversion(source: str, language: str,
                                  *, precision: bool,
                                  syntax_spans=None) -> tuple[str, int]:
-    kinds = _lexical_kinds(source, language)
-    match = next((candidate for candidate in FORMAT_CONVERSION.finditer(source)
-                  if set(kinds[candidate.start():candidate.end()]) == {"string"}
+    kinds = _lexical_kinds(source, language) if syntax_spans is None else None
+    matches = [candidate for candidate in FORMAT_CONVERSION.finditer(source)
+                  if (kinds is None or set(kinds[candidate.start():candidate.end()]) == {"string"})
                   and _preceding_percent_count(source, candidate.start()) % 2 == 0
                   and not candidate.group("precision" if precision else "width")
                   and (syntax_spans is None or any(
                       start <= candidate.start() and candidate.end() <= end
-                      for start, end in syntax_spans))), None)
-    if match is None:
-        return source, 0
+                      for start, end in syntax_spans))]
+    if len(matches) != 1:
+        return source, len(matches)
+    match = matches[0]
     parts = match.groupdict(default="")
     if precision:
         parts["precision"] = ".3"

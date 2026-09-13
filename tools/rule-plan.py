@@ -734,12 +734,14 @@ def _qualified_pattern_mutations(pattern: str):
 def _regex_alternative_mutations(pattern: str):
     alternatives = _regex_alternatives(pattern)
     prefix = suffix = ""
+    grouped_whole = False
     if not alternatives:
         grouped = re.fullmatch(
             r"(\^?(?:\(\?:|\(\?[A-Za-z-]+:|\())(.+)"
             r"(\)(?:(?:[?+*]|\{\d+(?:,\d*)?\})\??)?\$?)",
             pattern, flags=re.DOTALL)
         if grouped:
+            grouped_whole = True
             prefix, body, suffix = grouped.groups()
             group_prefix = prefix.removeprefix("^")
             verbose = TRANSFORMS.inline_verbose(group_prefix)
@@ -749,7 +751,7 @@ def _regex_alternative_mutations(pattern: str):
             part for part_index, part in enumerate(alternatives)
             if part_index != index)
         yield index, prefix + remaining + suffix
-    if alternatives:
+    if grouped_whole:
         return
     yield from TRANSFORMS.nested_regex_alternative_mutations(pattern)
 
