@@ -6,7 +6,7 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import yaml
 
@@ -397,6 +397,19 @@ class RulePlanSyntaxPreflightTests(unittest.TestCase):
             self.assertTrue(
                 not status.exists()
                 or "\nState:\tZ" in status.read_text(encoding="utf-8"))
+
+    def test_engine_interrupt_kills_reaps_and_reraises(self):
+        for failure in (KeyboardInterrupt(), RuntimeError("interrupted")):
+            with self.subTest(failure=type(failure).__name__):
+                process = MagicMock(pid=4242)
+                process.__enter__.return_value = process
+                process.communicate.side_effect = [failure, ("", "")]
+                with patch.object(PLAN.subprocess, "Popen", return_value=process), \
+                        patch.object(PLAN, "signal_process_group", return_value=True) as signal, \
+                        self.assertRaises(type(failure)):
+                    PLAN.run_engine(["engine"], timeout=1)
+                signal.assert_called_once_with(4242, PLAN.signal.SIGKILL)
+                self.assertEqual(process.communicate.call_count, 2)
 
     def test_two_named_branches_reach_both_witness_preflights(self):
         plan = minimal_plan(
