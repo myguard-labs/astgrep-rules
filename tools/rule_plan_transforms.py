@@ -4,14 +4,13 @@ import re
 from dataclasses import dataclass, field
 
 METAMORPHIC_LANGUAGES = {
-    "parenthesized": {"c", "cpp", "csharp", "go", "java", "javascript", "kotlin", "lua",
-                      "php", "python", "ruby", "rust", "scala", "swift", "typescript"},
+    "parenthesized": {"python"},
     "callee-parenthesized": {"c", "cpp", "javascript", "typescript", "python"},
     "qualified-name-spacing": {"python", "javascript", "typescript", "java", "php"},
     "member-access-spacing": {"c", "cpp", "javascript", "typescript", "java", "go", "php"},
     "literal-spacing": {"c", "cpp", "python"},
     "format-width": {"c", "cpp", "go"}, "format-precision": {"c", "cpp", "go"},
-    "qualified-name": {"c", "cpp"}, "member-access-swap": {"c", "cpp"},
+    "qualified-name": {"cpp"}, "member-access-swap": {"c", "cpp"},
     "literal-concatenation": {"c", "cpp", "python"},
 }
 
@@ -113,7 +112,8 @@ def _replace_first(source: str, expression: re.Pattern, replacement,
     for match in expression.finditer(source):
         in_syntax = syntax_spans is None or any(
             start <= match.start() and match.end() <= end for start, end in syntax_spans)
-        if in_syntax and set(kinds[match.start():match.end()]) <= allowed:
+        lexical_match = set(kinds[match.start():match.end()]) <= allowed
+        if in_syntax and (syntax_spans is not None or lexical_match):
             value = replacement(match) if callable(replacement) else match.expand(replacement)
             return source[:match.start()] + value + source[match.end():], 1
     return source, 0
@@ -130,9 +130,7 @@ def _parenthesize_callee(source: str,
 def metamorphic_source(source: str, transform: str, language: str,
                        syntax_spans: list[tuple[int, int]] | None = None) -> str:
     """Apply one transform only to a token of the intended lexical class."""
-    if transform == "parenthesized":
-        return f"({source})"
-    if transform == "callee-parenthesized":
+    if transform in {"parenthesized", "callee-parenthesized"}:
         changed, count = _parenthesize_callee(source, syntax_spans)
     elif transform in {"qualified-name-spacing", "member-access-spacing"}:
         changed, count = _replace_first(
@@ -227,6 +225,19 @@ def regex_alternatives(pattern: str, *, verbose: bool = False) -> list[str]:
         start = index + 1
     parts.append(pattern[start:])
     return parts if len(parts) > 1 and all(parts) else []
+
+
+def nested_regex_alternative_mutations(pattern: str):
+    """Yield byte-preserving deletions from each innermost concatenated group."""
+    groups = re.compile(r"\((?:\?[A-Za-z-]+:|\?:)?([^()]*)\)")
+    for group in groups.finditer(pattern):
+        alternatives = regex_alternatives(
+            group.group(1), verbose=inline_verbose(group.group(0)[1:]))
+        for index in range(len(alternatives)):
+            remaining = "|".join(part for part_index, part in enumerate(alternatives)
+                                 if part_index != index)
+            start, end = group.span(1)
+            yield f"group@{start}.{index}", pattern[:start] + remaining + pattern[end:]
 
 
 INLINE_FLAGS = re.compile(r"\(\?([aiLmsuxUR]*)(?:-([aiLmsuxUR]*))?([:)])")

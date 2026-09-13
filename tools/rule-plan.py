@@ -491,8 +491,7 @@ def expanded_cases(plan: dict, cases: dict[str, list[str]], deadline: float | No
             entry["source"], LANGUAGE_EXTENSIONS[plan["language"]],
             render_rule(plan, plan_matcher(plan)), partial(
                 _syntax_run, deadline=deadline, telemetry=telemetry)) if bind_findings else None
-        if (bind_findings and not findings and original_category == "valid"
-                and entry["outcome"] == "different"):
+        if bind_findings and not findings and original_category == "valid":
             findings = None
         transformed = _metamorphic_source(
             entry["source"], entry["transform"], plan["language"],
@@ -523,6 +522,8 @@ def validate_derived_syntax(plan: dict, cases: dict[str, list[str]], deadline: f
                 source, plan["language"], LANGUAGE_EXTENSIONS[plan["language"]],
                 deadline, invoke)
         except (OSError, subprocess.TimeoutExpired, RuntimeError, json.JSONDecodeError) as error:
+            if isinstance(error, RuntimeError):
+                raise
             raise RuntimeError(f"METAMORPHIC_PARSE_ERROR: {error}") from error
 
 
@@ -589,6 +590,10 @@ def run_engine(command: list[str], *, timeout: float,
                 process.communicate(timeout=1)
             except subprocess.TimeoutExpired:
                 pass
+            signal_process_group(process.pid, signal.SIGKILL)
+            process.communicate()
+            raise
+        except BaseException:
             signal_process_group(process.pid, signal.SIGKILL)
             process.communicate()
             raise
@@ -744,6 +749,9 @@ def _regex_alternative_mutations(pattern: str):
             part for part_index, part in enumerate(alternatives)
             if part_index != index)
         yield index, prefix + remaining + suffix
+    if alternatives:
+        return
+    yield from TRANSFORMS.nested_regex_alternative_mutations(pattern)
 
 
 def _pattern_mutations(value: dict, path: str, key: str, child):
@@ -924,6 +932,8 @@ def preflight(plan: dict, matcher: dict, cases: dict[str, list[str]],
     expanded = expanded_cases(plan, cases, deadline, telemetry)
     validate_derived_syntax(plan, cases, deadline, telemetry, expanded)
     cases = expanded
+    telemetry.valid_cases, telemetry.invalid_cases = len(cases["valid"]), len(cases["invalid"])
+    telemetry.bytes = sum(len(source.encode()) for values in cases.values() for source in values)
     passed, detail = run_preflight(
         render_rule(plan, matcher), cases, plan["id"], deadline=deadline,
         telemetry=telemetry)
@@ -946,10 +956,9 @@ def compile_plan_ir(path: Path, *, run_checks=True,
     plan = load_plan(path)
     matcher, cases = validate_plan(plan)
     telemetry.plans = 1
-    telemetry.valid_cases = len(cases["valid"])
-    telemetry.invalid_cases = len(cases["invalid"])
+    telemetry.valid_cases, telemetry.invalid_cases = len(cases["valid"]), len(cases["invalid"])
     telemetry.exclusions = len(plan.get("mutation_exclusions", {}))
-    telemetry.bytes = path.stat().st_size
+    telemetry.bytes = sum(len(source.encode()) for values in cases.values() for source in values)
     telemetry.load_validate_ms += int((perf_counter() - started) * 1000)
     started = perf_counter()
     rule_text, fixture_text = render_rule(plan, matcher), render_fixture(plan, cases)

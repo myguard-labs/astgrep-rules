@@ -104,7 +104,6 @@ class RulePlanPreflightTests(unittest.TestCase):
                                        "rule": {"pattern": "danger()"}})),
         ]
         with patch.object(PLAN, "run_engine", return_value=result) as run:
-            # White-box assertion covers batch outcome classification.
             # pylint: disable-next=protected-access
             outcomes = PLAN._run_mutant_batch(
                 rules, {"invalid": ["danger()"], "valid": ["safe()"]},
@@ -121,7 +120,6 @@ class RulePlanPreflightTests(unittest.TestCase):
             "rule": {"pattern": "danger()"},
         })
         with patch.object(PLAN, "run_engine", return_value=result) as run:
-            # White-box assertion covers one-process batch execution.
             # pylint: disable-next=protected-access
             PLAN._run_mutant_batch(
                 [("one", rule), ("two", rule)],
@@ -140,7 +138,6 @@ class RulePlanPreflightTests(unittest.TestCase):
         })
         with patch.object(PLAN, "run_engine",
                           side_effect=[load_error, passed, load_error]):
-            # White-box assertion covers unloadable-mutant bisection.
             # pylint: disable-next=protected-access
             outcomes = PLAN._run_mutant_batch(
                 [("valid", valid_rule), ("invalid", yaml.safe_dump({
@@ -178,7 +175,8 @@ class RulePlanSyntaxPreflightTests(unittest.TestCase):
         finding = SimpleNamespace(returncode=0, stderr="", stdout=json.dumps([{
             "range": {"byteOffset": {"start": 0, "end": 8}},
         }]))
-        with patch.object(PLAN, "run_engine", side_effect=[finding, malformed]), \
+        target = SimpleNamespace(returncode=0, stderr="", stdout=finding.stdout)
+        with patch.object(PLAN, "run_engine", side_effect=[finding, target, malformed]), \
                 patch.object(PLAN, "run_preflight") as contrast, \
                 self.assertRaisesRegex(RuntimeError, "METAMORPHIC_PARSE_ERROR"):
             PLAN.preflight(plan, matcher, cases)
@@ -186,7 +184,7 @@ class RulePlanSyntaxPreflightTests(unittest.TestCase):
 
         failed_cst = SimpleNamespace(returncode=2, stdout="query failed", stderr="")
         with patch.object(PLAN, "run_engine",
-                          side_effect=[finding, failed_cst]), \
+                          side_effect=[finding, target, failed_cst]), \
                 patch.object(PLAN, "run_preflight") as contrast, \
                 self.assertRaisesRegex(RuntimeError, "METAMORPHIC_PARSE_ERROR"):
             PLAN.preflight(plan, matcher, cases)
@@ -387,7 +385,7 @@ class RulePlanSyntaxPreflightTests(unittest.TestCase):
                 "time.sleep(60)"
             )
             with self.assertRaises(subprocess.TimeoutExpired):
-                PLAN.run_engine([sys.executable, "-c", program], timeout=0.5)
+                PLAN.run_engine([sys.executable, "-c", program], timeout=3)
             self.assertTrue(ready.is_file())
             pid = int(child_pid.read_text(encoding="utf-8"))
             status = Path(f"/proc/{pid}/status")

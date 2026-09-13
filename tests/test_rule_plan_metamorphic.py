@@ -93,6 +93,11 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                 {"source": "danger()", "transform": "member-access-swap",
                  "outcome": "equivalent"},
             ]))
+        with self.assertRaisesRegex(ValueError, "does not support c"):
+            PLAN.validate_plan(minimal_plan(language="c", metamorphic=[{
+                "source": "ns::call()", "transform": "qualified-name",
+                "outcome": "equivalent",
+            }], cases={"invalid": ["ns::call()"], "valid": ["safe();"]}))
 
     def test_metamorphic_derives_required_syntax_families(self):
         cases = {
@@ -106,8 +111,8 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         }
         for (source, transform), expected in cases.items():
             with self.subTest(transform=transform):
-                language = "python" if transform in {"parenthesized", "literal-spacing"} else "c"
-                # White-box assertion covers the transform dispatcher boundary.
+                language = ("python" if transform in {"parenthesized", "literal-spacing"}
+                            else "cpp" if transform == "qualified-name" else "c")
                 self.assertEqual(
                     PLAN._metamorphic_source(  # pylint: disable=protected-access
                         source, transform, language), expected)
@@ -146,6 +151,10 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                 '<?php $x = 1.2; $obj -> name();',
             ('# $fake->field\n$obj->field;', "member-access-spacing", "php"):
                 '# $fake->field\n$obj -> field;',
+            ('f"{obj.field}"', "qualified-name-spacing", "python"):
+                'f"{obj . field}"',
+            ('`${obj.field}`', "member-access-spacing", "javascript"):
+                '`${obj . field}`',
             ('void f() { danger(); }', "callee-parenthesized", "cpp"):
                 'void f() { (danger)(); }',
             ('obj->danger()', "callee-parenthesized", "cpp"):
@@ -175,7 +184,6 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         }
         for (source, transform, language), expected in cases.items():
             with self.subTest(transform=transform):
-                # White-box assertion covers syntax-aware transform selection.
                 self.assertEqual(
                     PLAN._metamorphic_source(  # pylint: disable=protected-access
                         source, transform, language), expected)
@@ -213,7 +221,6 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         ]
         for source, transform, expected in transformed:
             with self.subTest(source=source, transform=transform):
-                # White-box assertion covers format-transform dispatch.
                 # pylint: disable-next=protected-access
                 self.assertEqual(PLAN._metamorphic_source(source, transform, "c"), expected)
         unchanged = [("%20s", "format-width"), ("%*s", "format-width"),
@@ -222,7 +229,6 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         for source, transform in unchanged:
             with self.subTest(source=source, transform=transform), \
                     self.assertRaisesRegex(ValueError, "not applicable"):
-                # White-box assertion covers transform rejection behavior.
                 # pylint: disable-next=protected-access
                 PLAN._metamorphic_source(source, transform, "c")
 
@@ -237,7 +243,6 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         )
         for language, source, transform, expected in rows:
             with self.subTest(language=language, transform=transform):
-                # White-box assertion covers CST-restricted transform selection.
                 # pylint: disable-next=protected-access
                 self.assertEqual(PLAN._metamorphic_source(source, transform, language), expected)
 
@@ -278,7 +283,6 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         )
         for language, source, expected in rows:
             with self.subTest(language=language, source=source):
-                # White-box assertion covers delimiter-preserving literal expansion.
                 # pylint: disable-next=protected-access
                 actual = PLAN._metamorphic_source(
                     source, "literal-concatenation", language)
@@ -289,19 +293,16 @@ class RulePlanMetamorphicTests(unittest.TestCase):
                                  ('R"(a)" R"(b)"', 'R"(a)"   R"(b)"')):
             with self.subTest(source=source):
                 language = "cpp" if source.startswith("R") else "python"
-                # White-box assertion covers legal Python adjacency gaps.
                 # pylint: disable-next=protected-access
                 actual = PLAN._metamorphic_source(source, "literal-spacing", language)
                 self.assertEqual(actual, expected)
 
-        # White-box assertion covers C++ raw-string format conversion.
         # pylint: disable-next=protected-access
         self.assertEqual(PLAN._metamorphic_source(
             'log(R"tag(%s)tag", value)', "format-width", "cpp"),
             'log(R"tag(%20s)tag", value)')
 
         raw = 'log(R"tag(quoted \" text \\\\ %s)tag", value)'
-        # White-box assertion covers raw delimiters with quote/backslash content.
         # pylint: disable-next=protected-access
         self.assertEqual(PLAN._metamorphic_source(raw, "format-precision", "cpp"),
                          raw.replace("%s", "%.3s"))

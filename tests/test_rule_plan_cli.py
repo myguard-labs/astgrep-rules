@@ -66,7 +66,9 @@ class RulePlanCliTests(unittest.TestCase):
             "valid_cases": 13,
             "invalid_cases": 3,
             "exclusions": 4,
-            "bytes": (ROOT / "plans/python/security/py-tempfile-mktemp.yml").stat().st_size,
+            "bytes": sum(len(source.encode()) for values in PLAN.load_plan(
+                ROOT / "plans/python/security/py-tempfile-mktemp.yml")["cases"].values()
+                         for source in values),
             "mutants": 9,
             "survived": 4,
             "invalid": 0,

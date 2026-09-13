@@ -15,6 +15,7 @@ ROOT_KINDS = {
 }
 
 CST_TARGET_KINDS: dict[str, dict[str, str | tuple[str, ...]]] = {
+    "parenthesized": {"python": "expression_statement"},
     "member-access-spacing": {
         "c": "field_expression", "cpp": "field_expression",
         "javascript": "member_expression", "typescript": "member_expression",
@@ -67,10 +68,6 @@ def bound_transform_spans(spans, findings, transform: str):
     if findings is not None:
         spans = [span for span in (findings if spans is None else spans) if any(
             span[0] < end and start < span[1] for start, end in findings)]
-    if transform == "parenthesized":
-        if findings == []:
-            raise ValueError(f"metamorphic transform {transform} is not applicable")
-        return spans
     if not spans:
         raise ValueError(f"metamorphic transform {transform} is not applicable")
     if len(spans) != 1:
