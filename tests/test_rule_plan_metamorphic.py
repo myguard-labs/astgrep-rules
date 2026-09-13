@@ -350,6 +350,37 @@ class RulePlanMetamorphicTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not applicable"):
             PLAN.expanded_cases(multiple, cases)
 
+    def test_all_source_category_and_outcome_transitions(self):
+        rows = (
+            ("invalid", "equivalent", {"pattern": "log($FMT, value)"}, "invalid"),
+            ("invalid", "different", {"pattern": 'log("%s", value)'}, "valid"),
+            ("valid", "different", {"pattern": 'log("%20s", value)'}, "invalid"),
+            ("valid", "equivalent", {"pattern": "danger()"}, "valid"),
+        )
+        source, transformed = 'log("%s", value)', 'log("%20s", value)'
+        for category, outcome, rule, destination in rows:
+            cases = {"invalid": ["danger()"], "valid": ["safe()"]}
+            cases[category] = [source]
+            if category == "valid" and outcome == "different":
+                cases["invalid"] = [transformed]
+            plan = minimal_plan(
+                language="c", rule=rule, cases=cases,
+                metamorphic=[{"source": source, "transform": "format-width",
+                              "outcome": outcome}],
+            )
+            matcher, validated = PLAN.validate_plan(plan)
+            expanded = PLAN.expanded_cases(plan, validated)
+            with self.subTest(category=category, outcome=outcome):
+                self.assertIn(transformed, expanded[destination])
+                passed, _detail = PLAN.run_preflight(
+                    PLAN.render_rule(plan, matcher), expanded, plan["id"])
+                self.assertTrue(passed)
+
+        wrong = {"invalid": [source], "valid": [transformed]}
+        passed, _detail = PLAN.run_preflight(
+            PLAN.render_rule(plan, matcher), wrong, plan["id"])
+        self.assertFalse(passed)
+
     def test_compiled_plan_ir_matches_compatibility_artifacts(self):
         path = ROOT / "plans/python/security/py-tempfile-mktemp.yml"
         ir = PLAN.compile_plan_ir(path, run_checks=False)

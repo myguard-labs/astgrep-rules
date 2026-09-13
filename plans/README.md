@@ -40,6 +40,7 @@ exclusion, input-byte, engine-process, and mutant counts alongside explicitly
 informational wall-clock phase timings.
 The mutation limit counts required mutants, while documented exclusions remain
 batch-validated outside that budget. Timed-out engine invocations terminate
-their complete process groups. The compiler validates and renders one
-recursively immutable plan representation, which is then shared by generation,
-preflight, and compatibility callers.
+their complete process groups. The compiler returns a recursively frozen
+snapshot of the validated plan, matcher, and cases. Generation and preflight
+operate on consumer-owned thawed copies; the compatibility API likewise
+returns mutable copies rather than sharing the frozen snapshot.
